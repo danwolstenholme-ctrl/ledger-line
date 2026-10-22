@@ -1,0 +1,2333 @@
+-- ---------------------------------------------------------------------------
+-- Ledgerline: one practice, many client companies, one double-entry ledger
+-- each, with every books table carrying organisation_id. Composite foreign keys mean a
+-- document can only ever post to accounts of its own organisation.
+-- ---------------------------------------------------------------------------
+
+create table practices (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null check (length(btrim(name)) between 1 and 120),
+  initials    text not null check (length(btrim(initials)) between 1 and 4),
+  brand_color text not null default '#0d6e6e' check (brand_color ~ '^#[0-9a-fA-F]{6}$'),
+  tagline     text,
+  -- Below this much fee per hour of work, a client is flagged to reprice.
+  fee_floor   numeric(10, 2) not null default 40 check (fee_floor >= 0),
+  created_at  timestamptz not null default now()
+);
+
+create table organisations (
+  id                      uuid primary key default gen_random_uuid(),
+  practice_id             uuid not null references practices (id) on delete cascade,
+  slug                    text not null unique check (slug ~ '^[a-z0-9-]+$'),
+  name                    text not null,
+  greek_name              text,
+  industry                text not null,
+  he_number               text,
+  vat_number              text,
+  tic                     text,
+  vat_registered          boolean not null default true,
+  -- Cyprus quarters are staggered: 1 = Jan/Apr/Jul/Oct, 2 = Feb/May/Aug/Nov, 3 = Mar/Jun/Sep/Dec.
+  vat_quarter_end_month   smallint not null default 3 check (vat_quarter_end_month between 1 and 3),
+  year_end_month          smallint not null default 12 check (year_end_month between 1 and 12),
+  lock_date               date,
+  default_bank_account_id uuid,
+  ai_suggestions          boolean not null default true,
+  contact_name            text,
+  contact_email           text,
+  address                 text,
+  -- How this company numbers its sales documents, and the terms it gives.
+  invoice_prefix          text not null default 'INV-',
+  payment_terms_days      smallint not null default 30 check (payment_terms_days between 0 and 365),
+  -- How its documents look: an accent colour and terms printed at the foot. The logo is kept apart, below.
+  invoice_accent          text not null default '#1d2433' check (invoice_accent ~ '^#[0-9a-fA-F]{6}$'),
+  invoice_footer          text,
+  -- Who at the practice looks after this company: its deadlines and work are theirs.
+  manager                 text,
+  -- The practice's own books: its clients are its customers, its fees its sales. One per practice.
+  is_practice             boolean not null default false,
+  created_at              timestamptz not null default now()
+);
+create unique index organisations_one_practice on organisations (practice_id) where is_practice;
+
+-- A company's logo, for its invoices, quotes and statements. Apart from the company row, which every page reads.
+create table organisation_logos (
+  organisation_id uuid primary key references organisations (id) on delete cascade,
+  media_type      text not null check (media_type in ('image/png', 'image/jpeg')),
+  content         bytea not null,
+  updated_at      timestamptz not null default now()
+);
+
+create table app_users (
+  id       uuid primary key default gen_random_uuid(),
+  name     text not null,
+  email    text not null,
+  initials text not null
+);
+
+-- ---------------------------------------------------------------------------
+-- Chart of accounts
+-- ---------------------------------------------------------------------------
+
+create type ledger_account_type as enum (
+  'bank', 'current_asset', 'fixed_asset', 'current_liability', 'non_current_liability',
+  'equity', 'revenue', 'other_income', 'direct_costs', 'expense', 'depreciation'
+);
+
+create table ledger_accounts (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  code            text not null check (code ~ '^[0-9]{3,6}$'),
+  name            text not null check (length(btrim(name)) between 1 and 120),
+  type            ledger_account_type not null,
+  system_role     text check (system_role in ('receivable', 'payable', 'vat', 'sales', 'retained_earnings')),
+  description     text,
+  bank_details    text,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (organisation_id, code),
+  unique (organisation_id, system_role),
+  unique (organisation_id, id)
+);
+
+alter table organisations add constraint organisations_default_bank
+  foreign key (id, default_bank_account_id) references ledger_accounts (organisation_id, id) deferrable initially deferred;
+
+-- ---------------------------------------------------------------------------
+-- Customers and suppliers, per organisation
+-- ---------------------------------------------------------------------------
+
+create table customers (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  name            text not null,
+  email           text,
+  phone           text,
+  vat_number      text,
+  country         char(2) not null default 'CY',
+  address         text,
+  -- A business in another EU state: invoices start as reverse charge and go on the VIES statement.
+  eu_business     boolean not null default false,
+  default_account_id uuid,
+  -- Days this customer has to pay; the company's own terms when not set.
+  payment_terms_days smallint check (payment_terms_days between 0 and 365),
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, default_account_id) references ledger_accounts (organisation_id, id)
+);
+
+create table suppliers (
+  id                 uuid primary key default gen_random_uuid(),
+  organisation_id    uuid not null references organisations (id) on delete cascade,
+  name               text not null check (length(btrim(name)) between 1 and 200),
+  greek_name         text,
+  email              text,
+  phone              text,
+  vat_number         text,
+  country            char(2) not null default 'CY',
+  default_account_id uuid,
+  notes              text,
+  is_active          boolean not null default true,
+  reverse_charge     boolean not null default false,
+  -- Where the supplier is paid: needed for a SEPA payment file.
+  iban               text check (iban is null or iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$'),
+  bic                text check (bic is null or bic ~ '^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$'),
+  created_by         uuid,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, default_account_id) references ledger_accounts (organisation_id, id)
+);
+create unique index suppliers_name_unique on suppliers (organisation_id, lower(btrim(name))) where is_active;
+
+-- ---------------------------------------------------------------------------
+-- Products and services: what a company sells, priced once
+-- ---------------------------------------------------------------------------
+
+create table items (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  code            text,
+  name            text not null,
+  description     text,
+  unit            text,
+  unit_price      numeric(14, 4) not null default 0 check (unit_price >= 0),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  account_id      uuid not null,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id)
+);
+create unique index items_code_unique on items (organisation_id, lower(btrim(code))) where code is not null and is_active;
+create unique index items_name_unique on items (organisation_id, lower(btrim(name))) where is_active;
+
+-- ---------------------------------------------------------------------------
+-- Sales invoices: the same line model as bills
+-- ---------------------------------------------------------------------------
+
+create type invoice_status as enum ('draft', 'issued', 'part_paid', 'paid', 'void');
+create type vat_treatment as enum ('standard', 'exempt', 'reverse_charge', 'outside_scope');
+
+create table invoices (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  customer_id     uuid not null,
+  number          text not null,
+  issued_on       date not null,
+  due_on          date,
+  currency        char(3) not null default 'EUR',
+  vat_treatment   vat_treatment not null default 'standard',
+  net             numeric(14, 2) not null default 0,
+  vat_amount      numeric(14, 2) not null default 0,
+  total           numeric(14, 2) generated always as (net + vat_amount) stored,
+  amount_paid     numeric(14, 2) not null default 0,
+  -- Taken off by credit notes allocated to it. The balance is the total less both.
+  amount_credited numeric(14, 2) not null default 0 check (amount_credited >= 0),
+  -- The customer's own reference for it, such as their purchase order number.
+  reference       text,
+  -- When it was last sent to the customer, and to whom.
+  sent_at         timestamptz,
+  sent_to         text,
+  status          invoice_status not null default 'issued',
+  notes           text,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  unique (organisation_id, number),
+  foreign key (organisation_id, customer_id) references customers (organisation_id, id),
+  constraint invoices_not_overpaid check (amount_paid + amount_credited <= net + vat_amount),
+  constraint invoices_vat_treatment check (vat_treatment = 'standard' or vat_amount = 0)
+);
+
+create table invoice_lines (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  invoice_id      uuid not null,
+  position        smallint not null,
+  description     text not null,
+  account_id      uuid not null,
+  item_id         uuid references items (id) on delete set null,
+  unit            text,
+  quantity        numeric(12, 3) not null default 1 check (quantity > 0),
+  unit_price      numeric(14, 4) check (unit_price >= 0),
+  discount_pct    numeric(5, 2) not null default 0 check (discount_pct >= 0 and discount_pct < 100),
+  net             numeric(14, 2) not null check (net >= 0),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_amount      numeric(14, 2) not null default 0,
+  unique (invoice_id, position),
+  foreign key (organisation_id, invoice_id) references invoices (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id)
+);
+
+create table invoice_payments (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  invoice_id      uuid not null,
+  received_on     date not null,
+  amount          numeric(14, 2) not null check (amount > 0),
+  bank_account_id uuid not null,
+  method          text not null default 'bank_transfer',
+  reference       text,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, invoice_id) references invoices (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, bank_account_id) references ledger_accounts (organisation_id, id)
+);
+
+-- ---------------------------------------------------------------------------
+-- Bills
+-- ---------------------------------------------------------------------------
+
+create type bill_status as enum ('awaiting_payment', 'part_paid', 'paid', 'void');
+
+create table bills (
+  id                 uuid primary key default gen_random_uuid(),
+  organisation_id    uuid not null references organisations (id) on delete cascade,
+  supplier_id        uuid not null,
+  number             text,
+  reference          text,
+  issued_on          date not null,
+  due_on             date,
+  currency           char(3) not null default 'EUR',
+  net                numeric(14, 2) not null default 0 check (net >= 0),
+  vat_amount         numeric(14, 2) not null default 0 check (vat_amount >= 0),
+  total              numeric(14, 2) generated always as (net + vat_amount) stored,
+  amount_paid        numeric(14, 2) not null default 0 check (amount_paid >= 0),
+  -- Taken off by the supplier's credit notes set against it.
+  amount_credited    numeric(14, 2) not null default 0 check (amount_credited >= 0),
+  status             bill_status not null default 'awaiting_payment',
+  notes              text,
+  source_document    text,
+  capture_item_id    uuid,
+  reverse_charge     boolean not null default false,
+  reverse_charge_vat numeric(14, 2) not null default 0,
+  created_by         uuid,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, supplier_id) references suppliers (organisation_id, id),
+  constraint bills_due_after_issue check (due_on is null or due_on >= issued_on),
+  constraint bills_not_overpaid check (amount_paid + amount_credited <= net + vat_amount),
+  constraint bills_reverse_charge check (case when reverse_charge then vat_amount = 0 else reverse_charge_vat = 0 end)
+);
+create unique index bills_supplier_number_unique on bills (organisation_id, supplier_id, lower(btrim(number)))
+  where number is not null and status <> 'void';
+
+create table bill_lines (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  bill_id         uuid not null,
+  position        smallint not null,
+  description     text not null,
+  account_id      uuid not null,
+  net             numeric(14, 2) not null check (net >= 0),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_amount      numeric(14, 2) not null default 0 check (vat_amount >= 0),
+  unique (bill_id, position),
+  foreign key (organisation_id, bill_id) references bills (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id)
+);
+
+-- Several bills paid together: one bank account, one day, one SEPA file for the bank.
+create table bill_payment_runs (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  bank_account_id uuid not null,
+  paid_on         date not null,
+  reference       text,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, bank_account_id) references ledger_accounts (organisation_id, id)
+);
+
+create table bill_payments (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  bill_id         uuid not null,
+  run_id          uuid references bill_payment_runs (id) on delete set null,
+  paid_on         date not null,
+  amount          numeric(14, 2) not null check (amount > 0),
+  bank_account_id uuid not null,
+  method          text not null default 'bank_transfer',
+  reference       text,
+  created_by      uuid,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, bill_id) references bills (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, bank_account_id) references ledger_accounts (organisation_id, id)
+);
+
+-- ---------------------------------------------------------------------------
+-- Bank transactions: money spent, received, moved
+-- ---------------------------------------------------------------------------
+
+create type bank_transaction_kind as enum ('spend', 'receive', 'transfer');
+
+create table bank_transactions (
+  id                  uuid primary key default gen_random_uuid(),
+  organisation_id     uuid not null references organisations (id) on delete cascade,
+  kind                bank_transaction_kind not null,
+  bank_account_id     uuid not null,
+  transfer_account_id uuid,
+  txn_date            date not null,
+  contact             text,
+  reference           text,
+  amount              numeric(14, 2) not null default 0 check (amount >= 0),
+  net                 numeric(14, 2) not null default 0 check (net >= 0),
+  vat_amount          numeric(14, 2) not null default 0 check (vat_amount >= 0),
+  reverse_charge      boolean not null default false,
+  reverse_charge_vat  numeric(14, 2) not null default 0,
+  -- Set on a refund of a customer's credit: it posts against receivables, and has no lines.
+  credit_note_id      uuid,
+  -- Set on a refund received from a supplier against their credit note: it posts against payables.
+  supplier_credit_id  uuid,
+  created_by          uuid,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, bank_account_id) references ledger_accounts (organisation_id, id),
+  foreign key (organisation_id, transfer_account_id) references ledger_accounts (organisation_id, id),
+  constraint bank_transactions_transfer check ((kind = 'transfer') = (transfer_account_id is not null))
+);
+
+create table bank_transaction_lines (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  transaction_id  uuid not null,
+  position        smallint not null,
+  description     text not null,
+  account_id      uuid not null,
+  net             numeric(14, 2) not null check (net >= 0),
+  vat_rate        numeric(5, 2) not null default 0 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_amount      numeric(14, 2) not null default 0 check (vat_amount >= 0),
+  unique (transaction_id, position),
+  foreign key (organisation_id, transaction_id) references bank_transactions (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id)
+);
+
+-- ---------------------------------------------------------------------------
+-- The general ledger
+-- ---------------------------------------------------------------------------
+
+create type journal_source as enum ('invoice', 'invoice_payment', 'bill', 'bill_payment', 'bank', 'manual', 'credit_note', 'supplier_credit');
+
+create table journal_entries (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  entry_date      date not null,
+  source          journal_source not null,
+  source_id       uuid,
+  reference       text,
+  narration       text not null,
+  created_by      uuid,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  constraint journal_entries_source check ((source = 'manual') = (source_id is null))
+);
+create unique index journal_entries_source_unique on journal_entries (source, source_id) where source_id is not null;
+create index journal_entries_org_date on journal_entries (organisation_id, entry_date);
+
+create table journal_lines (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  entry_id        uuid not null,
+  account_id      uuid not null,
+  debit           numeric(14, 2) not null default 0 check (debit >= 0),
+  credit          numeric(14, 2) not null default 0 check (credit >= 0),
+  is_tax          boolean not null default false,
+  description     text,
+  foreign key (organisation_id, entry_id) references journal_entries (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id),
+  constraint journal_lines_one_side check ((debit > 0) <> (credit > 0))
+);
+create index journal_lines_entry_idx on journal_lines (entry_id);
+create index journal_lines_account_idx on journal_lines (account_id);
+
+create function check_journal_balance() returns trigger language plpgsql as $$
+declare v_entry uuid := coalesce(new.entry_id, old.entry_id);
+begin
+  if exists (select 1 from journal_entries where id = v_entry)
+     and (select coalesce(sum(debit), 0) - coalesce(sum(credit), 0) from journal_lines where entry_id = v_entry) <> 0 then
+    raise exception 'journal_unbalanced: debits and credits must be equal' using errcode = '23514';
+  end if;
+  return null;
+end $$;
+create constraint trigger journal_lines_balance after insert or update or delete on journal_lines
+  deferrable initially deferred for each row execute function check_journal_balance();
+
+create function org_lock_date(p_org uuid) returns date language sql stable as $$
+  select lock_date from organisations where id = p_org;
+$$;
+
+-- Replace a document's entry with the lines given; nothing when they are empty.
+-- An unchanged entry is left alone; a change that touches a locked date is refused.
+create function ledger_replace(p_org uuid, p_source journal_source, p_source_id uuid, p_date date,
+                               p_reference text, p_narration text, p_lines jsonb) returns void
+language plpgsql as $$
+declare
+  v_lock  date := org_lock_date(p_org);
+  v_old   journal_entries;
+  v_entry uuid;
+  v_new   jsonb;
+  v_had   jsonb;
+begin
+  select * into v_old from journal_entries where source = p_source and source_id = p_source_id;
+  select coalesce(jsonb_agg(jsonb_build_object('a', (l->>'account_id')::uuid, 'd', round(coalesce((l->>'debit')::numeric, 0), 2),
+                                               'c', round(coalesce((l->>'credit')::numeric, 0), 2), 't', coalesce((l->>'is_tax')::boolean, false))
+                            order by (l->>'account_id'), round(coalesce((l->>'debit')::numeric, 0), 2), round(coalesce((l->>'credit')::numeric, 0), 2), coalesce((l->>'is_tax')::boolean, false)), '[]'::jsonb)
+    into v_new
+    from jsonb_array_elements(coalesce(p_lines, '[]'::jsonb)) l
+   where round(coalesce((l->>'debit')::numeric, 0), 2) > 0 or round(coalesce((l->>'credit')::numeric, 0), 2) > 0;
+
+  if v_old.id is not null then
+    select coalesce(jsonb_agg(jsonb_build_object('a', account_id, 'd', debit, 'c', credit, 't', is_tax)
+                              order by account_id::text, debit, credit, is_tax), '[]'::jsonb)
+      into v_had from journal_lines where entry_id = v_old.id;
+    if v_had = v_new and v_old.entry_date = p_date then
+      update journal_entries set reference = p_reference, narration = p_narration
+       where id = v_old.id and (reference, narration) is distinct from (p_reference, p_narration);
+      return;
+    end if;
+    if v_lock is not null and v_old.entry_date <= v_lock then
+      raise exception 'period_locked: the books are locked up to %', v_lock using errcode = '23514';
+    end if;
+    delete from journal_entries where id = v_old.id;
+  end if;
+
+  if jsonb_array_length(v_new) = 0 then return; end if;
+  if v_lock is not null and p_date <= v_lock then
+    raise exception 'period_locked: the books are locked up to %', v_lock using errcode = '23514';
+  end if;
+  insert into journal_entries (organisation_id, entry_date, source, source_id, reference, narration)
+  values (p_org, p_date, p_source, p_source_id, p_reference, left(p_narration, 300))
+  returning id into v_entry;
+  insert into journal_lines (organisation_id, entry_id, account_id, debit, credit, is_tax, description)
+  select p_org, v_entry, (l->>'account_id')::uuid, round(coalesce((l->>'debit')::numeric, 0), 2), round(coalesce((l->>'credit')::numeric, 0), 2),
+         coalesce((l->>'is_tax')::boolean, false), left(l->>'description', 300)
+    from jsonb_array_elements(p_lines) l
+   where round(coalesce((l->>'debit')::numeric, 0), 2) > 0 or round(coalesce((l->>'credit')::numeric, 0), 2) > 0;
+end $$;
+
+create function ledger_system_account(p_org uuid, p_role text) returns uuid language sql stable as $$
+  select id from ledger_accounts where organisation_id = p_org and system_role = p_role;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Posting: each document to its one entry
+-- ---------------------------------------------------------------------------
+
+-- A sales invoice: the customer owes the total; each line's account earns its net, VAT is owed.
+create function post_invoice(p_id uuid) returns void language plpgsql as $$
+declare
+  v invoices;
+  v_org uuid;
+  v_customer text;
+  v_lines jsonb;
+begin
+  select * into v from invoices where id = p_id;
+  if not found then
+    select organisation_id into v_org from journal_entries where source = 'invoice' and source_id = p_id;
+    if v_org is not null then perform ledger_replace(v_org, 'invoice', p_id, null, null, null, null); end if;
+    return;
+  end if;
+  if v.status not in ('issued', 'part_paid', 'paid') or v.currency <> 'EUR' then
+    perform ledger_replace(v.organisation_id, 'invoice', p_id, null, null, null, null);
+    return;
+  end if;
+  select name into v_customer from customers where id = v.customer_id;
+  select coalesce(jsonb_agg(jsonb_build_object('account_id', account_id, 'credit', net, 'description', description)), '[]'::jsonb)
+    into v_lines
+    from (select account_id, sum(net) as net, min(description) as description from invoice_lines where invoice_id = p_id group by account_id) grouped;
+  perform ledger_replace(v.organisation_id, 'invoice', p_id, v.issued_on, v.number,
+    'Invoice ' || v.number || coalesce(' · ' || v_customer, ''),
+    v_lines || jsonb_build_array(
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'receivable'), 'debit', v.total),
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'vat'), 'credit', v.vat_amount, 'is_tax', true)
+    ));
+end $$;
+
+create function post_invoice_payment(p_id uuid) returns void language plpgsql as $$
+declare
+  v invoice_payments;
+  v_invoice invoices;
+  v_org uuid;
+begin
+  select * into v from invoice_payments where id = p_id;
+  if not found then
+    select organisation_id into v_org from journal_entries where source = 'invoice_payment' and source_id = p_id;
+    if v_org is not null then perform ledger_replace(v_org, 'invoice_payment', p_id, null, null, null, null); end if;
+    return;
+  end if;
+  select * into v_invoice from invoices where id = v.invoice_id;
+  perform ledger_replace(v.organisation_id, 'invoice_payment', p_id, v.received_on, coalesce(v.reference, v_invoice.number),
+    'Payment received · invoice ' || v_invoice.number,
+    jsonb_build_array(
+      jsonb_build_object('account_id', v.bank_account_id, 'debit', v.amount),
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'receivable'), 'credit', v.amount)
+    ));
+end $$;
+
+-- A bill: each line's account carries its net, VAT is reclaimable, the supplier is owed the total.
+-- A company that is not registered for VAT cannot reclaim it: the VAT is part of the cost.
+create function post_bill(p_id uuid) returns void language plpgsql as $$
+declare
+  v bills;
+  v_org uuid;
+  v_supplier text;
+  v_lines jsonb;
+  v_registered boolean;
+  v_vat uuid;
+begin
+  select * into v from bills where id = p_id;
+  if not found then
+    select organisation_id into v_org from journal_entries where source = 'bill' and source_id = p_id;
+    if v_org is not null then perform ledger_replace(v_org, 'bill', p_id, null, null, null, null); end if;
+    return;
+  end if;
+  if v.status = 'void' then
+    perform ledger_replace(v.organisation_id, 'bill', p_id, null, null, null, null);
+    return;
+  end if;
+  v_vat := ledger_system_account(v.organisation_id, 'vat');
+  select vat_registered into v_registered from organisations where id = v.organisation_id;
+  select name into v_supplier from suppliers where id = v.supplier_id;
+  select coalesce(jsonb_agg(jsonb_build_object('account_id', account_id, 'debit', amount, 'description', description)), '[]'::jsonb)
+    into v_lines
+    from (select account_id, sum(net + case when v_registered or v.reverse_charge then 0 else vat_amount end) as amount, min(description) as description
+            from bill_lines where bill_id = p_id group by account_id) grouped;
+  perform ledger_replace(v.organisation_id, 'bill', p_id, v.issued_on, coalesce(v.number, v.reference),
+    'Bill · ' || v_supplier || coalesce(' ' || v.number, ''),
+    v_lines || jsonb_build_array(
+      jsonb_build_object('account_id', v_vat, 'debit', case when v_registered then v.vat_amount else 0 end, 'is_tax', true),
+      jsonb_build_object('account_id', v_vat, 'debit', v.reverse_charge_vat, 'is_tax', true, 'description', 'Reverse charge: VAT reclaimed'),
+      jsonb_build_object('account_id', v_vat, 'credit', v.reverse_charge_vat, 'is_tax', true, 'description', 'Reverse charge: VAT due'),
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'payable'), 'credit', v.total)
+    ));
+end $$;
+
+create function post_bill_payment(p_id uuid) returns void language plpgsql as $$
+declare
+  v bill_payments;
+  v_bill bills;
+  v_supplier text;
+  v_org uuid;
+begin
+  select * into v from bill_payments where id = p_id;
+  if not found then
+    select organisation_id into v_org from journal_entries where source = 'bill_payment' and source_id = p_id;
+    if v_org is not null then perform ledger_replace(v_org, 'bill_payment', p_id, null, null, null, null); end if;
+    return;
+  end if;
+  select * into v_bill from bills where id = v.bill_id;
+  select name into v_supplier from suppliers where id = v_bill.supplier_id;
+  perform ledger_replace(v.organisation_id, 'bill_payment', p_id, v.paid_on, coalesce(v.reference, v_bill.number),
+    'Payment made · ' || v_supplier || coalesce(' ' || v_bill.number, ''),
+    jsonb_build_array(
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'payable'), 'debit', v.amount),
+      jsonb_build_object('account_id', v.bank_account_id, 'credit', v.amount)
+    ));
+end $$;
+
+create function post_bank_transaction(p_id uuid) returns void language plpgsql as $$
+declare
+  v bank_transactions;
+  v_lines jsonb;
+  v_side text;
+  v_vat uuid;
+  v_org uuid;
+  v_registered boolean;
+begin
+  select * into v from bank_transactions where id = p_id;
+  if not found then
+    select organisation_id into v_org from journal_entries where source = 'bank' and source_id = p_id;
+    if v_org is not null then perform ledger_replace(v_org, 'bank', p_id, null, null, null, null); end if;
+    return;
+  end if;
+  if v.kind = 'transfer' then
+    perform ledger_replace(v.organisation_id, 'bank', p_id, v.txn_date, v.reference, 'Transfer between bank accounts',
+      jsonb_build_array(
+        jsonb_build_object('account_id', v.transfer_account_id, 'debit', v.amount),
+        jsonb_build_object('account_id', v.bank_account_id, 'credit', v.amount)
+      ));
+    return;
+  end if;
+  v_vat := ledger_system_account(v.organisation_id, 'vat');
+  select vat_registered into v_registered from organisations where id = v.organisation_id;
+  -- A refund of a credit note: the customer's balance goes back up as the money leaves the bank.
+  if v.credit_note_id is not null then
+    perform ledger_replace(v.organisation_id, 'bank', p_id, v.txn_date, v.reference, 'Refund' || coalesce(' · ' || v.contact, ''),
+      jsonb_build_array(
+        jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'receivable'), 'debit', v.amount),
+        jsonb_build_object('account_id', v.bank_account_id, 'credit', v.amount)
+      ));
+    return;
+  end if;
+  -- A refund received from a supplier: the money comes in, and what they owed back is settled.
+  if v.supplier_credit_id is not null then
+    perform ledger_replace(v.organisation_id, 'bank', p_id, v.txn_date, v.reference, 'Refund received' || coalesce(' · ' || v.contact, ''),
+      jsonb_build_array(
+        jsonb_build_object('account_id', v.bank_account_id, 'debit', v.amount),
+        jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'payable'), 'credit', v.amount)
+      ));
+    return;
+  end if;
+  v_side := case when v.kind = 'spend' then 'debit' else 'credit' end;
+  select coalesce(jsonb_agg(jsonb_build_object('account_id', account_id, v_side, amount, 'description', description)), '[]'::jsonb)
+    into v_lines
+    from (select account_id, sum(net + case when v_registered or v.reverse_charge then 0 else vat_amount end) as amount, min(description) as description
+            from bank_transaction_lines where transaction_id = p_id group by account_id) grouped;
+  perform ledger_replace(v.organisation_id, 'bank', p_id, v.txn_date, v.reference,
+    case when v.kind = 'spend' then 'Money spent' else 'Money received' end || coalesce(' · ' || v.contact, ''),
+    v_lines || jsonb_build_array(
+      jsonb_build_object('account_id', v_vat, v_side, case when v_registered then v.vat_amount else 0 end, 'is_tax', true),
+      jsonb_build_object('account_id', v_vat, 'debit', v.reverse_charge_vat, 'is_tax', true, 'description', 'Reverse charge: VAT reclaimed'),
+      jsonb_build_object('account_id', v_vat, 'credit', v.reverse_charge_vat, 'is_tax', true, 'description', 'Reverse charge: VAT due'),
+      jsonb_build_object('account_id', v.bank_account_id, case when v.kind = 'spend' then 'credit' else 'debit' end, v.net + v.vat_amount)
+    ));
+end $$;
+
+create function post_invoice_trigger() returns trigger language plpgsql as $$
+begin perform post_invoice(coalesce(new.id, old.id)); return null; end $$;
+create function post_invoice_lines_trigger() returns trigger language plpgsql as $$
+begin perform post_invoice(coalesce(new.invoice_id, old.invoice_id)); return null; end $$;
+create constraint trigger invoice_ledger after insert or update or delete on invoices
+  deferrable initially deferred for each row execute function post_invoice_trigger();
+create constraint trigger invoice_lines_ledger after insert or update or delete on invoice_lines
+  deferrable initially deferred for each row execute function post_invoice_lines_trigger();
+
+create function post_invoice_payment_trigger() returns trigger language plpgsql as $$
+begin perform post_invoice_payment(coalesce(new.id, old.id)); return null; end $$;
+create trigger invoice_payment_ledger after insert or update or delete on invoice_payments
+  for each row execute function post_invoice_payment_trigger();
+
+create function post_bill_trigger() returns trigger language plpgsql as $$
+begin perform post_bill(coalesce(new.id, old.id)); return null; end $$;
+create function post_bill_lines_trigger() returns trigger language plpgsql as $$
+begin perform post_bill(coalesce(new.bill_id, old.bill_id)); return null; end $$;
+create constraint trigger bill_ledger after insert or update or delete on bills
+  deferrable initially deferred for each row execute function post_bill_trigger();
+create constraint trigger bill_lines_ledger after insert or update or delete on bill_lines
+  deferrable initially deferred for each row execute function post_bill_lines_trigger();
+
+create function post_bill_payment_trigger() returns trigger language plpgsql as $$
+begin perform post_bill_payment(coalesce(new.id, old.id)); return null; end $$;
+create trigger bill_payment_ledger after insert or update or delete on bill_payments
+  for each row execute function post_bill_payment_trigger();
+
+create function post_bank_transaction_trigger() returns trigger language plpgsql as $$
+begin perform post_bank_transaction(coalesce(new.id, old.id)); return null; end $$;
+create function post_bank_transaction_lines_trigger() returns trigger language plpgsql as $$
+begin perform post_bank_transaction(coalesce(new.transaction_id, old.transaction_id)); return null; end $$;
+create constraint trigger bank_transaction_ledger after insert or update or delete on bank_transactions
+  deferrable initially deferred for each row execute function post_bank_transaction_trigger();
+create constraint trigger bank_transaction_lines_ledger after insert or update or delete on bank_transaction_lines
+  deferrable initially deferred for each row execute function post_bank_transaction_lines_trigger();
+
+-- Payments keep the document's paid amount and status in step.
+create function sync_bill_balance(p_bill uuid) returns void language plpgsql as $$
+declare v_paid numeric(14, 2); v_credited numeric(14, 2);
+begin
+  select coalesce(sum(amount), 0) into v_paid from bill_payments where bill_id = p_bill;
+  select coalesce(sum(amount), 0) into v_credited from supplier_credit_allocations where bill_id = p_bill;
+  update bills set amount_paid = v_paid, amount_credited = v_credited,
+         status = case when v_paid + v_credited = 0 then 'awaiting_payment'::bill_status when v_paid + v_credited < total then 'part_paid'::bill_status else 'paid'::bill_status end
+   where id = p_bill and status <> 'void';
+end $$;
+create function sync_bill_payment() returns trigger language plpgsql as $$
+begin perform sync_bill_balance(coalesce(new.bill_id, old.bill_id)); return null; end $$;
+create trigger bill_payment_sync after insert or delete on bill_payments for each row execute function sync_bill_payment();
+
+create function guard_bill_payment() returns trigger language plpgsql as $$
+declare v_bill record;
+begin
+  select status, total, amount_paid, amount_credited into v_bill from bills where id = new.bill_id for update;
+  if v_bill.status = 'void' then raise exception 'bill_payment_closed: a void bill cannot be paid' using errcode = '23514'; end if;
+  if new.amount > v_bill.total - v_bill.amount_paid - v_bill.amount_credited then
+    raise exception 'bills_not_overpaid: that is more than the balance on this bill' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger bill_payment_guard before insert on bill_payments for each row execute function guard_bill_payment();
+
+-- What has been paid and what credit notes have taken off, together decide whether an invoice is still owed.
+create function sync_invoice_balance(p_invoice uuid) returns void language plpgsql as $$
+declare v_paid numeric(14, 2); v_credited numeric(14, 2);
+begin
+  select coalesce(sum(amount), 0) into v_paid from invoice_payments where invoice_id = p_invoice;
+  select coalesce(sum(amount), 0) into v_credited from credit_allocations where invoice_id = p_invoice;
+  update invoices set amount_paid = v_paid, amount_credited = v_credited,
+         status = case when v_paid + v_credited = 0 then 'issued'::invoice_status when v_paid + v_credited < total then 'part_paid'::invoice_status else 'paid'::invoice_status end
+   where id = p_invoice and status in ('issued', 'part_paid', 'paid');
+end $$;
+create function sync_invoice_payment() returns trigger language plpgsql as $$
+begin perform sync_invoice_balance(coalesce(new.invoice_id, old.invoice_id)); return null; end $$;
+create trigger invoice_payment_sync after insert or delete on invoice_payments for each row execute function sync_invoice_payment();
+
+create function guard_invoice_payment() returns trigger language plpgsql as $$
+declare v_invoice record;
+begin
+  select status, total, amount_paid, amount_credited into v_invoice from invoices where id = new.invoice_id for update;
+  if v_invoice.status not in ('issued', 'part_paid') then
+    raise exception 'invoice_payment_closed: only an issued invoice can take a payment' using errcode = '23514';
+  end if;
+  if new.amount > v_invoice.total - v_invoice.amount_paid - v_invoice.amount_credited then
+    raise exception 'invoices_not_overpaid: that is more than the balance on this invoice' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger invoice_payment_guard before insert on invoice_payments for each row execute function guard_invoice_payment();
+
+-- ---------------------------------------------------------------------------
+-- Writing documents
+-- ---------------------------------------------------------------------------
+
+create function ledger_document_lines(p_org uuid, p_lines jsonb, p_label text)
+returns table (pos integer, description text, account_id uuid, net numeric, vat_rate numeric, vat_amount numeric,
+               item_id uuid, unit text, quantity numeric, unit_price numeric, discount_pct numeric)
+language plpgsql as $$
+declare
+  v_line jsonb; v_pos integer := 0; v_type ledger_account_type; v_role text; v_net numeric;
+begin
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) not between 1 and 200 then
+    raise exception 'ledger_lines_required: a % needs between 1 and 200 lines', p_label using errcode = '23514';
+  end if;
+  for v_line in select value from jsonb_array_elements(p_lines) loop
+    v_pos := v_pos + 1;
+    pos := v_pos;
+    description := btrim(coalesce(v_line->>'description', ''));
+    account_id := nullif(v_line->>'account_id', '')::uuid;
+    item_id := nullif(v_line->>'item_id', '')::uuid;
+    unit := nullif(btrim(coalesce(v_line->>'unit', '')), '');
+    unit_price := nullif(v_line->>'unit_price', '')::numeric;
+    if unit_price is null then
+      -- A single amount: one of it, at its net.
+      net := round(coalesce((v_line->>'net')::numeric, 0), 2);
+      quantity := 1; discount_pct := 0;
+    else
+      quantity := coalesce(nullif(v_line->>'quantity', '')::numeric, 1);
+      discount_pct := coalesce(nullif(v_line->>'discount_pct', '')::numeric, 0);
+      if quantity <= 0 or unit_price < 0 or discount_pct < 0 or discount_pct >= 100 then
+        raise exception 'ledger_line_quantity: line % needs a quantity above zero, a price and a discount under 100%%', v_pos using errcode = '23514';
+      end if;
+      net := round(quantity * unit_price * (100 - discount_pct) / 100, 2);
+      v_net := nullif(v_line->>'net', '')::numeric;
+      if v_net is not null and abs(round(v_net, 2) - net) > 0.01 then
+        raise exception 'ledger_line_net: the amount on line % is not its quantity times its price, less the discount', v_pos using errcode = '23514';
+      end if;
+    end if;
+    vat_rate := coalesce((v_line->>'vat_rate')::numeric, 0);
+    vat_amount := round(coalesce(nullif(v_line->>'vat_amount', '')::numeric, net * vat_rate / 100), 2);
+    select a.type, a.system_role into v_type, v_role from ledger_accounts a where a.id = account_id and a.organisation_id = p_org and a.is_active;
+    if description = '' or account_id is null or v_type is null or net < 0 then
+      raise exception 'ledger_lines_required: line % needs a description, an account and an amount', v_pos using errcode = '23514';
+    end if;
+    if item_id is not null and not exists (select 1 from items i where i.id = item_id and i.organisation_id = p_org) then
+      raise exception 'ledger_line_item: line % names a product this company does not sell', v_pos using errcode = '23514';
+    end if;
+    -- A VAT payment to or refund from the Tax Department is money spent or received on the VAT account itself.
+    if v_type = 'bank' or v_role in ('receivable', 'payable') or (v_role = 'vat' and p_label in ('bill', 'invoice', 'quote', 'credit note', 'supplier credit')) then
+      raise exception 'ledger_line_account: line % cannot be coded to a bank, receivable, payable or VAT account', v_pos using errcode = '23514';
+    end if;
+    if vat_rate not in (0, 3, 5, 9, 19) then
+      raise exception 'ledger_vat_rate: line % has a VAT rate Cyprus does not use', v_pos using errcode = '23514';
+    end if;
+    if abs(vat_amount - round(net * vat_rate / 100, 2)) > 0.01 then
+      raise exception 'ledger_vat_amount: the VAT on line % does not match its rate', v_pos using errcode = '23514';
+    end if;
+    return next;
+  end loop;
+end $$;
+
+create function save_bill(p_org uuid, p_id uuid, p_supplier_id uuid, p_number text, p_reference text,
+  p_issued_on date, p_due_on date, p_notes text, p_source_document text, p_lines jsonb, p_reverse_charge boolean default false)
+returns uuid language plpgsql as $$
+declare v_id uuid := p_id; v_net numeric(14, 2); v_vat numeric(14, 2); v_rc boolean := coalesce(p_reverse_charge, false);
+begin
+  select coalesce(sum(l.net), 0), coalesce(sum(l.vat_amount), 0) into v_net, v_vat from ledger_document_lines(p_org, p_lines, 'bill') l;
+  if v_id is null then
+    insert into bills (organisation_id, supplier_id, number, reference, issued_on, due_on, net, vat_amount, reverse_charge, reverse_charge_vat, notes, source_document)
+    values (p_org, p_supplier_id, nullif(btrim(p_number), ''), nullif(btrim(p_reference), ''), p_issued_on, p_due_on, v_net,
+            case when v_rc then 0 else v_vat end, v_rc, case when v_rc then v_vat else 0 end, nullif(btrim(p_notes), ''), nullif(btrim(p_source_document), ''))
+    returning id into v_id;
+  else
+    update bills set supplier_id = p_supplier_id, number = nullif(btrim(p_number), ''), reference = nullif(btrim(p_reference), ''),
+           issued_on = p_issued_on, due_on = p_due_on, net = v_net, vat_amount = case when v_rc then 0 else v_vat end,
+           reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end,
+           notes = nullif(btrim(p_notes), ''), source_document = nullif(btrim(p_source_document), ''), updated_at = now()
+     where id = v_id and organisation_id = p_org and status <> 'void';
+    if not found then raise exception 'bill_closed: this bill is void or no longer exists' using errcode = '23514'; end if;
+    delete from bill_lines where bill_id = v_id;
+  end if;
+  insert into bill_lines (organisation_id, bill_id, position, description, account_id, net, vat_rate, vat_amount)
+  select p_org, v_id, l.pos, l.description, l.account_id, l.net, l.vat_rate, l.vat_amount from ledger_document_lines(p_org, p_lines, 'bill') l order by l.pos;
+  return v_id;
+end $$;
+
+create function set_bill_void(p_id uuid, p_void boolean) returns void language plpgsql as $$
+begin
+  update bills set status = case when p_void then 'void'::bill_status else 'awaiting_payment'::bill_status end
+   where id = p_id and status = case when p_void then 'awaiting_payment'::bill_status else 'void'::bill_status end;
+  if not found then raise exception 'bill_has_payments: only an unpaid bill can be voided' using errcode = '23514'; end if;
+end $$;
+
+create function save_invoice(p_org uuid, p_id uuid, p_customer_id uuid, p_number text, p_issued_on date, p_due_on date,
+  p_treatment vat_treatment, p_notes text, p_lines jsonb, p_status invoice_status default 'issued', p_reference text default null)
+returns uuid language plpgsql as $$
+declare v_id uuid := p_id; v_net numeric(14, 2); v_vat numeric(14, 2);
+begin
+  select coalesce(sum(l.net), 0), coalesce(sum(l.vat_amount), 0) into v_net, v_vat from ledger_document_lines(p_org, p_lines, 'invoice') l;
+  if p_treatment <> 'standard' then v_vat := 0; end if;
+  if v_id is null then
+    insert into invoices (organisation_id, customer_id, number, issued_on, due_on, vat_treatment, net, vat_amount, notes, status, reference)
+    values (p_org, p_customer_id, btrim(p_number), p_issued_on, p_due_on, p_treatment, v_net, v_vat, nullif(btrim(p_notes), ''), p_status, nullif(btrim(p_reference), ''))
+    returning id into v_id;
+  else
+    update invoices set customer_id = p_customer_id, number = btrim(p_number), issued_on = p_issued_on, due_on = p_due_on,
+           vat_treatment = p_treatment, net = v_net, vat_amount = v_vat, notes = nullif(btrim(p_notes), ''), reference = nullif(btrim(p_reference), '')
+     where id = v_id and organisation_id = p_org and amount_paid = 0 and amount_credited = 0 and status in ('draft', 'issued');
+    if not found then raise exception 'invoice_has_payments: only an open invoice with no payments can be edited' using errcode = '23514'; end if;
+    delete from invoice_lines where invoice_id = v_id;
+  end if;
+  insert into invoice_lines (organisation_id, invoice_id, position, description, account_id, net, vat_rate, vat_amount, item_id, unit, quantity, unit_price, discount_pct)
+  select p_org, v_id, l.pos, l.description, l.account_id, l.net, case when p_treatment = 'standard' then l.vat_rate else 0 end,
+         case when p_treatment = 'standard' then l.vat_amount else 0 end, l.item_id, l.unit, l.quantity, l.unit_price, l.discount_pct
+    from ledger_document_lines(p_org, p_lines, 'invoice') l order by l.pos;
+  return v_id;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Quotes: the same lines as an invoice. Accepting one raises the invoice.
+-- ---------------------------------------------------------------------------
+
+create type quote_status as enum ('draft', 'sent', 'accepted', 'declined');
+
+create table quotes (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  customer_id     uuid not null,
+  number          text not null,
+  issued_on       date not null,
+  valid_until     date,
+  vat_treatment   vat_treatment not null default 'standard',
+  net             numeric(14, 2) not null default 0,
+  vat_amount      numeric(14, 2) not null default 0,
+  total           numeric(14, 2) generated always as (net + vat_amount) stored,
+  status          quote_status not null default 'draft',
+  notes           text,
+  invoice_id      uuid,
+  accepted_on     date,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  unique (organisation_id, number),
+  foreign key (organisation_id, customer_id) references customers (organisation_id, id),
+  foreign key (organisation_id, invoice_id) references invoices (organisation_id, id)
+);
+
+create table quote_lines (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  quote_id        uuid not null,
+  position        smallint not null,
+  description     text not null,
+  account_id      uuid not null,
+  item_id         uuid references items (id) on delete set null,
+  unit            text,
+  quantity        numeric(12, 3) not null default 1 check (quantity > 0),
+  unit_price      numeric(14, 4) check (unit_price >= 0),
+  discount_pct    numeric(5, 2) not null default 0 check (discount_pct >= 0 and discount_pct < 100),
+  net             numeric(14, 2) not null check (net >= 0),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_amount      numeric(14, 2) not null default 0,
+  unique (quote_id, position),
+  foreign key (organisation_id, quote_id) references quotes (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id)
+);
+
+create function save_quote(p_org uuid, p_id uuid, p_customer_id uuid, p_number text, p_issued_on date, p_valid_until date,
+  p_treatment vat_treatment, p_notes text, p_lines jsonb)
+returns uuid language plpgsql as $$
+declare v_id uuid := p_id; v_net numeric(14, 2); v_vat numeric(14, 2);
+begin
+  select coalesce(sum(l.net), 0), coalesce(sum(l.vat_amount), 0) into v_net, v_vat from ledger_document_lines(p_org, p_lines, 'quote') l;
+  if p_treatment <> 'standard' then v_vat := 0; end if;
+  if v_id is null then
+    insert into quotes (organisation_id, customer_id, number, issued_on, valid_until, vat_treatment, net, vat_amount, notes)
+    values (p_org, p_customer_id, btrim(p_number), p_issued_on, p_valid_until, p_treatment, v_net, v_vat, nullif(btrim(p_notes), ''))
+    returning id into v_id;
+  else
+    update quotes set customer_id = p_customer_id, number = btrim(p_number), issued_on = p_issued_on, valid_until = p_valid_until,
+           vat_treatment = p_treatment, net = v_net, vat_amount = v_vat, notes = nullif(btrim(p_notes), '')
+     where id = v_id and organisation_id = p_org and status in ('draft', 'sent');
+    if not found then raise exception 'quote_closed: an accepted or declined quote cannot be edited' using errcode = '23514'; end if;
+    delete from quote_lines where quote_id = v_id;
+  end if;
+  insert into quote_lines (organisation_id, quote_id, position, description, account_id, net, vat_rate, vat_amount, item_id, unit, quantity, unit_price, discount_pct)
+  select p_org, v_id, l.pos, l.description, l.account_id, l.net, case when p_treatment = 'standard' then l.vat_rate else 0 end,
+         case when p_treatment = 'standard' then l.vat_amount else 0 end, l.item_id, l.unit, l.quantity, l.unit_price, l.discount_pct
+    from ledger_document_lines(p_org, p_lines, 'quote') l order by l.pos;
+  return v_id;
+end $$;
+
+-- The customer said yes: raise the invoice with the quote's very lines, and close the quote.
+create function accept_quote(p_quote_id uuid, p_number text, p_issued_on date, p_due_on date) returns uuid language plpgsql as $$
+declare v quotes; v_invoice uuid; v_lines jsonb;
+begin
+  select * into v from quotes where id = p_quote_id for update;
+  if not found then raise exception 'Quote not found' using errcode = '23503'; end if;
+  if v.status in ('accepted', 'declined') then raise exception 'quote_closed: this quote is already %', v.status using errcode = '23514'; end if;
+  select jsonb_agg(jsonb_build_object('description', description, 'account_id', account_id, 'net', net, 'vat_rate', vat_rate, 'vat_amount', vat_amount,
+                   'item_id', item_id, 'unit', unit, 'quantity', quantity, 'unit_price', unit_price, 'discount_pct', discount_pct) order by position)
+    into v_lines from quote_lines where quote_id = p_quote_id;
+  v_invoice := save_invoice(v.organisation_id, null, v.customer_id, p_number, p_issued_on, p_due_on, v.vat_treatment,
+    coalesce(v.notes, '') || case when v.notes is null then '' else ' ' end || '(From quote ' || v.number || '.)', v_lines, 'issued');
+  update quotes set status = 'accepted', accepted_on = p_issued_on, invoice_id = v_invoice where id = p_quote_id;
+  return v_invoice;
+end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- Credit notes: a sale taken back, in whole or in part, under its own number.
+-- Cyprus VAT law corrects an issued invoice this way, never by editing it.
+-- ---------------------------------------------------------------------------
+
+create type credit_note_status as enum ('draft', 'issued', 'void');
+
+create table credit_notes (
+  id               uuid primary key default gen_random_uuid(),
+  organisation_id  uuid not null references organisations (id) on delete cascade,
+  customer_id      uuid not null,
+  invoice_id       uuid,
+  number           text not null,
+  issued_on        date not null,
+  vat_treatment    vat_treatment not null default 'standard',
+  reason           text not null,
+  net              numeric(14, 2) not null default 0,
+  vat_amount       numeric(14, 2) not null default 0,
+  total            numeric(14, 2) generated always as (net + vat_amount) stored,
+  amount_allocated numeric(14, 2) not null default 0 check (amount_allocated >= 0),
+  amount_refunded  numeric(14, 2) not null default 0 check (amount_refunded >= 0),
+  status           credit_note_status not null default 'issued',
+  notes            text,
+  created_at       timestamptz not null default now(),
+  unique (organisation_id, id),
+  unique (organisation_id, number),
+  foreign key (organisation_id, customer_id) references customers (organisation_id, id),
+  foreign key (organisation_id, invoice_id) references invoices (organisation_id, id),
+  constraint credit_notes_not_overused check (amount_allocated + amount_refunded <= net + vat_amount),
+  constraint credit_notes_vat_treatment check (vat_treatment = 'standard' or vat_amount = 0)
+);
+
+create table credit_note_lines (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  credit_note_id  uuid not null,
+  position        smallint not null,
+  description     text not null,
+  account_id      uuid not null,
+  item_id         uuid references items (id) on delete set null,
+  unit            text,
+  quantity        numeric(12, 3) not null default 1 check (quantity > 0),
+  unit_price      numeric(14, 4) check (unit_price >= 0),
+  discount_pct    numeric(5, 2) not null default 0 check (discount_pct >= 0 and discount_pct < 100),
+  net             numeric(14, 2) not null check (net >= 0),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_amount      numeric(14, 2) not null default 0,
+  unique (credit_note_id, position),
+  foreign key (organisation_id, credit_note_id) references credit_notes (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id)
+);
+
+-- A credit set against one of the customer's invoices. It posts nothing: both sides are the customer's account.
+create table credit_allocations (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  credit_note_id  uuid not null,
+  invoice_id      uuid not null,
+  amount          numeric(14, 2) not null check (amount > 0),
+  allocated_on    date not null,
+  created_at      timestamptz not null default now(),
+  foreign key (organisation_id, credit_note_id) references credit_notes (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, invoice_id) references invoices (organisation_id, id) on delete cascade
+);
+create index credit_allocations_invoice_idx on credit_allocations (invoice_id);
+create index credit_allocations_note_idx on credit_allocations (credit_note_id);
+
+-- A refund is money spent from the bank against the credit; see post_bank_transaction.
+alter table bank_transactions add foreign key (organisation_id, credit_note_id) references credit_notes (organisation_id, id);
+create index bank_transactions_credit_note_idx on bank_transactions (credit_note_id) where credit_note_id is not null;
+
+-- The reverse of an invoice: each line's account gives back its net, the VAT due falls, the customer owes less.
+create function post_credit_note(p_id uuid) returns void language plpgsql as $$
+declare v credit_notes; v_org uuid; v_customer text; v_lines jsonb;
+begin
+  select * into v from credit_notes where id = p_id;
+  if not found then
+    select organisation_id into v_org from journal_entries where source = 'credit_note' and source_id = p_id;
+    if v_org is not null then perform ledger_replace(v_org, 'credit_note', p_id, null, null, null, null); end if;
+    return;
+  end if;
+  if v.status <> 'issued' then
+    perform ledger_replace(v.organisation_id, 'credit_note', p_id, null, null, null, null);
+    return;
+  end if;
+  select name into v_customer from customers where id = v.customer_id;
+  select coalesce(jsonb_agg(jsonb_build_object('account_id', account_id, 'debit', net, 'description', description)), '[]'::jsonb)
+    into v_lines
+    from (select account_id, sum(net) as net, min(description) as description from credit_note_lines where credit_note_id = p_id group by account_id) grouped;
+  perform ledger_replace(v.organisation_id, 'credit_note', p_id, v.issued_on, v.number,
+    'Credit note ' || v.number || coalesce(' · ' || v_customer, ''),
+    v_lines || jsonb_build_array(
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'vat'), 'debit', v.vat_amount, 'is_tax', true),
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'receivable'), 'credit', v.total)
+    ));
+end $$;
+
+create function post_credit_note_trigger() returns trigger language plpgsql as $$
+begin perform post_credit_note(coalesce(new.id, old.id)); return null; end $$;
+create function post_credit_note_lines_trigger() returns trigger language plpgsql as $$
+begin perform post_credit_note(coalesce(new.credit_note_id, old.credit_note_id)); return null; end $$;
+create constraint trigger credit_note_ledger after insert or update or delete on credit_notes
+  deferrable initially deferred for each row execute function post_credit_note_trigger();
+create constraint trigger credit_note_lines_ledger after insert or update or delete on credit_note_lines
+  deferrable initially deferred for each row execute function post_credit_note_lines_trigger();
+
+-- What has been allocated and refunded, kept on the credit note.
+create function sync_credit_note(p_id uuid) returns void language plpgsql as $$
+begin
+  update credit_notes n
+     set amount_allocated = coalesce((select sum(a.amount) from credit_allocations a where a.credit_note_id = p_id), 0),
+         amount_refunded = coalesce((select sum(t.amount) from bank_transactions t where t.credit_note_id = p_id), 0)
+   where n.id = p_id;
+end $$;
+
+create function guard_credit_allocation() returns trigger language plpgsql as $$
+declare v_note record; v_invoice record;
+begin
+  select status, customer_id, total, amount_allocated, amount_refunded into v_note from credit_notes where id = new.credit_note_id for update;
+  select status, customer_id, total, amount_paid, amount_credited into v_invoice from invoices where id = new.invoice_id for update;
+  if v_note.status is distinct from 'issued' then
+    raise exception 'credit_note_closed: only an issued credit note can be used' using errcode = '23514';
+  end if;
+  if v_invoice.status not in ('issued', 'part_paid') then
+    raise exception 'invoice_payment_closed: only an invoice still owed can take a credit' using errcode = '23514';
+  end if;
+  if v_note.customer_id <> v_invoice.customer_id then
+    raise exception 'credit_customer: a credit can only go against the same customer''s invoices' using errcode = '23514';
+  end if;
+  if new.amount > v_note.total - v_note.amount_allocated - v_note.amount_refunded then
+    raise exception 'credit_notes_not_overused: that is more credit than is left on this credit note' using errcode = '23514';
+  end if;
+  if new.amount > v_invoice.total - v_invoice.amount_paid - v_invoice.amount_credited then
+    raise exception 'invoices_not_overpaid: that is more than the balance on this invoice' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger credit_allocation_guard before insert on credit_allocations for each row execute function guard_credit_allocation();
+
+create function sync_credit_allocation() returns trigger language plpgsql as $$
+begin
+  perform sync_credit_note(coalesce(new.credit_note_id, old.credit_note_id));
+  perform sync_invoice_balance(coalesce(new.invoice_id, old.invoice_id));
+  return null;
+end $$;
+create trigger credit_allocation_sync after insert or delete on credit_allocations for each row execute function sync_credit_allocation();
+
+create function guard_credit_refund() returns trigger language plpgsql as $$
+declare v_note record;
+begin
+  if new.credit_note_id is null then return new; end if;
+  select status, total, amount_allocated, amount_refunded into v_note from credit_notes where id = new.credit_note_id for update;
+  if v_note.status is distinct from 'issued' then
+    raise exception 'credit_note_closed: only an issued credit note can be refunded' using errcode = '23514';
+  end if;
+  if new.kind <> 'spend' then raise exception 'bank_refund: a refund is money spent' using errcode = '23514'; end if;
+  if new.amount > v_note.total - v_note.amount_allocated - v_note.amount_refunded then
+    raise exception 'credit_notes_not_overused: that is more credit than is left on this credit note' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger credit_refund_guard before insert on bank_transactions for each row execute function guard_credit_refund();
+
+create function sync_credit_refund() returns trigger language plpgsql as $$
+begin
+  if tg_op <> 'INSERT' and old.credit_note_id is not null then perform sync_credit_note(old.credit_note_id); end if;
+  if tg_op <> 'DELETE' and new.credit_note_id is not null then perform sync_credit_note(new.credit_note_id); end if;
+  return null;
+end $$;
+create trigger credit_refund_sync after insert or update or delete on bank_transactions for each row execute function sync_credit_refund();
+
+-- Issued against an invoice still owed: the credit goes against it at once, as far as it will go.
+create function apply_credit_to_invoice(p_id uuid) returns void language plpgsql as $$
+declare v credit_notes; v_balance numeric(14, 2); v_amount numeric(14, 2);
+begin
+  select * into v from credit_notes where id = p_id;
+  if v.id is null or v.invoice_id is null or v.status <> 'issued' then return; end if;
+  select total - amount_paid - amount_credited into v_balance from invoices where id = v.invoice_id and status in ('issued', 'part_paid');
+  v_amount := least(coalesce(v_balance, 0), v.total - v.amount_allocated - v.amount_refunded);
+  if v_amount > 0 then
+    insert into credit_allocations (organisation_id, credit_note_id, invoice_id, amount, allocated_on)
+    values (v.organisation_id, p_id, v.invoice_id, v_amount, v.issued_on);
+  end if;
+end $$;
+
+create function save_credit_note(p_org uuid, p_id uuid, p_customer_id uuid, p_invoice_id uuid, p_number text, p_issued_on date,
+  p_treatment vat_treatment, p_reason text, p_notes text, p_lines jsonb, p_status credit_note_status default 'issued')
+returns uuid language plpgsql as $$
+declare v_id uuid := p_id; v_net numeric(14, 2); v_vat numeric(14, 2); v_invoice invoices; v_credited numeric(14, 2);
+begin
+  if p_invoice_id is not null then
+    select * into v_invoice from invoices where id = p_invoice_id and organisation_id = p_org;
+    if v_invoice.id is null or v_invoice.customer_id <> p_customer_id or v_invoice.status not in ('issued', 'part_paid', 'paid') then
+      raise exception 'credit_invoice: a credit note corrects an issued invoice to the same customer' using errcode = '23514';
+    end if;
+  end if;
+  select coalesce(sum(l.net), 0), coalesce(sum(l.vat_amount), 0) into v_net, v_vat from ledger_document_lines(p_org, p_lines, 'credit note') l;
+  if p_treatment <> 'standard' then v_vat := 0; end if;
+  -- Never more back than the invoice charged, counting the credit notes already issued against it.
+  if v_invoice.id is not null then
+    select coalesce(sum(total), 0) into v_credited from credit_notes where invoice_id = p_invoice_id and status = 'issued' and id is distinct from v_id;
+    if v_net + v_vat > v_invoice.total - v_credited then
+      raise exception 'credit_exceeds_invoice: that is more than is left to credit on invoice %', v_invoice.number using errcode = '23514';
+    end if;
+  end if;
+  if v_id is null then
+    insert into credit_notes (organisation_id, customer_id, invoice_id, number, issued_on, vat_treatment, reason, net, vat_amount, notes, status)
+    values (p_org, p_customer_id, p_invoice_id, btrim(p_number), p_issued_on, p_treatment, coalesce(nullif(btrim(p_reason), ''), 'Correction'),
+            v_net, v_vat, nullif(btrim(p_notes), ''), p_status)
+    returning id into v_id;
+  else
+    update credit_notes set customer_id = p_customer_id, invoice_id = p_invoice_id, number = btrim(p_number), issued_on = p_issued_on,
+           vat_treatment = p_treatment, reason = coalesce(nullif(btrim(p_reason), ''), 'Correction'), net = v_net, vat_amount = v_vat, notes = nullif(btrim(p_notes), '')
+     where id = v_id and organisation_id = p_org and status = 'draft';
+    if not found then raise exception 'credit_note_closed: only a draft credit note can be edited' using errcode = '23514'; end if;
+    delete from credit_note_lines where credit_note_id = v_id;
+  end if;
+  insert into credit_note_lines (organisation_id, credit_note_id, position, description, account_id, net, vat_rate, vat_amount, item_id, unit, quantity, unit_price, discount_pct)
+  select p_org, v_id, l.pos, l.description, l.account_id, l.net, case when p_treatment = 'standard' then l.vat_rate else 0 end,
+         case when p_treatment = 'standard' then l.vat_amount else 0 end, l.item_id, l.unit, l.quantity, l.unit_price, l.discount_pct
+    from ledger_document_lines(p_org, p_lines, 'credit note') l order by l.pos;
+  if p_status = 'issued' then perform apply_credit_to_invoice(v_id); end if;
+  return v_id;
+end $$;
+
+create function issue_credit_note(p_id uuid) returns void language plpgsql as $$
+begin
+  update credit_notes set status = 'issued' where id = p_id and status = 'draft';
+  if not found then raise exception 'credit_note_closed: only a draft credit note can be issued' using errcode = '23514'; end if;
+  perform apply_credit_to_invoice(p_id);
+end $$;
+
+-- Void: the credit comes off any invoice it was set against, which is owed again. A refunded credit stays.
+create function set_credit_note_void(p_id uuid, p_void boolean) returns void language plpgsql as $$
+begin
+  if p_void then
+    if exists (select 1 from bank_transactions where credit_note_id = p_id) then
+      raise exception 'credit_note_refunded: remove the refund before voiding this credit note' using errcode = '23514';
+    end if;
+    delete from credit_allocations where credit_note_id = p_id;
+    update credit_notes set status = 'void' where id = p_id and status = 'issued';
+    if not found then raise exception 'credit_note_closed: only an issued credit note can be voided' using errcode = '23514'; end if;
+  else
+    update credit_notes set status = 'issued' where id = p_id and status = 'void';
+    if not found then raise exception 'credit_note_closed: only a void credit note can be restored' using errcode = '23514'; end if;
+    perform apply_credit_to_invoice(p_id);
+  end if;
+end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- Credit notes from suppliers: a bill taken back, in whole or in part,
+-- recorded as the supplier sent it. It lowers what is owed to them, the cost,
+-- and the VAT reclaimed; set against a bill, or refunded into the bank.
+-- ---------------------------------------------------------------------------
+
+create type supplier_credit_status as enum ('recorded', 'void');
+
+create table supplier_credits (
+  id                 uuid primary key default gen_random_uuid(),
+  organisation_id    uuid not null references organisations (id) on delete cascade,
+  supplier_id        uuid not null,
+  bill_id            uuid,
+  number             text,
+  issued_on          date not null,
+  net                numeric(14, 2) not null default 0 check (net >= 0),
+  vat_amount         numeric(14, 2) not null default 0 check (vat_amount >= 0),
+  total              numeric(14, 2) generated always as (net + vat_amount) stored,
+  reverse_charge     boolean not null default false,
+  reverse_charge_vat numeric(14, 2) not null default 0,
+  amount_allocated   numeric(14, 2) not null default 0 check (amount_allocated >= 0),
+  amount_refunded    numeric(14, 2) not null default 0 check (amount_refunded >= 0),
+  status             supplier_credit_status not null default 'recorded',
+  notes              text,
+  created_at         timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, supplier_id) references suppliers (organisation_id, id),
+  foreign key (organisation_id, bill_id) references bills (organisation_id, id),
+  constraint supplier_credits_not_overused check (amount_allocated + amount_refunded <= net + vat_amount),
+  constraint supplier_credits_reverse_charge check (case when reverse_charge then vat_amount = 0 else reverse_charge_vat = 0 end)
+);
+create unique index supplier_credits_number_unique on supplier_credits (organisation_id, supplier_id, lower(btrim(number)))
+  where number is not null and status <> 'void';
+
+create table supplier_credit_lines (
+  id                 uuid primary key default gen_random_uuid(),
+  organisation_id    uuid not null,
+  supplier_credit_id uuid not null,
+  position           smallint not null,
+  description        text not null,
+  account_id         uuid not null,
+  net                numeric(14, 2) not null check (net >= 0),
+  vat_rate           numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_amount         numeric(14, 2) not null default 0 check (vat_amount >= 0),
+  unique (supplier_credit_id, position),
+  foreign key (organisation_id, supplier_credit_id) references supplier_credits (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, account_id) references ledger_accounts (organisation_id, id)
+);
+
+-- A supplier's credit set against one of their bills. It posts nothing: both sides are what is owed to them.
+create table supplier_credit_allocations (
+  id                 uuid primary key default gen_random_uuid(),
+  organisation_id    uuid not null,
+  supplier_credit_id uuid not null,
+  bill_id            uuid not null,
+  amount             numeric(14, 2) not null check (amount > 0),
+  allocated_on       date not null,
+  created_at         timestamptz not null default now(),
+  foreign key (organisation_id, supplier_credit_id) references supplier_credits (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, bill_id) references bills (organisation_id, id) on delete cascade
+);
+create index supplier_credit_allocations_bill_idx on supplier_credit_allocations (bill_id);
+create index supplier_credit_allocations_credit_idx on supplier_credit_allocations (supplier_credit_id);
+
+alter table bank_transactions add foreign key (organisation_id, supplier_credit_id) references supplier_credits (organisation_id, id);
+create index bank_transactions_supplier_credit_idx on bank_transactions (supplier_credit_id) where supplier_credit_id is not null;
+
+-- The reverse of a bill: each line's account gives back its cost, the VAT reclaimed falls, and less is owed to the supplier.
+create function post_supplier_credit(p_id uuid) returns void language plpgsql as $$
+declare v supplier_credits; v_org uuid; v_supplier text; v_lines jsonb; v_registered boolean; v_vat uuid;
+begin
+  select * into v from supplier_credits where id = p_id;
+  if not found then
+    select organisation_id into v_org from journal_entries where source = 'supplier_credit' and source_id = p_id;
+    if v_org is not null then perform ledger_replace(v_org, 'supplier_credit', p_id, null, null, null, null); end if;
+    return;
+  end if;
+  if v.status = 'void' then
+    perform ledger_replace(v.organisation_id, 'supplier_credit', p_id, null, null, null, null);
+    return;
+  end if;
+  v_vat := ledger_system_account(v.organisation_id, 'vat');
+  select vat_registered into v_registered from organisations where id = v.organisation_id;
+  select name into v_supplier from suppliers where id = v.supplier_id;
+  select coalesce(jsonb_agg(jsonb_build_object('account_id', account_id, 'credit', amount, 'description', description)), '[]'::jsonb)
+    into v_lines
+    from (select account_id, sum(net + case when v_registered or v.reverse_charge then 0 else vat_amount end) as amount, min(description) as description
+            from supplier_credit_lines where supplier_credit_id = p_id group by account_id) grouped;
+  perform ledger_replace(v.organisation_id, 'supplier_credit', p_id, v.issued_on, v.number,
+    'Supplier credit · ' || v_supplier || coalesce(' ' || v.number, ''),
+    v_lines || jsonb_build_array(
+      jsonb_build_object('account_id', v_vat, 'credit', case when v_registered then v.vat_amount else 0 end, 'is_tax', true),
+      jsonb_build_object('account_id', v_vat, 'credit', v.reverse_charge_vat, 'is_tax', true, 'description', 'Reverse charge: VAT reclaimed, taken back'),
+      jsonb_build_object('account_id', v_vat, 'debit', v.reverse_charge_vat, 'is_tax', true, 'description', 'Reverse charge: VAT due, taken back'),
+      jsonb_build_object('account_id', ledger_system_account(v.organisation_id, 'payable'), 'debit', v.total)
+    ));
+end $$;
+
+create function post_supplier_credit_trigger() returns trigger language plpgsql as $$
+begin perform post_supplier_credit(coalesce(new.id, old.id)); return null; end $$;
+create function post_supplier_credit_lines_trigger() returns trigger language plpgsql as $$
+begin perform post_supplier_credit(coalesce(new.supplier_credit_id, old.supplier_credit_id)); return null; end $$;
+create constraint trigger supplier_credit_ledger after insert or update or delete on supplier_credits
+  deferrable initially deferred for each row execute function post_supplier_credit_trigger();
+create constraint trigger supplier_credit_lines_ledger after insert or update or delete on supplier_credit_lines
+  deferrable initially deferred for each row execute function post_supplier_credit_lines_trigger();
+
+create function sync_supplier_credit(p_id uuid) returns void language plpgsql as $$
+begin
+  update supplier_credits c
+     set amount_allocated = coalesce((select sum(a.amount) from supplier_credit_allocations a where a.supplier_credit_id = p_id), 0),
+         amount_refunded = coalesce((select sum(t.amount) from bank_transactions t where t.supplier_credit_id = p_id), 0)
+   where c.id = p_id;
+end $$;
+
+create function guard_supplier_credit_allocation() returns trigger language plpgsql as $$
+declare v_credit record; v_bill record;
+begin
+  select status, supplier_id, total, amount_allocated, amount_refunded into v_credit from supplier_credits where id = new.supplier_credit_id for update;
+  select status, supplier_id, total, amount_paid, amount_credited into v_bill from bills where id = new.bill_id for update;
+  if v_credit.status is distinct from 'recorded' then
+    raise exception 'supplier_credit_closed: a void credit note cannot be used' using errcode = '23514';
+  end if;
+  if v_bill.status not in ('awaiting_payment', 'part_paid') then
+    raise exception 'bill_payment_closed: only a bill still owed can take a credit' using errcode = '23514';
+  end if;
+  if v_credit.supplier_id <> v_bill.supplier_id then
+    raise exception 'credit_supplier: a credit can only go against the same supplier''s bills' using errcode = '23514';
+  end if;
+  if new.amount > v_credit.total - v_credit.amount_allocated - v_credit.amount_refunded then
+    raise exception 'supplier_credits_not_overused: that is more credit than is left on this credit note' using errcode = '23514';
+  end if;
+  if new.amount > v_bill.total - v_bill.amount_paid - v_bill.amount_credited then
+    raise exception 'bills_not_overpaid: that is more than the balance on this bill' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger supplier_credit_allocation_guard before insert on supplier_credit_allocations for each row execute function guard_supplier_credit_allocation();
+
+create function sync_supplier_credit_allocation() returns trigger language plpgsql as $$
+begin
+  perform sync_supplier_credit(coalesce(new.supplier_credit_id, old.supplier_credit_id));
+  perform sync_bill_balance(coalesce(new.bill_id, old.bill_id));
+  return null;
+end $$;
+create trigger supplier_credit_allocation_sync after insert or delete on supplier_credit_allocations for each row execute function sync_supplier_credit_allocation();
+
+create function guard_supplier_refund() returns trigger language plpgsql as $$
+declare v_credit record;
+begin
+  if new.supplier_credit_id is null then return new; end if;
+  select status, total, amount_allocated, amount_refunded into v_credit from supplier_credits where id = new.supplier_credit_id for update;
+  if v_credit.status is distinct from 'recorded' then
+    raise exception 'supplier_credit_closed: a void credit note cannot be refunded' using errcode = '23514';
+  end if;
+  if new.kind <> 'receive' then raise exception 'bank_refund: a refund from a supplier is money received' using errcode = '23514'; end if;
+  if new.amount > v_credit.total - v_credit.amount_allocated - v_credit.amount_refunded then
+    raise exception 'supplier_credits_not_overused: that is more credit than is left on this credit note' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+create trigger supplier_refund_guard before insert on bank_transactions for each row execute function guard_supplier_refund();
+
+create function sync_supplier_refund() returns trigger language plpgsql as $$
+begin
+  if tg_op <> 'INSERT' and old.supplier_credit_id is not null then perform sync_supplier_credit(old.supplier_credit_id); end if;
+  if tg_op <> 'DELETE' and new.supplier_credit_id is not null then perform sync_supplier_credit(new.supplier_credit_id); end if;
+  return null;
+end $$;
+create trigger supplier_refund_sync after insert or update or delete on bank_transactions for each row execute function sync_supplier_refund();
+
+-- Recorded against a bill still owed: the credit goes against it at once, as far as it will go.
+create function apply_supplier_credit_to_bill(p_id uuid) returns void language plpgsql as $$
+declare v supplier_credits; v_balance numeric(14, 2); v_amount numeric(14, 2);
+begin
+  select * into v from supplier_credits where id = p_id;
+  if v.id is null or v.bill_id is null or v.status <> 'recorded' then return; end if;
+  select total - amount_paid - amount_credited into v_balance from bills where id = v.bill_id and status in ('awaiting_payment', 'part_paid');
+  v_amount := least(coalesce(v_balance, 0), v.total - v.amount_allocated - v.amount_refunded);
+  if v_amount > 0 then
+    insert into supplier_credit_allocations (organisation_id, supplier_credit_id, bill_id, amount, allocated_on)
+    values (v.organisation_id, p_id, v.bill_id, v_amount, v.issued_on);
+  end if;
+end $$;
+
+create function save_supplier_credit(p_org uuid, p_id uuid, p_supplier_id uuid, p_bill_id uuid, p_number text, p_issued_on date,
+  p_notes text, p_lines jsonb, p_reverse_charge boolean default false)
+returns uuid language plpgsql as $$
+declare v_id uuid := p_id; v_net numeric(14, 2); v_vat numeric(14, 2); v_rc boolean := coalesce(p_reverse_charge, false); v_bill bills; v_credited numeric(14, 2);
+begin
+  if p_bill_id is not null then
+    select * into v_bill from bills where id = p_bill_id and organisation_id = p_org;
+    if v_bill.id is null or v_bill.supplier_id <> p_supplier_id or v_bill.status = 'void' then
+      raise exception 'credit_bill: a supplier''s credit note corrects one of their bills' using errcode = '23514';
+    end if;
+  end if;
+  select coalesce(sum(l.net), 0), coalesce(sum(l.vat_amount), 0) into v_net, v_vat from ledger_document_lines(p_org, p_lines, 'supplier credit') l;
+  -- Never more back than the bill charged, counting the credit notes already recorded against it.
+  if v_bill.id is not null then
+    select coalesce(sum(total), 0) into v_credited from supplier_credits where bill_id = p_bill_id and status = 'recorded' and id is distinct from v_id;
+    if v_net + (case when v_rc then 0 else v_vat end) > v_bill.total - v_credited then
+      raise exception 'credit_exceeds_bill: that is more than is left to credit on this bill' using errcode = '23514';
+    end if;
+  end if;
+  if v_id is null then
+    insert into supplier_credits (organisation_id, supplier_id, bill_id, number, issued_on, net, vat_amount, reverse_charge, reverse_charge_vat, notes)
+    values (p_org, p_supplier_id, p_bill_id, nullif(btrim(p_number), ''), p_issued_on, v_net, case when v_rc then 0 else v_vat end, v_rc,
+            case when v_rc then v_vat else 0 end, nullif(btrim(p_notes), ''))
+    returning id into v_id;
+  else
+    if exists (select 1 from bank_transactions where supplier_credit_id = v_id) then
+      raise exception 'supplier_credit_refunded: remove the refund before changing this credit note' using errcode = '23514';
+    end if;
+    delete from supplier_credit_allocations where supplier_credit_id = v_id;
+    update supplier_credits set supplier_id = p_supplier_id, bill_id = p_bill_id, number = nullif(btrim(p_number), ''), issued_on = p_issued_on,
+           net = v_net, vat_amount = case when v_rc then 0 else v_vat end, reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end,
+           notes = nullif(btrim(p_notes), '')
+     where id = v_id and organisation_id = p_org and status = 'recorded';
+    if not found then raise exception 'supplier_credit_closed: a void credit note cannot be changed' using errcode = '23514'; end if;
+    delete from supplier_credit_lines where supplier_credit_id = v_id;
+  end if;
+  insert into supplier_credit_lines (organisation_id, supplier_credit_id, position, description, account_id, net, vat_rate, vat_amount)
+  select p_org, v_id, l.pos, l.description, l.account_id, l.net, l.vat_rate, l.vat_amount from ledger_document_lines(p_org, p_lines, 'supplier credit') l order by l.pos;
+  perform apply_supplier_credit_to_bill(v_id);
+  return v_id;
+end $$;
+
+-- Void: the credit comes off the bills it was set against, which are owed again. A refunded credit stays.
+create function set_supplier_credit_void(p_id uuid, p_void boolean) returns void language plpgsql as $$
+begin
+  if p_void then
+    if exists (select 1 from bank_transactions where supplier_credit_id = p_id) then
+      raise exception 'supplier_credit_refunded: remove the refund before voiding this credit note' using errcode = '23514';
+    end if;
+    delete from supplier_credit_allocations where supplier_credit_id = p_id;
+    update supplier_credits set status = 'void' where id = p_id and status = 'recorded';
+    if not found then raise exception 'supplier_credit_closed: this credit note is already void' using errcode = '23514'; end if;
+  else
+    update supplier_credits set status = 'recorded' where id = p_id and status = 'void';
+    if not found then raise exception 'supplier_credit_closed: only a void credit note can be restored' using errcode = '23514'; end if;
+    perform apply_supplier_credit_to_bill(p_id);
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Repeating invoices: the same invoice raised every month, quarter or year.
+-- Nothing runs in the background: invoices that have come due are raised
+-- when someone asks, each on its own date and with its own number.
+-- ---------------------------------------------------------------------------
+
+create table repeating_invoices (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  customer_id     uuid not null,
+  name            text not null,
+  every_months    smallint not null check (every_months in (1, 2, 3, 6, 12)),
+  -- The day of the month it falls on, kept across shorter months.
+  day_of_month    smallint not null check (day_of_month between 1 and 31),
+  next_on         date not null,
+  ends_on         date,
+  -- Issue each invoice at once, or save it as a draft for someone to check and issue.
+  issue           boolean not null default true,
+  vat_treatment   vat_treatment not null default 'standard',
+  notes           text,
+  lines           jsonb not null check (jsonb_typeof(lines) = 'array' and jsonb_array_length(lines) between 1 and 200),
+  is_active       boolean not null default true,
+  raised          integer not null default 0,
+  last_invoice_id uuid references invoices (id) on delete set null,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, customer_id) references customers (organisation_id, id),
+  constraint repeating_invoices_ends check (ends_on is null or ends_on >= next_on or not is_active)
+);
+alter table invoices add column repeating_id uuid references repeating_invoices (id) on delete set null;
+
+-- The date `p_months` on, on the same day of the month, or the month's last day when it is shorter.
+create function next_repeat_date(p_from date, p_months integer, p_day integer) returns date language sql immutable as $$
+  select (date_trunc('month', p_from) + make_interval(months => p_months))::date
+       + (least(p_day, extract(day from date_trunc('month', p_from) + make_interval(months => p_months + 1) - interval '1 day')::integer) - 1);
+$$;
+
+-- Raise the invoice that is due, numbered as asked, dated its due date, on the customer's terms; then move on to the next.
+create function raise_repeating_invoice(p_id uuid, p_number text, p_today date) returns uuid language plpgsql as $$
+declare v repeating_invoices; v_terms integer; v_invoice uuid; v_next date;
+begin
+  select * into v from repeating_invoices where id = p_id for update;
+  if v.id is null or not v.is_active or v.next_on > p_today or (v.ends_on is not null and v.next_on > v.ends_on) then
+    raise exception 'repeat_not_due: this repeating invoice is not due' using errcode = '23514';
+  end if;
+  select coalesce(c.payment_terms_days, o.payment_terms_days) into v_terms
+    from customers c join organisations o on o.id = c.organisation_id where c.id = v.customer_id;
+  v_invoice := save_invoice(v.organisation_id, null, v.customer_id, p_number, v.next_on, v.next_on + v_terms, v.vat_treatment, v.notes, v.lines,
+                            case when v.issue then 'issued'::invoice_status else 'draft'::invoice_status end);
+  update invoices set repeating_id = p_id where id = v_invoice;
+  v_next := next_repeat_date(v.next_on, v.every_months, v.day_of_month);
+  update repeating_invoices
+     set next_on = v_next, raised = raised + 1, last_invoice_id = v_invoice,
+         is_active = case when ends_on is not null and v_next > ends_on then false else is_active end
+   where id = p_id;
+  return v_invoice;
+end $$;
+
+create function save_bank_transaction(p_org uuid, p_id uuid, p_kind bank_transaction_kind, p_bank_account_id uuid, p_transfer_account_id uuid,
+  p_date date, p_contact text, p_reference text, p_amount numeric, p_lines jsonb, p_reverse_charge boolean default false)
+returns uuid language plpgsql as $$
+declare v_id uuid := p_id; v_net numeric(14, 2) := 0; v_vat numeric(14, 2) := 0; v_rc boolean := coalesce(p_reverse_charge, false) and p_kind = 'spend';
+begin
+  if not exists (select 1 from ledger_accounts where id = p_bank_account_id and organisation_id = p_org and type = 'bank' and is_active)
+     or (p_kind = 'transfer' and not exists (select 1 from ledger_accounts where id = p_transfer_account_id and organisation_id = p_org and type = 'bank' and is_active)) then
+    raise exception 'ledger_bank_required: choose an active bank account' using errcode = '23514';
+  end if;
+  if p_kind = 'transfer' then
+    if coalesce(p_amount, 0) <= 0 then raise exception 'ledger_amount_required: a transfer needs an amount' using errcode = '23514'; end if;
+  else
+    select coalesce(sum(l.net), 0), coalesce(sum(l.vat_amount), 0) into v_net, v_vat
+      from ledger_document_lines(p_org, p_lines, case when p_kind = 'spend' then 'payment' else 'receipt' end) l;
+  end if;
+  if v_id is null then
+    insert into bank_transactions (organisation_id, kind, bank_account_id, transfer_account_id, txn_date, contact, reference, amount, net, vat_amount, reverse_charge, reverse_charge_vat)
+    values (p_org, p_kind, p_bank_account_id, case when p_kind = 'transfer' then p_transfer_account_id end, p_date,
+            nullif(btrim(p_contact), ''), nullif(btrim(p_reference), ''),
+            case when p_kind = 'transfer' then round(p_amount, 2) when v_rc then v_net else v_net + v_vat end, v_net,
+            case when v_rc then 0 else v_vat end, v_rc, case when v_rc then v_vat else 0 end)
+    returning id into v_id;
+  else
+    update bank_transactions set kind = p_kind, bank_account_id = p_bank_account_id, transfer_account_id = case when p_kind = 'transfer' then p_transfer_account_id end,
+           txn_date = p_date, contact = nullif(btrim(p_contact), ''), reference = nullif(btrim(p_reference), ''),
+           amount = case when p_kind = 'transfer' then round(p_amount, 2) when v_rc then v_net else v_net + v_vat end, net = v_net,
+           vat_amount = case when v_rc then 0 else v_vat end, reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end, updated_at = now()
+     where id = v_id and organisation_id = p_org;
+    if not found then raise exception 'Bank transaction not found' using errcode = '23503'; end if;
+    delete from bank_transaction_lines where transaction_id = v_id;
+  end if;
+  if exists (select 1 from bank_transactions where id = v_id and (credit_note_id is not null or supplier_credit_id is not null)) then
+    raise exception 'bank_refund: a refund is changed from its credit note' using errcode = '23514';
+  end if;
+  if p_kind <> 'transfer' then
+    insert into bank_transaction_lines (organisation_id, transaction_id, position, description, account_id, net, vat_rate, vat_amount)
+    select p_org, v_id, l.pos, l.description, l.account_id, l.net, l.vat_rate, l.vat_amount
+      from ledger_document_lines(p_org, p_lines, case when p_kind = 'spend' then 'payment' else 'receipt' end) l order by l.pos;
+  end if;
+  return v_id;
+end $$;
+
+create function delete_bank_transaction(p_id uuid) returns void language plpgsql as $$
+begin delete from bank_transactions where id = p_id; end $$;
+
+create function save_manual_journal(p_org uuid, p_id uuid, p_date date, p_reference text, p_narration text, p_lines jsonb)
+returns uuid language plpgsql as $$
+declare v_id uuid := p_id; v_lock date := org_lock_date(p_org); v_old date; v_line jsonb; v_pos integer := 0; v_debit numeric := 0; v_credit numeric := 0; d numeric; c numeric;
+begin
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) not between 2 and 200 then
+    raise exception 'journal_lines_required: a journal needs at least two lines' using errcode = '23514';
+  end if;
+  if coalesce(btrim(p_narration), '') = '' then raise exception 'journal_narration_required: say what the journal is for' using errcode = '23514'; end if;
+  for v_line in select value from jsonb_array_elements(p_lines) loop
+    v_pos := v_pos + 1;
+    d := round(coalesce((v_line->>'debit')::numeric, 0), 2); c := round(coalesce((v_line->>'credit')::numeric, 0), 2);
+    if d < 0 or c < 0 or (d > 0) = (c > 0) then raise exception 'journal_line_side: line % needs either a debit or a credit', v_pos using errcode = '23514'; end if;
+    if not exists (select 1 from ledger_accounts where id = nullif(v_line->>'account_id', '')::uuid and organisation_id = p_org and is_active) then
+      raise exception 'journal_line_account: line % needs an active account', v_pos using errcode = '23514';
+    end if;
+    v_debit := v_debit + d; v_credit := v_credit + c;
+  end loop;
+  if v_debit <> v_credit then raise exception 'journal_unbalanced: debits and credits must be equal' using errcode = '23514'; end if;
+  if v_lock is not null and p_date <= v_lock then raise exception 'period_locked: the books are locked up to %', v_lock using errcode = '23514'; end if;
+  if v_id is null then
+    insert into journal_entries (organisation_id, entry_date, source, reference, narration)
+    values (p_org, p_date, 'manual', nullif(btrim(p_reference), ''), btrim(p_narration)) returning id into v_id;
+  else
+    select entry_date into v_old from journal_entries where id = v_id and organisation_id = p_org and source = 'manual';
+    if not found then raise exception 'Journal not found' using errcode = '23503'; end if;
+    if v_lock is not null and v_old <= v_lock then raise exception 'period_locked: the books are locked up to %', v_lock using errcode = '23514'; end if;
+    update journal_entries set entry_date = p_date, reference = nullif(btrim(p_reference), ''), narration = btrim(p_narration) where id = v_id;
+    delete from journal_lines where entry_id = v_id;
+  end if;
+  insert into journal_lines (organisation_id, entry_id, account_id, debit, credit, description)
+  select p_org, v_id, (l->>'account_id')::uuid, round(coalesce((l->>'debit')::numeric, 0), 2), round(coalesce((l->>'credit')::numeric, 0), 2),
+         nullif(left(btrim(coalesce(l->>'description', '')), 300), '')
+    from jsonb_array_elements(p_lines) l;
+  return v_id;
+end $$;
+
+create function delete_manual_journal(p_id uuid) returns void language plpgsql as $$
+declare v_lock date; v_date date; v_org uuid;
+begin
+  select entry_date, organisation_id into v_date, v_org from journal_entries where id = p_id and source = 'manual';
+  if not found then raise exception 'Journal not found' using errcode = '23503'; end if;
+  v_lock := org_lock_date(v_org);
+  if v_lock is not null and v_date <= v_lock then raise exception 'period_locked: the books are locked up to %', v_lock using errcode = '23514'; end if;
+  delete from journal_entries where id = p_id;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Reading the books
+-- ---------------------------------------------------------------------------
+
+create function ledger_balances(p_org uuid, p_from date, p_to date)
+returns table (account_id uuid, code text, name text, type ledger_account_type, system_role text, is_active boolean,
+               opening numeric, debit numeric, credit numeric)
+language sql stable as $$
+  select a.id, a.code, a.name, a.type, a.system_role, a.is_active,
+         coalesce(sum(l.debit - l.credit) filter (where e.entry_date < p_from), 0),
+         coalesce(sum(l.debit) filter (where e.entry_date between p_from and p_to), 0),
+         coalesce(sum(l.credit) filter (where e.entry_date between p_from and p_to), 0)
+    from ledger_accounts a
+    left join journal_lines l on l.account_id = a.id
+    left join journal_entries e on e.id = l.entry_id and e.entry_date <= p_to
+   where a.organisation_id = p_org
+   group by a.id
+   order by a.code;
+$$;
+
+create function cash_movements(p_org uuid, p_from date, p_to date)
+returns table (account_id uuid, code text, name text, type ledger_account_type, system_role text, amount numeric)
+language sql stable as $$
+  select a.id, a.code, a.name, a.type, a.system_role, sum(l.credit - l.debit)
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id
+    join ledger_accounts a on a.id = l.account_id
+   where e.organisation_id = p_org and e.entry_date between p_from and p_to and a.type <> 'bank'
+     and exists (select 1 from journal_lines bl join ledger_accounts ba on ba.id = bl.account_id where bl.entry_id = e.id and ba.type = 'bank')
+   group by a.id
+  having sum(l.credit - l.debit) <> 0
+   order by a.code;
+$$;
+
+create function cash_by_month(p_org uuid, p_from date, p_to date)
+returns table (month date, money_in numeric, money_out numeric)
+language sql stable as $$
+  select date_trunc('month', c.entry_date)::date,
+         coalesce(sum(c.cash) filter (where c.cash > 0), 0),
+         coalesce(-sum(c.cash) filter (where c.cash < 0), 0)
+    from (select e.id, e.entry_date, sum(l.debit - l.credit) as cash
+            from journal_entries e
+            join journal_lines l on l.entry_id = e.id
+            join ledger_accounts a on a.id = l.account_id
+           where e.organisation_id = p_org and a.type = 'bank' and e.entry_date between p_from and p_to
+           group by e.id, e.entry_date) c
+   group by 1 order by 1;
+$$;
+
+create function vat_summary(p_org uuid, p_from date, p_to date)
+returns table (output_vat numeric, input_vat numeric, sales_net numeric, purchases_net numeric)
+language sql stable as $$
+  -- A credit note to a customer reduces the VAT due (box 1); it is not VAT reclaimed (box 4).
+  -- A supplier's credit note reduces the VAT reclaimed (box 4), and under the reverse charge the VAT due too.
+  select coalesce(sum(l.credit) filter (where l.is_tax and e.source <> 'supplier_credit'), 0)
+           - coalesce(sum(l.debit) filter (where l.is_tax and e.source in ('credit_note', 'supplier_credit')), 0),
+         coalesce(sum(l.debit) filter (where l.is_tax and e.source not in ('credit_note', 'supplier_credit')), 0)
+           - coalesce(sum(l.credit) filter (where l.is_tax and e.source = 'supplier_credit'), 0),
+         coalesce(sum(l.credit - l.debit) filter (where not l.is_tax and a.type in ('revenue', 'other_income') and e.source in ('invoice', 'bank', 'credit_note')), 0),
+         coalesce(sum(l.debit - l.credit) filter (where not l.is_tax and a.type in ('direct_costs', 'expense', 'depreciation', 'fixed_asset', 'current_asset')
+                                                  and a.system_role is null and e.source in ('bill', 'bank', 'supplier_credit')), 0)
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id
+    join ledger_accounts a on a.id = l.account_id
+   where e.organisation_id = p_org and e.entry_date between p_from and p_to;
+$$;
+
+-- Sales by VAT treatment (net) and services bought under the reverse charge.
+create function vat_breakdown(p_org uuid, p_from date, p_to date)
+returns table (standard_sales numeric, zero_rated_sales numeric, exempt_sales numeric, reverse_charge_sales numeric,
+               outside_scope_sales numeric, reverse_charge_purchases numeric, reverse_charge_vat numeric)
+language sql stable as $$
+  with sales as (
+    select vat_treatment, sum(net) filter (where vat_rate > 0) as rated, sum(net) filter (where vat_rate = 0) as zero
+      from (select i.vat_treatment, l.net, l.vat_rate
+              from invoices i join invoice_lines l on l.invoice_id = i.id
+             where i.organisation_id = p_org and i.status in ('issued', 'part_paid', 'paid') and i.currency = 'EUR' and i.issued_on between p_from and p_to
+            union all
+            -- Credit notes come off the sales of the period they are issued in.
+            select n.vat_treatment, -l.net, l.vat_rate
+              from credit_notes n join credit_note_lines l on l.credit_note_id = n.id
+             where n.organisation_id = p_org and n.status = 'issued' and n.issued_on between p_from and p_to) s
+     group by vat_treatment
+  ), purchases as (
+    select sum(net) as net, sum(reverse_charge_vat) as vat from (
+      select b.net, b.reverse_charge_vat from bills b where b.organisation_id = p_org and b.reverse_charge and b.status <> 'void' and b.issued_on between p_from and p_to
+      union all
+      select t.net, t.reverse_charge_vat from bank_transactions t where t.organisation_id = p_org and t.reverse_charge and t.txn_date between p_from and p_to
+      union all
+      select -c.net, -c.reverse_charge_vat from supplier_credits c where c.organisation_id = p_org and c.reverse_charge and c.status = 'recorded' and c.issued_on between p_from and p_to
+    ) rc
+  )
+  select coalesce((select rated from sales where vat_treatment = 'standard'), 0),
+         coalesce((select zero from sales where vat_treatment = 'standard'), 0),
+         coalesce((select coalesce(rated, 0) + coalesce(zero, 0) from sales where vat_treatment = 'exempt'), 0),
+         coalesce((select coalesce(rated, 0) + coalesce(zero, 0) from sales where vat_treatment = 'reverse_charge'), 0),
+         coalesce((select coalesce(rated, 0) + coalesce(zero, 0) from sales where vat_treatment = 'outside_scope'), 0),
+         coalesce((select net from purchases), 0),
+         coalesce((select vat from purchases), 0);
+$$;
+
+create view v_journal_lines as
+select l.id, l.organisation_id, l.entry_id, e.entry_date, e.source, e.source_id, e.reference, e.narration,
+       l.account_id, a.code as account_code, a.name as account_name, a.type as account_type,
+       l.debit, l.credit, l.is_tax, l.description, e.created_at
+  from journal_lines l
+  join journal_entries e on e.id = l.entry_id
+  join ledger_accounts a on a.id = l.account_id;
+
+create view v_bill_directory as
+select b.*, (b.total - b.amount_paid - b.amount_credited) as balance, s.name as supplier_name, s.iban as supplier_iban,
+       case when b.status in ('awaiting_payment', 'part_paid') and b.due_on is not null
+            then greatest(0, (now() at time zone 'Asia/Nicosia')::date - b.due_on) else 0 end as days_overdue,
+       coalesce(b.number, '') || ' ' || s.name || ' ' || coalesce(b.reference, '') as search_text
+  from bills b join suppliers s on s.id = b.supplier_id;
+
+create view v_invoice_directory as
+select i.*, (i.total - i.amount_paid - i.amount_credited) as balance, c.name as client_name, c.vat_number as client_vat_number, c.country as client_country,
+       case when i.status in ('issued', 'part_paid') and i.due_on is not null
+            then greatest(0, (now() at time zone 'Asia/Nicosia')::date - i.due_on) else 0 end as days_overdue
+  from invoices i join customers c on c.id = i.customer_id;
+
+create view v_quote_directory as
+select q.*, c.name as client_name, c.vat_number as client_vat_number, c.country as client_country, inv.number as invoice_number,
+       (q.status = 'sent' and q.valid_until is not null and q.valid_until < (now() at time zone 'Asia/Nicosia')::date) as expired
+  from quotes q join customers c on c.id = q.customer_id left join invoices inv on inv.id = q.invoice_id;
+
+create view v_supplier_credit_directory as
+select c.*, (c.total - c.amount_allocated - c.amount_refunded) as remaining, s.name as supplier_name, b.number as bill_number
+  from supplier_credits c join suppliers s on s.id = c.supplier_id left join bills b on b.id = c.bill_id;
+
+create view v_credit_note_directory as
+select n.*, (n.total - n.amount_allocated - n.amount_refunded) as remaining, c.name as client_name, c.vat_number as client_vat_number,
+       c.country as client_country, inv.number as invoice_number
+  from credit_notes n join customers c on c.id = n.customer_id left join invoices inv on inv.id = n.invoice_id;
+
+create view v_bank_transaction_directory as
+select t.*, a.name as bank_account_name, ta.name as transfer_account_name
+  from bank_transactions t
+  join ledger_accounts a on a.id = t.bank_account_id
+  left join ledger_accounts ta on ta.id = t.transfer_account_id;
+
+-- ---------------------------------------------------------------------------
+-- Bank statements and reconciliation
+-- ---------------------------------------------------------------------------
+
+create table bank_statement_imports (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  bank_account_id uuid not null,
+  source          text not null check (source in ('file', 'feed')),
+  file_name       text,
+  added           integer not null default 0,
+  skipped         integer not null default 0,
+  first_date      date,
+  last_date       date,
+  closing_balance numeric(14, 2),
+  imported_by     uuid,
+  imported_at     timestamptz not null default now(),
+  foreign key (organisation_id, bank_account_id) references ledger_accounts (organisation_id, id)
+);
+
+create table bank_statement_lines (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  bank_account_id uuid not null,
+  import_id       uuid references bank_statement_imports (id) on delete set null,
+  txn_date        date not null,
+  amount          numeric(14, 2) not null check (amount <> 0),
+  description     text not null,
+  reference       text,
+  counterparty    text,
+  balance         numeric(14, 2),
+  external_id     text not null,
+  excluded_at     timestamptz,
+  excluded_by     uuid,
+  excluded_reason text,
+  created_at      timestamptz not null default now(),
+  unique (bank_account_id, external_id),
+  foreign key (organisation_id, bank_account_id) references ledger_accounts (organisation_id, id)
+);
+create index bank_statement_lines_account_date_idx on bank_statement_lines (bank_account_id, txn_date desc);
+
+create table bank_line_matches (
+  id                  uuid primary key default gen_random_uuid(),
+  organisation_id     uuid not null,
+  line_id             uuid not null references bank_statement_lines (id) on delete cascade,
+  bank_account_id     uuid not null,
+  invoice_payment_id  uuid references invoice_payments (id) on delete cascade,
+  bill_payment_id     uuid references bill_payments (id) on delete cascade,
+  bank_transaction_id uuid references bank_transactions (id) on delete cascade,
+  matched_by          uuid,
+  matched_at          timestamptz not null default now(),
+  constraint bank_line_matches_one_document check (num_nonnulls(invoice_payment_id, bill_payment_id, bank_transaction_id) = 1)
+);
+create index bank_line_matches_line_idx on bank_line_matches (line_id);
+create unique index bank_line_matches_invoice_payment_unique on bank_line_matches (invoice_payment_id) where invoice_payment_id is not null;
+create unique index bank_line_matches_bill_payment_unique on bank_line_matches (bill_payment_id) where bill_payment_id is not null;
+create unique index bank_line_matches_bank_transaction_unique on bank_line_matches (bank_transaction_id, bank_account_id) where bank_transaction_id is not null;
+
+create function bank_match_effect(p_bank uuid, p_invoice_payment uuid, p_bill_payment uuid, p_bank_transaction uuid)
+returns numeric language sql stable as $$
+  select case
+    when p_invoice_payment is not null then (
+      select coalesce(sum(l.debit - l.credit), 0) from journal_entries e join journal_lines l on l.entry_id = e.id
+       where e.source = 'invoice_payment' and e.source_id = p_invoice_payment and l.account_id = p_bank)
+    when p_bill_payment is not null then (
+      select coalesce(sum(l.debit - l.credit), 0) from journal_entries e join journal_lines l on l.entry_id = e.id
+       where e.source = 'bill_payment' and e.source_id = p_bill_payment and l.account_id = p_bank)
+    else (
+      select case
+               when t.kind = 'spend' and t.bank_account_id = p_bank then -t.amount
+               when t.kind = 'receive' and t.bank_account_id = p_bank then t.amount
+               when t.kind = 'transfer' and t.bank_account_id = p_bank then -t.amount
+               when t.kind = 'transfer' and t.transfer_account_id = p_bank then t.amount
+               else 0 end
+        from bank_transactions t where t.id = p_bank_transaction)
+  end;
+$$;
+
+create function import_bank_statement(p_bank_account_id uuid, p_source text, p_file_name text, p_closing_balance numeric, p_lines jsonb)
+returns jsonb language plpgsql as $$
+declare
+  v_org uuid; v_import uuid; v_line jsonb; v_pos integer := 0; v_added integer := 0;
+  v_date date; v_amount numeric(14, 2); v_desc text; v_key text; v_rows integer;
+begin
+  select organisation_id into v_org from ledger_accounts where id = p_bank_account_id and type = 'bank' and is_active;
+  if v_org is null then raise exception 'ledger_bank_required: choose an active bank account' using errcode = '23514'; end if;
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) not between 1 and 5000 then
+    raise exception 'bank_statement_lines: a statement needs between 1 and 5,000 lines' using errcode = '23514';
+  end if;
+  insert into bank_statement_imports (organisation_id, bank_account_id, source, file_name, closing_balance)
+  values (v_org, p_bank_account_id, p_source, left(nullif(btrim(p_file_name), ''), 200), round(p_closing_balance, 2))
+  returning id into v_import;
+  for v_line in select value from jsonb_array_elements(p_lines) loop
+    v_pos := v_pos + 1;
+    v_date := (v_line->>'date')::date;
+    v_amount := round((v_line->>'amount')::numeric, 2);
+    v_desc := left(btrim(coalesce(nullif(btrim(v_line->>'description'), ''), nullif(btrim(v_line->>'counterparty'), ''), nullif(btrim(v_line->>'reference'), ''), '')), 500);
+    v_key := left(btrim(coalesce(v_line->>'external_id', '')), 200);
+    if v_date is null or v_amount is null or v_amount = 0 or v_desc = '' or v_key = '' then
+      raise exception 'bank_statement_line: line % needs a date, an amount and a description', v_pos using errcode = '23514';
+    end if;
+    insert into bank_statement_lines (organisation_id, bank_account_id, import_id, txn_date, amount, description, reference, counterparty, balance, external_id)
+    values (v_org, p_bank_account_id, v_import, v_date, v_amount, v_desc,
+            left(nullif(btrim(v_line->>'reference'), ''), 200), left(nullif(btrim(v_line->>'counterparty'), ''), 200),
+            round(nullif(v_line->>'balance', '')::numeric, 2), v_key)
+    on conflict (bank_account_id, external_id) do nothing;
+    get diagnostics v_rows = row_count;
+    v_added := v_added + v_rows;
+  end loop;
+  update bank_statement_imports
+     set added = v_added, skipped = v_pos - v_added,
+         first_date = (select min((l->>'date')::date) from jsonb_array_elements(p_lines) l),
+         last_date = (select max((l->>'date')::date) from jsonb_array_elements(p_lines) l)
+   where id = v_import;
+  return jsonb_build_object('import_id', v_import, 'added', v_added, 'skipped', v_pos - v_added);
+end $$;
+
+create function reconcile_bank_line(p_line_id uuid, p_items jsonb) returns void language plpgsql as $$
+declare
+  v_line bank_statement_lines; v_item jsonb; v_kind text; v_id uuid; v_ref text; v_total numeric(14, 2); v_zero integer;
+begin
+  select * into v_line from bank_statement_lines where id = p_line_id for update;
+  if not found then raise exception 'Bank line not found' using errcode = '23503'; end if;
+  if v_line.excluded_at is not null then raise exception 'bank_line_excluded: include the line again before matching it' using errcode = '23514'; end if;
+  if exists (select 1 from bank_line_matches where line_id = p_line_id) then
+    raise exception 'bank_line_matched: this line is already matched; unmatch it first' using errcode = '23514';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) not between 1 and 50 then
+    raise exception 'bank_match_items: choose what this line was' using errcode = '23514';
+  end if;
+  v_ref := left(coalesce(nullif(btrim(v_line.reference), ''), v_line.description), 120);
+  for v_item in select value from jsonb_array_elements(p_items) loop
+    v_kind := v_item->>'kind';
+    v_id := nullif(v_item->>'id', '')::uuid;
+    if v_kind = 'invoice' then
+      insert into invoice_payments (organisation_id, invoice_id, received_on, amount, method, reference, bank_account_id)
+      values (v_line.organisation_id, (v_item->>'invoice_id')::uuid, v_line.txn_date, round((v_item->>'amount')::numeric, 2), 'bank_transfer', v_ref, v_line.bank_account_id)
+      returning id into v_id;
+      v_kind := 'invoice_payment';
+    elsif v_kind = 'bill' then
+      insert into bill_payments (organisation_id, bill_id, paid_on, amount, bank_account_id, method, reference)
+      values (v_line.organisation_id, (v_item->>'bill_id')::uuid, v_line.txn_date, round((v_item->>'amount')::numeric, 2), v_line.bank_account_id, 'bank_transfer', v_ref)
+      returning id into v_id;
+      v_kind := 'bill_payment';
+    elsif v_kind in ('spend', 'receive') then
+      v_id := save_bank_transaction(v_line.organisation_id, null, v_kind::bank_transaction_kind, v_line.bank_account_id, null, v_line.txn_date,
+        coalesce(nullif(btrim(v_item->>'contact'), ''), v_line.counterparty), v_ref, null, v_item->'lines');
+      v_kind := 'bank_transaction';
+    elsif v_kind = 'transfer' then
+      if v_line.amount < 0 then
+        v_id := save_bank_transaction(v_line.organisation_id, null, 'transfer', v_line.bank_account_id, (v_item->>'account_id')::uuid, v_line.txn_date, null, v_ref, -v_line.amount, null);
+      else
+        v_id := save_bank_transaction(v_line.organisation_id, null, 'transfer', (v_item->>'account_id')::uuid, v_line.bank_account_id, v_line.txn_date, null, v_ref, v_line.amount, null);
+      end if;
+      v_kind := 'bank_transaction';
+    elsif v_kind not in ('invoice_payment', 'bill_payment', 'bank_transaction') or v_id is null then
+      raise exception 'bank_match_items: one of the choices is not something a bank line can be' using errcode = '23514';
+    end if;
+    insert into bank_line_matches (organisation_id, line_id, bank_account_id, invoice_payment_id, bill_payment_id, bank_transaction_id)
+    values (v_line.organisation_id, p_line_id, v_line.bank_account_id,
+            case when v_kind = 'invoice_payment' then v_id end,
+            case when v_kind = 'bill_payment' then v_id end,
+            case when v_kind = 'bank_transaction' then v_id end);
+  end loop;
+  -- Bank transactions post when the statement ends; post them now so their effect can be checked.
+  perform post_bank_transaction(m.bank_transaction_id) from bank_line_matches m where m.line_id = p_line_id and m.bank_transaction_id is not null;
+  select coalesce(sum(bank_match_effect(m.bank_account_id, m.invoice_payment_id, m.bill_payment_id, m.bank_transaction_id)), 0),
+         count(*) filter (where bank_match_effect(m.bank_account_id, m.invoice_payment_id, m.bill_payment_id, m.bank_transaction_id) = 0)
+    into v_total, v_zero
+    from bank_line_matches m where m.line_id = p_line_id;
+  if v_zero > 0 then raise exception 'bank_match_account: something chosen does not go through this bank account' using errcode = '23514'; end if;
+  if v_total <> v_line.amount then
+    raise exception 'bank_match_total: the matched amounts come to %, the bank line is %', v_total, v_line.amount using errcode = '23514';
+  end if;
+end $$;
+
+create function unmatch_bank_line(p_line_id uuid) returns void language plpgsql as $$
+begin delete from bank_line_matches where line_id = p_line_id; end $$;
+
+create function set_bank_line_excluded(p_line_id uuid, p_excluded boolean, p_reason text) returns void language plpgsql as $$
+begin
+  if p_excluded and exists (select 1 from bank_line_matches where line_id = p_line_id) then
+    raise exception 'bank_line_matched: this line is already matched; unmatch it first' using errcode = '23514';
+  end if;
+  update bank_statement_lines
+     set excluded_at = case when p_excluded then now() end,
+         excluded_reason = case when p_excluded then left(nullif(btrim(p_reason), ''), 300) end
+   where id = p_line_id;
+  if not found then raise exception 'Bank line not found' using errcode = '23503'; end if;
+end $$;
+
+create function delete_bank_statement_import(p_import_id uuid) returns integer language plpgsql as $$
+declare v_removed integer;
+begin
+  delete from bank_statement_lines l where l.import_id = p_import_id and not exists (select 1 from bank_line_matches m where m.line_id = l.id);
+  get diagnostics v_removed = row_count;
+  delete from bank_statement_imports i where i.id = p_import_id and not exists (select 1 from bank_statement_lines l where l.import_id = i.id);
+  return v_removed;
+end $$;
+
+create view v_bank_statement_lines as
+select l.*,
+       coalesce(m.matched_amount, 0) as matched_amount,
+       coalesce(m.match_count, 0)::integer as match_count,
+       case when l.excluded_at is not null then 'excluded'
+            when coalesce(m.match_count, 0) = 0 then 'unmatched'
+            when coalesce(m.matched_amount, 0) = l.amount then 'matched'
+            else 'partial' end as status
+  from bank_statement_lines l
+  left join lateral (
+    select count(*) as match_count,
+           sum(bank_match_effect(x.bank_account_id, x.invoice_payment_id, x.bill_payment_id, x.bank_transaction_id)) as matched_amount
+      from bank_line_matches x where x.line_id = l.id
+  ) m on true;
+
+create function unreconciled_bank_items(p_bank_account_id uuid)
+returns table (kind text, id uuid, item_date date, amount numeric, label text, reference text, document_id uuid)
+language sql stable as $$
+  select 'invoice_payment', p.id, p.received_on, bank_match_effect(p_bank_account_id, p.id, null, null),
+         'Invoice ' || i.number || coalesce(' · ' || c.name, ''), p.reference, i.id
+    from invoice_payments p
+    join invoices i on i.id = p.invoice_id
+    join customers c on c.id = i.customer_id
+   where p.bank_account_id = p_bank_account_id
+     and not exists (select 1 from bank_line_matches m where m.invoice_payment_id = p.id)
+  union all
+  select 'bill_payment', p.id, p.paid_on, -p.amount, 'Bill' || coalesce(' ' || b.number, '') || ' · ' || s.name, p.reference, b.id
+    from bill_payments p
+    join bills b on b.id = p.bill_id
+    join suppliers s on s.id = b.supplier_id
+   where p.bank_account_id = p_bank_account_id
+     and not exists (select 1 from bank_line_matches m where m.bill_payment_id = p.id)
+  union all
+  select 'bank_transaction', t.id, t.txn_date, bank_match_effect(p_bank_account_id, null, null, t.id),
+         case t.kind when 'spend' then 'Spent' when 'receive' then 'Received' else 'Transfer' end || coalesce(' · ' || t.contact, ''), t.reference, t.id
+    from bank_transactions t
+   where p_bank_account_id in (t.bank_account_id, t.transfer_account_id)
+     and not exists (select 1 from bank_line_matches m where m.bank_transaction_id = t.id and m.bank_account_id = p_bank_account_id)
+  order by 3, 2;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- VAT returns filed
+-- ---------------------------------------------------------------------------
+
+create table vat_returns (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  period_from     date not null,
+  period_to       date not null,
+  filed_on        date not null,
+  net_vat         numeric(14, 2) not null,
+  boxes           jsonb not null default '{}'::jsonb,
+  unique (organisation_id, period_to)
+);
+
+-- ---------------------------------------------------------------------------
+-- AI capture: files dropped at practice level, invoices found in them
+-- ---------------------------------------------------------------------------
+
+create table capture_files (
+  id           uuid primary key default gen_random_uuid(),
+  practice_id  uuid not null references practices (id) on delete cascade,
+  -- Uploaded from inside one company's books: where a document goes when nothing on it names a client.
+  organisation_id uuid references organisations (id) on delete set null,
+  file_name    text not null,
+  media_type   text not null,
+  size_bytes   integer not null,
+  sha256       text not null,
+  content      bytea not null,
+  status       text not null default 'queued' check (status in ('queued', 'reading', 'read', 'failed')),
+  error        text,
+  uploaded_at  timestamptz not null default now(),
+  read_at      timestamptz
+);
+
+create table capture_items (
+  id              uuid primary key default gen_random_uuid(),
+  file_id         uuid not null references capture_files (id) on delete cascade,
+  position        smallint not null default 1,
+  organisation_id uuid references organisations (id) on delete set null,
+  routing         jsonb not null default '{}'::jsonb,
+  extraction      jsonb not null,
+  checks          jsonb not null default '[]'::jsonb,
+  supplier_id     uuid,
+  draft           jsonb not null default '{}'::jsonb,
+  status          text not null default 'review' check (status in ('review', 'posted', 'discarded')),
+  bill_id         uuid,
+  created_at      timestamptz not null default now(),
+  posted_at       timestamptz
+);
+
+-- ---------------------------------------------------------------------------
+-- Tamper-evident audit log: each row's hash covers the one before it.
+-- ---------------------------------------------------------------------------
+
+create table audit_log (
+  seq             bigserial primary key,
+  at              timestamptz not null default now(),
+  organisation_id uuid,
+  actor           text not null default 'system',
+  action          text not null,
+  entity          text not null,
+  entity_id       uuid,
+  detail          jsonb not null default '{}'::jsonb,
+  prev_hash       text not null,
+  hash            text not null
+);
+
+create function audit_hash(p_prev text, p_at timestamptz, p_org uuid, p_actor text, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb)
+returns text language sql immutable as $$
+  select encode(sha256(convert_to(concat_ws('|', p_prev, to_char(p_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US'), coalesce(p_org::text, ''), p_actor, p_action,
+                                            p_entity, coalesce(p_entity_id::text, ''), p_detail::text), 'UTF8')), 'hex');
+$$;
+
+create function audit_append(p_org uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb) returns void language plpgsql as $$
+declare v_prev text; v_at timestamptz := clock_timestamp(); v_actor text := coalesce(nullif(current_setting('ledgerline.actor', true), ''), 'system');
+begin
+  if coalesce(current_setting('ledgerline.seeding', true), '') = 'on' then return; end if;
+  select hash into v_prev from audit_log order by seq desc limit 1;
+  v_prev := coalesce(v_prev, repeat('0', 64));
+  insert into audit_log (at, organisation_id, actor, action, entity, entity_id, detail, prev_hash, hash)
+  values (v_at, p_org, v_actor, p_action, p_entity, p_entity_id, coalesce(p_detail, '{}'::jsonb), v_prev,
+          audit_hash(v_prev, v_at, p_org, v_actor, p_action, p_entity, p_entity_id, coalesce(p_detail, '{}'::jsonb)));
+end $$;
+
+create function audit_guard() returns trigger language plpgsql as $$
+begin raise exception 'audit_log_append_only: the audit log cannot be changed' using errcode = '42501'; end $$;
+create trigger audit_log_append_only before update or delete on audit_log for each row execute function audit_guard();
+
+-- Every posting, and every match, lock and filing, goes on the chain.
+create function audit_journal_entry() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    perform audit_append(new.organisation_id, 'posted', new.source::text, new.id,
+      jsonb_build_object('date', new.entry_date, 'narration', new.narration, 'reference', new.reference));
+    return new;
+  end if;
+  perform audit_append(old.organisation_id, 'reversed', old.source::text, old.id, jsonb_build_object('date', old.entry_date, 'narration', old.narration));
+  return old;
+end $$;
+create trigger journal_entries_audit after insert or delete on journal_entries for each row execute function audit_journal_entry();
+
+create function audit_match() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    perform audit_append(new.organisation_id, 'matched', 'bank_line', new.line_id, '{}'::jsonb);
+    return new;
+  end if;
+  perform audit_append(old.organisation_id, 'unmatched', 'bank_line', old.line_id, '{}'::jsonb);
+  return old;
+end $$;
+create trigger bank_line_matches_audit after insert or delete on bank_line_matches for each row execute function audit_match();
+
+create function audit_organisation() returns trigger language plpgsql as $$
+begin
+  if new.lock_date is distinct from old.lock_date then
+    perform audit_append(new.id, 'locked', 'books', new.id, jsonb_build_object('from', old.lock_date, 'to', new.lock_date));
+  end if;
+  return new;
+end $$;
+create trigger organisations_audit after update on organisations for each row execute function audit_organisation();
+
+create function audit_vat_return() returns trigger language plpgsql as $$
+begin
+  perform audit_append(new.organisation_id, 'filed', 'vat_return', new.id, jsonb_build_object('from', new.period_from, 'to', new.period_to, 'net_vat', new.net_vat));
+  return new;
+end $$;
+create trigger vat_returns_audit after insert on vat_returns for each row execute function audit_vat_return();
+
+-- Recompute the chain: the first row whose hash or link does not hold, or none.
+create function audit_verify() returns table (checked bigint, broken_at bigint) language plpgsql stable as $$
+declare r audit_log; v_prev text := repeat('0', 64); v_count bigint := 0;
+begin
+  for r in select * from audit_log order by seq loop
+    v_count := v_count + 1;
+    if r.prev_hash <> v_prev or r.hash <> audit_hash(r.prev_hash, r.at, r.organisation_id, r.actor, r.action, r.entity, r.entity_id, r.detail) then
+      checked := v_count; broken_at := r.seq; return next; return;
+    end if;
+    v_prev := r.hash;
+  end loop;
+  checked := v_count; broken_at := null; return next;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- The CRM, inside each client company: enquiries through to won, the
+-- company's clients (its customers in the books), their people, the work in
+-- hand (matters), tasks and the activity on each.
+-- ---------------------------------------------------------------------------
+
+create type crm_stage as enum ('new', 'contact_attempted', 'contacted', 'qualified', 'proposal', 'won', 'lost');
+
+create table crm_enquiries (
+  id               uuid primary key default gen_random_uuid(),
+  organisation_id  uuid not null references organisations (id) on delete cascade,
+  reference        text not null,
+  full_name        text not null,
+  company          text,
+  email            text,
+  phone            text,
+  source           text not null default 'Website',
+  -- How it reached the books: typed in by someone, sent from the company's website form, or posted to the API.
+  channel          text not null default 'manual' check (channel in ('manual', 'form', 'api')),
+  service          text,
+  stage            crm_stage not null default 'new',
+  value            numeric(14, 2),
+  owner            text not null,
+  priority         text not null default 'normal' check (priority in ('normal', 'high', 'urgent')),
+  next_action      text,
+  next_action_due  date,
+  summary          text,
+  lost_reason      text,
+  customer_id      uuid references customers (id) on delete set null,
+  stage_changed_at timestamptz not null default now(),
+  created_at       timestamptz not null default now(),
+  unique (organisation_id, reference),
+  constraint crm_enquiries_lost_reason check (stage <> 'lost' or lost_reason is not null)
+);
+
+-- ---------------------------------------------------------------------------
+-- The practice's own work: its people, the time they spend on each client,
+-- each client's fee, and the fee invoices raised from the practice's books.
+-- ---------------------------------------------------------------------------
+
+create table practice_staff (
+  id           uuid primary key default gen_random_uuid(),
+  practice_id  uuid not null references practices (id) on delete cascade,
+  name         text not null,
+  role         text,
+  weekly_hours numeric(4, 1) not null default 35 check (weekly_hours between 1 and 80),
+  unique (practice_id, name)
+);
+
+-- What a client company pays the practice: a monthly fee, and a rate for extra work billed on top of it.
+-- customer_id is that client as a customer in the practice's own books.
+create table client_fees (
+  organisation_id uuid primary key references organisations (id) on delete cascade,
+  customer_id     uuid not null references customers (id),
+  monthly_fee     numeric(12, 2) not null default 0 check (monthly_fee >= 0),
+  hourly_rate     numeric(10, 2) not null default 60 check (hourly_rate >= 0),
+  -- What the practice charges this client for using Ledgerline under the practice's name. Ledgerline bills the
+  -- practice one fee whatever this is: the practice sets it, invoices it on its fee invoice, and keeps it.
+  app_fee         numeric(10, 2) not null default 0 check (app_fee >= 0),
+  updated_at      timestamptz not null default now()
+);
+
+-- Time spent on a client company (or on the practice's own work, against its own books).
+-- A running timer has no end and no minutes yet; each person runs one at a time.
+create table time_entries (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  person          text not null,
+  work            text not null check (length(btrim(work)) between 1 and 200),
+  started_at      timestamptz not null,
+  ended_at        timestamptz,
+  minutes         integer check (minutes between 1 and 1440),
+  extra           boolean not null default false,
+  invoice_id      uuid references invoices (id) on delete set null,
+  created_at      timestamptz not null default now(),
+  constraint time_entries_running check ((ended_at is null) = (minutes is null))
+);
+create unique index time_entries_one_running on time_entries (person) where ended_at is null;
+create index time_entries_org_started on time_entries (organisation_id, started_at);
+
+-- The fee invoice raised for a client and a month, so a month is never billed twice.
+create table fee_invoices (
+  client_organisation_id uuid not null references organisations (id) on delete cascade,
+  period                 date not null check (extract(day from period) = 1),
+  invoice_id             uuid not null references invoices (id) on delete cascade,
+  primary key (client_organisation_id, period)
+);
+
+-- Every VAT number checked against VIES, the EU's register: the answer, the name and address the member
+-- state gave, and the consultation number VIES issues when the company checking gives its own VAT number,
+-- which is the evidence that the number was checked before a sale was zero-rated. Kept for good: a later
+-- check is a new row. organisation_id is the company the check was made for (the requester).
+create table vat_checks (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  country         text not null check (country ~ '^[A-Z]{2}$'),
+  number          text not null check (number ~ '^[A-Z0-9+*]{2,14}$'),
+  valid           boolean,
+  name            text,
+  address         text,
+  consultation    text,
+  -- The name in the books, and whether the member state said it matches its register: some match without disclosing the name.
+  asked_name      text,
+  name_match      text check (name_match in ('match', 'differs')),
+  error           text,
+  source          text not null check (source in ('vies', 'demo')),
+  checked_by      text not null,
+  checked_at      timestamptz not null default now(),
+  constraint vat_checks_answer check ((valid is null) = (error is not null))
+);
+create index vat_checks_number on vat_checks (country, number, checked_at desc);
+-- The demo's companies are invented, so the real register has never heard of them. A check of one of
+-- their numbers is answered from here and marked as a demo answer; every other number goes to VIES.
+create table vies_demo_register (
+  country text not null,
+  number  text not null,
+  valid   boolean not null default true,
+  name    text,
+  address text,
+  primary key (country, number)
+);
+
+-- A check is evidence, so it goes on the audit chain.
+create function audit_vat_check() returns trigger language plpgsql as $$
+begin
+  perform audit_append(new.organisation_id, 'checked', 'vat_number', new.id,
+    jsonb_build_object('number', new.country || new.number, 'valid', new.valid, 'name', new.name, 'name_match', new.name_match, 'consultation', new.consultation, 'error', new.error, 'source', new.source));
+  return new;
+end $$;
+create trigger vat_checks_audit after insert on vat_checks for each row execute function audit_vat_check();
+
+-- Deadlines other than a VAT return (a VIES statement, a provisional tax
+-- instalment, the company tax return) are marked done by hand. A VAT return
+-- needs no mark: filing it in Ledgerline is what closes its deadline.
+create table deadline_marks (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  kind            text not null check (kind in ('vies', 'provisional_tax', 'tax_return')),
+  period_end      date not null,
+  done_on         date not null,
+  done_by         text not null,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, kind, period_end)
+);
+
+-- A company's website form key. It can do one thing, add an enquiry, so it is
+-- public by design (it sits in the form's own HTML) and is kept as written so
+-- the snippet can be shown again. One live key per company; a new key retires
+-- the old one.
+create table enquiry_form_keys (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  token           text not null unique check (token ~ '^ll_form_[A-Za-z0-9]{24}$'),
+  created_at      timestamptz not null default now(),
+  last_used_at    timestamptz,
+  uses            integer not null default 0,
+  revoked_at      timestamptz
+);
+create unique index enquiry_form_keys_one_live on enquiry_form_keys (organisation_id) where revoked_at is null;
+
+create table crm_contacts (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  customer_id     uuid references customers (id) on delete cascade,
+  name            text not null,
+  role            text,
+  email           text,
+  phone           text,
+  created_at      timestamptz not null default now()
+);
+
+create table crm_matters (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  reference       text not null,
+  title           text not null,
+  customer_id     uuid references customers (id) on delete set null,
+  enquiry_id      uuid references crm_enquiries (id) on delete set null,
+  owner           text not null,
+  status          text not null default 'active' check (status in ('active', 'waiting_on_client', 'on_hold', 'completed')),
+  priority        text not null default 'normal' check (priority in ('normal', 'high', 'urgent')),
+  value           numeric(14, 2),
+  next_action     text,
+  next_action_due date,
+  summary         text,
+  opened_on       date not null default current_date,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, reference)
+);
+
+create table crm_tasks (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  title           text not null,
+  due_on          date,
+  priority        text not null default 'normal' check (priority in ('normal', 'high', 'urgent')),
+  owner           text not null,
+  done_at         timestamptz,
+  enquiry_id      uuid references crm_enquiries (id) on delete cascade,
+  matter_id       uuid references crm_matters (id) on delete cascade,
+  customer_id     uuid references customers (id) on delete cascade,
+  created_at      timestamptz not null default now()
+);
+
+create table crm_activities (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  enquiry_id      uuid references crm_enquiries (id) on delete cascade,
+  matter_id       uuid references crm_matters (id) on delete cascade,
+  customer_id     uuid references customers (id) on delete cascade,
+  kind            text not null default 'note' check (kind in ('note', 'call', 'email', 'meeting', 'stage', 'won')),
+  body            text not null,
+  actor           text not null,
+  occurred_at     timestamptz not null default now()
+);
+create index crm_activities_enquiry_idx on crm_activities (enquiry_id, occurred_at desc);

@@ -1,0 +1,568 @@
+import path from "node:path";
+import { expect, test } from "@playwright/test";
+
+const files = ["01-greek-marine-fuel-invoice.pdf", "02-two-invoices-in-one-pdf.pdf", "03-photographed-print-shop-invoice.jpg", "04-eu-reverse-charge-invoice.pdf"]
+  .map(name => path.join(process.cwd(), "demo-files", name));
+
+test("practice dashboard lists every client", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /6 clients/ })).toBeVisible();
+  for (const name of ["Aegean Blue Marine Services Ltd", "Troodos Gold Olive Oil Ltd", "Kalamies Dental Clinic Ltd", "Larnaka Roast Coffee Co Ltd", "Pixelforge Studio Ltd", "Mesogeios Holdings Ltd"]) {
+    await expect(page.getByRole("link", { name })).toBeVisible();
+  }
+});
+
+test("capture reads, routes and posts a mixed batch", async ({ page }) => {
+  await page.goto("/capture");
+  await page.locator("#capture-files").setInputFiles(files);
+  await expect(page.getByText(/invoices? found, checked and routed/)).toHaveCount(4, { timeout: 60_000 });
+  await expect(page.getByText("→ Larnaka Roast Coffee Co Ltd").first()).toBeVisible();
+  await page.getByRole("button", { name: /Post all/ }).click();
+  await expect(page.getByText(/bills posted to/)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Posted from capture" })).toBeVisible();
+});
+
+test("bank reconciliation matches every sure line in one press", async ({ page }) => {
+  await page.goto("/c/aegean-blue-marine/bank");
+  await page.getByRole("link", { name: /Reconcile|Bank of Cyprus/ }).first().click();
+  const matchAll = page.getByRole("button", { name: /Match all \d+/ });
+  await expect(matchAll).toBeVisible();
+  await matchAll.click();
+  await expect(page.getByRole("button", { name: /Match all \d+/ })).toHaveCount(0, { timeout: 60_000 });
+});
+
+test("reports agree and the VAT return files and locks", async ({ page }) => {
+  for (const report of ["profit-and-loss", "balance-sheet", "trial-balance", "general-ledger", "cash-flow"]) {
+    await page.goto(`/c/aegean-blue-marine/reports/${report}`);
+    await expect(page.getByText("We couldn’t load")).toHaveCount(0);
+  }
+  await page.goto("/c/aegean-blue-marine/reports/vat");
+  await page.getByRole("button", { name: "Mark as filed and lock the period" }).click();
+  await expect(page.getByText(/locked to the end of the period/)).toBeVisible();
+  await page.goto("/c/aegean-blue-marine/audit");
+  await expect(page.getByText("The chain is intact")).toBeVisible();
+});
+
+test("white label rebrands every screen", async ({ page }) => {
+  await page.goto("/settings");
+  await page.getByLabel("Firm name").fill("Kyrenia Street Accountants");
+  await page.getByLabel("Initials").fill("KS");
+  await page.getByRole("button", { name: "Save the brand" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await page.goto("/compare");
+  await expect(page.getByRole("link", { name: "Kyrenia Street Accountants dashboard" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Main navigation" }).getByText(/Powered by/)).toBeVisible();
+});
+
+test("each client has the CRM: to-dos, the pipeline, and a won enquiry becomes a customer in the books", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/crm");
+  await expect(page.getByRole("heading", { name: "My to-dos" })).toBeVisible();
+  await page.getByLabel("New to-do").fill("Call the roastery about the green coffee order");
+  await page.getByLabel("New to-do").press("Enter");
+  await expect(page.getByText("Call the roastery about the green coffee order")).toBeVisible();
+  await page.goto("/c/larnaka-roast/crm/enquiries");
+  await expect(page.getByRole("region", { name: "Proposal sent" })).toBeVisible();
+  await page.getByRole("region", { name: "Proposal sent" }).getByRole("link").first().click();
+  await page.getByRole("button", { name: "Won: make a customer" }).click();
+  await expect(page.getByRole("heading", { name: "Matters" })).toBeVisible();
+  await expect(page.getByText("Owes you")).toBeVisible();
+});
+
+test("a company's home puts the everyday actions first", async ({ page }) => {
+  await page.goto("/c/larnaka-roast");
+  const actions = page.getByRole("navigation", { name: "Everyday actions" });
+  for (const name of ["Raise an invoice", "Record a bill", "Upload a receipt", "Money in", "Money out", "Write a quote"]) await expect(actions.getByRole("link", { name: new RegExp(name) })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Needs attention" })).toBeVisible();
+  // The switcher keeps the section: Invoices in one company opens Invoices in the next.
+  await page.goto("/c/larnaka-roast/sales");
+  await page.getByRole("button", { name: /Larnaka Roast/ }).click();
+  await page.getByRole("link", { name: "Pixelforge Studio" }).click();
+  await expect(page).toHaveURL(/\/c\/pixelforge\/sales$/);
+});
+
+test("an owner raises an invoice to a new customer, issues it, opens the PDF and records the payment", async ({ page }) => {
+  await page.goto("/c/larnaka-roast");
+  await page.getByRole("link", { name: /Raise an invoice/ }).click();
+  await expect(page.getByRole("heading", { name: "New invoice" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Customer", exact: true }).selectOption("new");
+  await page.getByLabel("New customer's name").fill("Harbour View Apartments Ltd");
+  await page.getByLabel("Line 1 description").fill("House espresso blend, 20 kg");
+  await page.getByLabel("Line 1 unit price").fill("400");
+  await expect(page.getByText("€476.00")).toBeVisible();
+  await page.getByRole("button", { name: "Save and issue" }).click();
+  await expect(page.getByText("Issued and in the books.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Invoice LRC-2026-\d{4}$/ })).toBeVisible();
+
+  const href = await page.getByRole("link", { name: "View PDF" }).getAttribute("href");
+  const pdf = await page.request.get(href!);
+  expect(pdf.headers()["content-type"]).toBe("application/pdf");
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Line 1 unit price").fill("500");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("€595.00").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Record payment" }).click();
+  await expect(page.getByRole("heading", { name: "Paid in full" })).toBeVisible();
+  await page.goto("/c/larnaka-roast/customers?q=Harbour");
+  await expect(page.getByRole("link", { name: "Harbour View Apartments Ltd" })).toBeVisible();
+});
+
+test("a quote the customer accepts becomes an issued invoice with its lines", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/quotes");
+  await page.getByRole("link", { name: "LRC-Q-002" }).click();
+  await page.getByRole("button", { name: "Accepted: raise the invoice" }).click();
+  await expect(page.getByText("Issued and in the books.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "LRC-Q-002" })).toBeVisible();
+  await page.goto("/c/larnaka-roast/quotes?view=accepted");
+  await expect(page.getByRole("link", { name: "LRC-Q-002" })).toBeVisible();
+});
+
+test("a receipt uploaded inside a company is read into that company's inbox", async ({ page }) => {
+  await page.goto("/c/pixelforge/capture");
+  await expect(page.getByRole("heading", { name: "Upload receipts", level: 1 })).toBeVisible();
+  await page.locator("#capture-files").setInputFiles(files[2]);
+  await expect(page.getByText(/invoices? found, checked and routed/)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("Lefkosia Print Shop").first()).toBeVisible();
+});
+
+test("a draft posts nothing until issued, and an unpaid invoice can be voided and restored", async ({ page }) => {
+  await page.goto("/c/pixelforge/sales/new");
+  // An EU business customer: reverse charge is chosen, and no VAT can be charged on the lines.
+  await page.getByRole("combobox", { name: "Customer", exact: true }).selectOption({ label: "Brabant Digital BV · NL859123455B01" });
+  await expect(page.getByRole("combobox", { name: "VAT", exact: true })).toHaveValue("reverse_charge");
+  await expect(page.getByLabel("Line 1 VAT rate")).toBeDisabled();
+  await page.getByLabel("Line 1 description").fill("Design sprint, October");
+  await page.getByLabel("Line 1 unit price").fill("3200");
+  await page.getByRole("button", { name: "Save as draft" }).click();
+  await expect(page.getByText("A draft: nothing is in the books until it is issued.")).toBeVisible();
+  await page.getByRole("button", { name: "Issue" }).click();
+  await expect(page.getByRole("heading", { name: "To collect" })).toBeVisible();
+  await expect(page.getByText("Reverse charge", { exact: true })).toBeVisible();
+  // Issued and unpaid: it can still be edited, and saving reposts it.
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Line 1 unit price").fill("3500");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("heading", { name: "To collect" })).toBeVisible();
+  await expect(page.getByText("€3,500.00").first()).toBeVisible();
+  await page.getByRole("button", { name: "Void" }).click();
+  await page.getByRole("button", { name: "Yes, void it" }).click();
+  await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByRole("heading", { name: "To collect" })).toBeVisible();
+});
+
+test("a product priced once fills an invoice line: quantity, unit price, discount and VAT worked out exactly", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/items/new");
+  await page.getByLabel("Name").fill("Cold brew concentrate, 1 L");
+  await page.getByLabel("Code").fill("CB-1L");
+  await page.getByLabel("Price before VAT").fill("12.35");
+  await page.getByLabel("VAT rate").selectOption("5");
+  await page.getByRole("button", { name: "Add the product" }).click();
+  await expect(page.getByText("Cold brew concentrate, 1 L added.")).toBeVisible();
+
+  await page.goto("/c/larnaka-roast/sales/new");
+  await page.getByRole("combobox", { name: "Customer", exact: true }).selectOption({ label: "Coral Sands Hotel Ltd · CY10501127A" });
+  await page.getByLabel("Line 1 description").fill("Cold brew concentrate, 1 L");
+  await expect(page.getByLabel("Line 1 unit price")).toHaveValue("12.35");
+  await expect(page.getByLabel("Line 1 VAT rate")).toHaveValue("5");
+  await page.getByLabel("Line 1 quantity").fill("24");
+  await page.getByRole("button", { name: "Give a discount" }).click();
+  await page.getByLabel("Line 1 discount percent").fill("7.5");
+  // 24 × 12.35 = 296.40, less 7.5% = 274.17; VAT at 5% = 13.71; total 287.88.
+  await expect(page.getByLabel("Line 1 amount")).toHaveText("€274.17");
+  await expect(page.getByText("€287.88")).toBeVisible();
+  await page.getByRole("button", { name: "Save and issue" }).click();
+  await expect(page.getByText("Issued and in the books.")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "€12.35" })).toBeVisible();
+  await expect(page.getByText("€287.88").first()).toBeVisible();
+});
+
+test("a credit note from an invoice takes it off what is owed, and comes off the VAT due", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/sales?view=open");
+  await page.getByRole("link", { name: /^LRC-2026-\d{4}$/ }).first().click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: /^Credit note/ }).click();
+  await expect(page.getByRole("heading", { name: "New credit note" })).toBeVisible();
+  await page.getByLabel("Reason").selectOption("Price corrected");
+  await page.getByLabel("Line 1 quantity").fill("1");
+  await page.getByLabel("Line 1 unit price").fill("10");
+  await page.getByRole("button", { name: "Save and issue" }).click();
+  await expect(page.getByText("Issued and in the books.")).toBeVisible();
+  await expect(page.getByText(/came off invoice LRC-2026-\d{4}/)).toBeVisible();
+  await page.getByRole("link", { name: /^LRC-2026-\d{4}$/ }).first().click();
+  await expect(page.getByText(/€[\d,.]+ credited of €/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /^LRC-CN-2026-\d{4}$/ })).toBeVisible();
+});
+
+test("unused credit can be refunded from the bank, and the refund shows in the bank", async ({ page }) => {
+  await page.goto("/c/pixelforge/credit-notes?view=unused");
+  await page.getByRole("link", { name: "PF-CN-2026-0001" }).click();
+  await expect(page.getByRole("heading", { name: "Credit to use" })).toBeVisible();
+  await page.getByRole("button", { name: "Record the refund" }).click();
+  await expect(page.getByRole("heading", { name: "Credit used" })).toBeVisible();
+  await expect(page.getByText(/Refunded from/)).toBeVisible();
+  await page.goto("/c/pixelforge/bank");
+  await expect(page.getByText("Refunded").first()).toBeVisible();
+  await page.goto("/c/pixelforge/reports/overview");
+  await expect(page.getByText("Debtors agree")).toBeVisible();
+});
+
+test("a customer's statement is a PDF, and a reminder lists what is overdue", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/c/larnaka-roast/customers");
+  await page.getByRole("link", { name: "Finikoudes Beach Kiosk Ltd" }).click();
+  const statement = await page.getByRole("link", { name: "Statement" }).getAttribute("href");
+  const pdf = await page.request.get(statement!);
+  expect(pdf.headers()["content-type"]).toBe("application/pdf");
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  await page.getByRole("button", { name: "Send a reminder" }).click();
+  await expect(page.getByLabel("Message")).toHaveValue(/overdue/);
+  await page.getByRole("button", { name: "Copy the message" }).click();
+  await expect(page.getByText("Logged on the customer's timeline.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/^Payment reminder: /)).toBeVisible();
+});
+
+test("a sale paid on the spot is issued and paid in one step, and an invoice can be copied", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/sales/new");
+  await page.getByRole("combobox", { name: "Customer", exact: true }).selectOption("new");
+  await page.getByLabel("New customer's name").fill("Walk-in event, Larnaca marina");
+  await page.getByLabel("Line 1 description").fill("Barista coffee at events, per cup");
+  await page.getByLabel("Line 1 quantity").fill("120");
+  await page.getByLabel("Paid already").check();
+  await page.getByRole("button", { name: "Save, issue and mark paid" }).click();
+  await expect(page.getByRole("heading", { name: "Paid in full" })).toBeVisible();
+  const number = (await page.getByRole("heading", { level: 1 }).innerText()).replace("Invoice ", "");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: /^Copy/ }).click();
+  await expect(page.getByText(`A copy of ${number}`)).toBeVisible();
+  await expect(page.getByLabel("Line 1 quantity")).toHaveValue("120");
+  await page.getByRole("button", { name: "Save as draft" }).click();
+  await expect(page.getByText("A draft: nothing is in the books until it is issued.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).not.toHaveText(`Invoice ${number}`);
+});
+
+test("an invoice's due date follows each customer's own payment terms", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/sales/new");
+  const customer = page.getByRole("combobox", { name: "Customer", exact: true });
+  await customer.selectOption({ label: "Coral Sands Hotel Ltd · CY10501127A" });
+  await expect(page.getByText("30 days", { exact: true })).toBeVisible();
+  const thirty = await page.getByLabel("Due date").inputValue();
+  await customer.selectOption({ label: "Finikoudes Beach Kiosk Ltd · CY10472210X" });
+  await expect(page.getByText("14 days", { exact: true })).toBeVisible();
+  const fourteen = await page.getByLabel("Due date").inputValue();
+  expect((Date.parse(thirty) - Date.parse(fourteen)) / 86_400_000).toBe(16);
+});
+
+test("repeating invoices: start one from an invoice, and raise what has come due in one press", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/repeating");
+  await expect(page.getByText(/1 due:/)).toBeVisible();
+  await page.getByRole("button", { name: "Raise 1 due invoice" }).click();
+  await expect(page.getByText(/1 invoice raised: LRC-2026-\d{4}\./)).toBeVisible();
+  await expect(page.getByText(/1 due:/)).toHaveCount(0);
+  await page.getByRole("link", { name: "Espresso machine lease" }).click();
+  await expect(page.getByRole("heading", { name: "Raised" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^LRC-2026-\d{4}$/ })).toBeVisible();
+
+  await page.goto("/c/pixelforge/sales?view=all");
+  await page.getByRole("link", { name: /^PF-2026-\d{4}$/ }).first().click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: /^Repeat/ }).click();
+  await page.getByLabel("How often").selectOption("3");
+  await page.getByRole("button", { name: "Start repeating" }).click();
+  await expect(page.getByText(/^Repeating\. The next invoice is due on/)).toBeVisible();
+});
+
+test("the VIES statement lists EU business customers by VAT number and agrees with box 8B", async ({ page }) => {
+  await page.goto("/c/pixelforge/reports/vies?range=custom&from=2026-07-01&to=2026-09-30");
+  await expect(page.getByRole("cell", { name: "298765435" })).toBeVisible();
+  await expect(page.getByText(/Agrees with box 8B/)).toBeVisible();
+});
+
+test("an issued invoice downloads as a UBL e-invoice, and a company's documents carry its own logo and colour", async ({ page }) => {
+  await page.goto("/c/pixelforge/sales?view=all&q=Nordlicht");
+  await page.getByRole("link", { name: /^PF-2026-\d{4}$/ }).first().click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  const href = await page.getByRole("menuitem", { name: /^E-invoice \(XML\)/ }).getAttribute("href");
+  const xml = await page.request.get(href!);
+  expect(xml.headers()["content-type"]).toContain("application/xml");
+  const body = await xml.text();
+  expect(body).toContain("urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0");
+  expect(body).toContain("<cbc:ID>AE</cbc:ID>");
+  expect(body).toContain("VATEX-EU-AE");
+
+  await page.goto("/c/larnaka-roast/settings");
+  await expect(page.getByRole("img", { name: "Logo" })).toBeVisible();
+  await page.getByLabel("Terms at the foot").fill("Goods remain ours until paid for in full.");
+  await page.getByRole("button", { name: "Save the design" }).click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  const logo = await page.request.get("/c/larnaka-roast/logo");
+  expect(logo.headers()["content-type"]).toBe("image/png");
+});
+
+test("an issued invoice is sent from the owner's own email and recorded as sent", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/c/troodos-gold/sales/new");
+  await page.getByRole("combobox", { name: "Customer", exact: true }).selectOption({ label: "Nicosia Fine Foods Ltd · CY10144782P" });
+  await page.getByLabel("Line 1 description").fill("Extra virgin olive oil, 750 ml");
+  await page.getByLabel("Line 1 quantity").fill("120");
+  await page.getByLabel("Their reference").fill("PO-2231");
+  await page.getByRole("button", { name: "Save and issue" }).click();
+  await expect(page.getByText(/Not sent to Nicosia Fine Foods Ltd yet/)).toBeVisible();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByLabel("Message")).toHaveValue(/Please find attached invoice/);
+  await page.getByRole("button", { name: "Copy the message" }).click();
+  await expect(page.getByText("Marked as sent, and logged on the customer's timeline.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("PO-2231")).toBeVisible();
+  await expect(page.getByText(/Not sent to/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send again" })).toBeVisible();
+});
+
+test("a supplier's credit note from a bill comes off what is still to pay", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/bills?q=TD2610-032");
+  await page.getByRole("link", { name: "Troodos Dairy Ltd" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: /^Supplier credit note/ }).click();
+  await expect(page.getByRole("heading", { name: "Record a supplier's credit note" })).toBeVisible();
+  await page.getByLabel("Their credit note number").fill("TD-CN-0412");
+  await page.getByLabel("Line 1 net amount").fill("40");
+  await page.getByRole("button", { name: "Record the credit note" }).click();
+  await expect(page.getByText("Recorded and in the books.")).toBeVisible();
+  await expect(page.getByText(/came off what is owed on TD2610-032/)).toBeVisible();
+  await page.getByRole("link", { name: "TD2610-032" }).first().click();
+  await expect(page.getByText(/credited of/)).toBeVisible();
+});
+
+test("several bills are paid at once, and the bank gets a SEPA file", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/bills");
+  const boxes = page.getByRole("checkbox", { name: /^Pay / });
+  await boxes.nth(0).check();
+  await boxes.nth(1).check();
+  await expect(page.getByText(/^2 bills chosen/)).toBeVisible();
+  await page.getByRole("button", { name: "Pay them" }).click();
+  await page.getByRole("button", { name: /^Pay 2 bills/ }).click();
+  await expect(page.getByRole("heading", { name: /^Payment run/ })).toBeVisible();
+  const href = await page.getByRole("link", { name: "Download the SEPA file" }).getAttribute("href");
+  const file = await page.request.get(href!);
+  expect(file.headers()["content-type"]).toContain("application/xml");
+  const xml = await file.text();
+  expect(xml).toContain("urn:iso:std:iso:20022:tech:xsd:pain.001.001.03");
+  expect(xml).toContain("<NbOfTxs>2</NbOfTxs>");
+});
+
+test("customers and products come in from a spreadsheet, and those already there are left alone", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/customers/import");
+  await page.getByText("Or paste the rows").click();
+  await page.getByLabel("Pasted rows").fill("Name,Email,VAT number,Country,Payment terms\nSeaview Cafe Ltd,accounts@seaview.example,CY10999991E,CY,21\nMarina Bistro Ltd,,,,\nCoral Sands Hotel Ltd,,CY10501127A,CY,30\nHarbour Grill Ltd,,CY10999991A,CY,\n");
+  await expect(page.getByText("2 to add")).toBeVisible();
+  await expect(page.getByText(/1 already there/)).toBeVisible();
+  await expect(page.getByText(/1 with a problem/)).toBeVisible();
+  await expect(page.getByText(/VAT number CY10999991A: the check letter of this Cyprus number doesn’t match/)).toBeVisible();
+  await page.getByRole("button", { name: "Add 2 customers" }).click();
+  await expect(page.getByText(/2 customers added\. 1 already there, left alone\. 1 row not imported\./)).toBeVisible();
+  await page.goto("/c/larnaka-roast/customers?q=Seaview");
+  await expect(page.getByRole("link", { name: "Seaview Cafe Ltd" })).toBeVisible();
+
+  await page.goto("/c/larnaka-roast/items/import");
+  await page.getByText("Or paste the rows").click();
+  await page.getByLabel("Pasted rows").fill("Code;Name;Unit;Price;VAT rate\nCB-500;Cold brew, 500 ml;bottle;4,20;5%\n");
+  await page.getByRole("button", { name: "Add 1 product" }).click();
+  await expect(page.getByText(/1 product added/)).toBeVisible();
+  await page.goto("/c/larnaka-roast/items");
+  await expect(page.getByRole("link", { name: "Cold brew, 500 ml" })).toBeVisible();
+});
+
+test("a supplier's IBAN is checked before it is saved", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/suppliers");
+  await page.getByRole("link", { name: "Ermou Street Properties Ltd" }).first().click();
+  await page.getByLabel("IBAN").fill("CY12 0021 8116 2667 4713 0738 4396");
+  await page.getByRole("button", { name: "Save supplier" }).click();
+  await expect(page.getByText("That IBAN does not check out")).toBeVisible();
+});
+
+test("a journal is posted, edited, reversed in the next month and removed", async ({ page }) => {
+  await page.goto("/c/troodos-gold/journals");
+  await page.getByRole("link", { name: "New journal" }).click();
+  await page.getByLabel("Narration").fill("Accrued electricity for October");
+  await page.getByLabel("Line 1 account").selectOption({ label: "445 · Electricity and water" });
+  await page.getByLabel("Line 1 debit").fill("312.40");
+  await page.getByLabel("Line 2 account").selectOption({ label: "830 · Accruals" });
+  await page.getByLabel("Line 2 credit").fill("312.40");
+  await page.getByRole("button", { name: "Post journal" }).click();
+  await expect(page.getByRole("heading", { name: "Accrued electricity for October", level: 1 })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Posted");
+
+  await page.getByRole("link", { name: "Edit" }).click();
+  await page.getByLabel("Line 1 debit").fill("318.90");
+  await page.getByLabel("Line 2 credit").fill("318.90");
+  await page.getByRole("button", { name: "Save journal" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.getByRole("row", { name: /Balanced/ })).toContainText("€318.90");
+
+  await page.getByRole("link", { name: "Reverse" }).click();
+  await expect(page.getByRole("heading", { name: "Reverse a journal" })).toBeVisible();
+  await expect(page.getByLabel("Date")).toHaveValue("2026-11-01");
+  await expect(page.getByLabel("Line 1 credit")).toHaveValue("318.90");
+  await page.getByRole("button", { name: "Post journal" }).click();
+  await expect(page.getByRole("heading", { name: "Reversal of Accrued electricity for October", level: 1 })).toBeVisible();
+
+  await page.getByRole("button", { name: "Remove this journal" }).click();
+  await page.getByRole("button", { name: "Yes, remove" }).click();
+  await expect(page.getByRole("status")).toContainText("removed from the books");
+  await expect(page.getByRole("link", { name: "Accrued electricity for October" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Reversal of/ })).toHaveCount(0);
+});
+
+test("an enquiry sent from the company's website form lands in its pipeline, assigned, with a call-back due", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/crm/enquiries/website");
+  const form = await page.getByRole("link", { name: "Open the form" }).getAttribute("href");
+  expect(form).toMatch(/^\/f\/ll_form_[A-Za-z0-9]{24}$/);
+  await page.goto(form!);
+  await expect(page.getByRole("heading", { name: "Tell us what you need" })).toBeVisible();
+  await page.getByLabel("Your name").fill("Eleni Charalambous");
+  await page.getByLabel("Company").fill("Kypros Ferry Lines Ltd");
+  await page.getByLabel("Email").fill("eleni@kyprosferry.example");
+  await page.getByLabel("What do you need?").fill("Monthly bookkeeping and VAT");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("heading", { name: "Thank you" })).toBeVisible();
+
+  await page.goto("/c/larnaka-roast/crm/enquiries");
+  const card = page.getByRole("link", { name: /Eleni Charalambous/ });
+  await expect(card).toContainText("From your website");
+  await card.click();
+  await expect(page.getByText("Sent from the website form: Monthly bookkeeping and VAT.")).toBeVisible();
+  await expect(page.getByText(/Call Eleni back \(Kypros Ferry Lines Ltd\)/)).toBeVisible();
+});
+
+test("the enquiries API takes JSON with a form key, refuses a wrong key, and a new key retires the old one", async ({ page }) => {
+  await page.goto("/c/pixelforge/crm/enquiries/website");
+  const token = (await page.getByRole("link", { name: "Open the form" }).getAttribute("href"))!.replace("/f/", "");
+  const post = (key: string, data: Record<string, string>) => page.request.post("/api/v1/enquiries", { headers: { authorization: `Bearer ${key}` }, data });
+
+  const created = await post(token, { name: "Annika Berg", company: "Fjordline Studio AS", email: "annika@fjordline.example", service: "VAT registration" });
+  expect(created.status()).toBe(201);
+  const body = await created.json();
+  expect(body.reference).toMatch(/^P-2026-\d{4}$/);
+  expect(body.next_action).toBe("Call Annika back");
+
+  expect((await post("ll_form_wrongwrongwrongwrongwron", { name: "Someone", email: "a@b.example" })).status()).toBe(401);
+  expect((await post(token, { company: "No name Ltd", email: "a@b.example" })).status()).toBe(422);
+  expect((await post(token, { name: "Spam Bot", email: "bot@spam.example", _trap: "http://spam.example" })).status()).toBe(202);
+
+  await page.reload();
+  await expect(page.getByRole("link", { name: /Annika Berg Fjordline Studio AS API/ })).toBeVisible();
+  await expect(page.getByText("Spam Bot")).toHaveCount(0);
+  await page.getByRole("button", { name: "Make a new key" }).click();
+  await expect(page.getByRole("link", { name: "Open the form" })).not.toHaveAttribute("href", `/f/${token}`);
+  expect((await post(token, { name: "Too Late", email: "late@example.test" })).status()).toBe(401);
+});
+
+test("every client's deadlines are worked out from their books, and one that slipped is caught and closed", async ({ page }) => {
+  await page.goto("/deadlines");
+  await expect(page.getByRole("heading", { name: "Deadlines", level: 1 })).toBeVisible();
+  await expect(page.getByText("VAT return, Jul–Sept 2026").first()).toBeVisible();
+  const slipped = page.getByRole("listitem").filter({ hasText: "Provisional tax 2026, first instalment" }).filter({ hasText: "Kalamies Dental Clinic Ltd" });
+  await expect(slipped).toContainText("overdue");
+  await expect(slipped).toContainText("Sofia Georgiou");
+
+  await page.goto("/c/kalamies-dental");
+  await expect(page.getByRole("link", { name: /Provisional tax 2026, first instalment/ })).toBeVisible();
+  await page.goto("/c/kalamies-dental/deadlines");
+  await expect(page.getByText("Pixelforge Studio Ltd")).toHaveCount(0);
+  await page.getByRole("listitem").filter({ hasText: "Provisional tax 2026, first instalment" }).getByRole("button", { name: "Mark done" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: "Provisional tax 2026, first instalment" })).toContainText("Done");
+
+  await page.goto("/deadlines?view=overdue");
+  await expect(page.getByText("Nothing is overdue")).toBeVisible();
+});
+
+test("a timer started on a client from the top bar runs, stops, and its time lands on the Time page", async ({ page }) => {
+  await page.goto("/c/pixelforge");
+  await page.getByRole("button", { name: "Start timer" }).click();
+  await expect(page.getByRole("combobox", { name: "For" })).toHaveValue(/.+/);
+  await page.getByLabel("Working on").fill("VIES statement");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  const stop = page.getByRole("button", { name: "Stop the timer on Pixelforge Studio Ltd" });
+  await expect(stop).toBeVisible();
+  await stop.click();
+  await expect(page.getByRole("button", { name: "Start timer" })).toBeVisible();
+
+  await page.goto("/time");
+  await expect(page.getByRole("heading", { name: "Time", level: 1 })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "Pixelforge Studio · VIES statement" }).first()).toContainText("0:01");
+  await page.getByLabel("Work", { exact: true }).fill("Payroll");
+  await page.getByLabel("How long").fill("1:15");
+  await page.getByRole("button", { name: "Add the time" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: "· Payroll" }).first()).toContainText("1:15");
+});
+
+test("each client's fee is set against its hours, and the month's fees are invoiced in one press, once", async ({ page }) => {
+  await page.goto("/fees");
+  const kalamies = page.getByRole("row").filter({ hasText: "Kalamies Dental Clinic Ltd" });
+  await expect(kalamies).toContainText("Below your floor");
+  await page.getByRole("button", { name: /^Raise .+’s fees/ }).click();
+  await expect(page.getByRole("status")).toContainText("fee invoices raised");
+  await expect(page.getByText(/’s fees are invoiced/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Raise .+’s fees/ })).toHaveCount(0);
+
+  await page.getByRole("row").filter({ hasText: "Mesogeios Holdings Ltd" }).getByRole("link", { name: /^SAL-/ }).click();
+  await expect(page.getByText(/Additional work, 3 hours at €90/)).toBeVisible();
+  await expect(page.getByText(/Accounting services, /)).toBeVisible();
+
+  // The app, resold under the firm's name, is its own line on the client's fee invoice.
+  await page.goto("/fees");
+  await expect(page.getByText(/4 clients pay you €100.00 a month for the app/)).toBeVisible();
+  await page.getByRole("row").filter({ hasText: "Larnaka Roast Coffee Co Ltd" }).getByRole("link", { name: /^SAL-/ }).click();
+  await expect(page.getByText(/Online books and invoicing, /)).toBeVisible();
+});
+
+test("an EU customer's VAT number is checked in VIES, and the answer is kept on the audit trail", async ({ page }) => {
+  await page.goto("/c/pixelforge/customers?q=Atelier");
+  await page.getByRole("link", { name: "Atelier Lumière SAS" }).first().click();
+  await expect(page.getByText("Not checked in VIES yet.", { exact: false })).toBeVisible();
+
+  await page.goto("/c/pixelforge/customers?q=Nordlicht");
+  await page.getByRole("link", { name: "Nordlicht Software GmbH" }).first().click();
+  await expect(page.getByText("Valid in VIES", { exact: true })).toBeVisible();
+  await expect(page.getByText("Germany doesn’t disclose it")).toBeVisible();
+  await page.getByRole("button", { name: "Check again" }).click();
+  await expect(page.getByText(/· for Pixelforge Studio Ltd$/)).toBeVisible();
+
+  await page.goto("/c/pixelforge/audit");
+  await expect(page.getByText("VAT number checked in VIES").first()).toBeVisible();
+  await expect(page.getByText(/DE298765435: valid/).first()).toBeVisible();
+});
+
+test("a supplier registered in VIES under another name is flagged before it is relied on", async ({ page }) => {
+  await page.goto("/c/pixelforge/suppliers");
+  await page.getByRole("link", { name: "Nimbus Cloud Services BV" }).first().click();
+  await page.getByRole("button", { name: "Check in VIES" }).click();
+  await expect(page.getByText(/VIES has this number registered to STRATOCUMULUS HOSTING B\.V\., not Nimbus Cloud Services BV/)).toBeVisible();
+
+  await page.getByLabel("VAT number", { exact: true }).fill("NL822334455B01");
+  await page.getByRole("button", { name: "Save supplier" }).click();
+  await expect(page.getByText(/The check digit of this Netherlands number doesn’t match/).first()).toBeVisible();
+});
+
+test("the practice checks any EU VAT number, sees every client's EU numbers, and re-checks them all at once", async ({ page }) => {
+  await page.goto("/vat-numbers");
+  const table = page.getByRole("table");
+  await expect(table.getByRole("row", { name: /Brabant Digital BV/ })).toContainText(/Last valid .*: check again/);
+  await expect(table.getByRole("row", { name: /Atelier Lumière SAS/ })).toContainText("Not checked");
+
+  await page.getByLabel("VAT number").fill("DE298765431");
+  await expect(page.getByText(/The check digit of this Germany number doesn’t match/)).toBeVisible();
+  await page.getByLabel("VAT number").fill("de 298 765 435");
+  await expect(page.getByText("Germany: the shape and check digit are right. VIES will say whether it is registered.")).toBeVisible();
+  await page.getByLabel("Checking for").selectOption({ label: "Pixelforge Studio Ltd" });
+  await page.getByRole("button", { name: "Check", exact: true }).click();
+  await expect(page.getByText("Valid in VIES", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Check every number now" }).click();
+  await expect(page.getByText(/^\d+ numbers checked against VIES just now/)).toBeVisible();
+  await expect(table.getByRole("row", { name: /Brabant Digital BV/ })).toContainText(/^.*Valid, /);
+  await expect(table.getByRole("row", { name: /Nimbus Cloud Services BV/ })).toContainText("Registered to STRATOCUMULUS HOSTING B.V.");
+});

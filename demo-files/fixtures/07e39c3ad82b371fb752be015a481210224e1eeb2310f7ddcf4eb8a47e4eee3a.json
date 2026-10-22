@@ -1,0 +1,118 @@
+{
+  "invoices": [
+    {
+      "pages": "1",
+      "document_type": "invoice",
+      "language": "en",
+      "supplier": {
+        "name": "Mediterranean Glass Bottles Ltd",
+        "name_latin": "Mediterranean Glass Bottles Ltd",
+        "vat_number": "CY10233611W",
+        "country": "CY",
+        "address": "Industrial Area, 14 Ifestou Street, 2540 Dali, Cyprus",
+        "iban": "CY44005001450001450177770001"
+      },
+      "bill_to": {
+        "name": "Troodos Gold Olive Oil Ltd",
+        "vat_number": "CY10388104O"
+      },
+      "client_ref": null,
+      "invoice_number": "MGB2610-014",
+      "issue_date": "2026-10-12",
+      "due_date": "2026-11-11",
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Dark glass bottles 750ml, Marasca",
+          "description_en": "Dark glass bottles 750ml, Marasca",
+          "net": 1008,
+          "vat_rate": 19,
+          "vat_amount": 191.52,
+          "account_code": "315"
+        },
+        {
+          "description": "Natural cork stoppers",
+          "description_en": "Natural cork stoppers",
+          "net": 144,
+          "vat_rate": 19,
+          "vat_amount": 27.36,
+          "account_code": "315"
+        },
+        {
+          "description": "Shrink capsules, gold",
+          "description_en": "Shrink capsules, gold",
+          "net": 72,
+          "vat_rate": 19,
+          "vat_amount": 13.68,
+          "account_code": "315"
+        }
+      ],
+      "totals": {
+        "net": 1224,
+        "vat": 232.56,
+        "total": 1456.56
+      },
+      "reverse_charge": false,
+      "handwritten_or_photo": false,
+      "confidence": "high",
+      "warnings": []
+    },
+    {
+      "pages": "2",
+      "document_type": "invoice",
+      "language": "en",
+      "supplier": {
+        "name": "Kafe Machines Cyprus Ltd",
+        "name_latin": "Kafe Machines Cyprus Ltd",
+        "vat_number": "CY10598877L",
+        "country": "CY",
+        "address": "52 Artemidos Avenue, 6031 Larnaca, Cyprus",
+        "iban": "CY18018000010000002044710001"
+      },
+      "bill_to": {
+        "name": "Larnaka Roast Coffee Co Ltd",
+        "vat_number": "CY10395540R"
+      },
+      "client_ref": null,
+      "invoice_number": "KMC-4471",
+      "issue_date": "2026-10-14",
+      "due_date": "2026-10-28",
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Espresso machine service visit, 2-group",
+          "description_en": "Espresso machine service visit, 2-group",
+          "net": 85,
+          "vat_rate": 19,
+          "vat_amount": 16.15,
+          "account_code": "473"
+        },
+        {
+          "description": "Group head gaskets",
+          "description_en": "Group head gaskets",
+          "net": 37,
+          "vat_rate": 19,
+          "vat_amount": 7.03,
+          "account_code": "473"
+        },
+        {
+          "description": "Shower screens",
+          "description_en": "Shower screens",
+          "net": 24,
+          "vat_rate": 19,
+          "vat_amount": 4.56,
+          "account_code": "473"
+        }
+      ],
+      "totals": {
+        "net": 146,
+        "vat": 27.74,
+        "total": 173.74
+      },
+      "reverse_charge": false,
+      "handwritten_or_photo": false,
+      "confidence": "high",
+      "warnings": []
+    }
+  ]
+}

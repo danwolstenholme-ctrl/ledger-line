@@ -1,0 +1,172 @@
+[
+  {
+    "file": "marathasa-pressing-october.pdf",
+    "media": "application/pdf",
+    "org": "troodos-gold",
+    "extraction": {
+      "pages": "1",
+      "document_type": "invoice",
+      "language": "el",
+      "supplier": {
+        "name": "ΕΛΑΙΟΤΡΙΒΕΙΟ ΜΑΡΑΘΑΣΑΣ ΛΤΔ",
+        "name_latin": "Marathasa Olive Pressing Ltd",
+        "vat_number": "CY10120339W",
+        "country": "CY",
+        "address": "Κεντρική Οδός 12, 2865 Καλοπαναγιώτης",
+        "iban": "CY30005001450001450120201180"
+      },
+      "bill_to": {
+        "name": "ΤΡΟΟΔΟΣ ΓΚΟΛΝΤ ΕΛΑΙΟΛΑΔΟ ΛΤΔ",
+        "vat_number": "CY10388104O"
+      },
+      "client_ref": null,
+      "invoice_number": "ΤΔΑ 26118",
+      "issue_date": "2026-10-17",
+      "due_date": "2026-11-16",
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Έκθλιψη ελιών — κιλά",
+          "description_en": "Olive pressing, kilos",
+          "net": 992,
+          "vat_rate": 5,
+          "vat_amount": 49.6,
+          "account_code": "310"
+        },
+        {
+          "description": "Αποθήκευση λαδιού σε δεξαμενή",
+          "description_en": "Oil storage in tank",
+          "net": 140,
+          "vat_rate": 5,
+          "vat_amount": 7,
+          "account_code": "310"
+        }
+      ],
+      "totals": {
+        "net": 1132,
+        "vat": 56.6,
+        "total": 1188.6
+      },
+      "reverse_charge": false,
+      "handwritten_or_photo": false,
+      "confidence": "high",
+      "warnings": []
+    }
+  },
+  {
+    "file": "dentalpro-supplies-4471.pdf",
+    "media": "application/pdf",
+    "org": "kalamies-dental",
+    "extraction": {
+      "pages": "1",
+      "document_type": "invoice",
+      "language": "en",
+      "supplier": {
+        "name": "DentalPro Supplies Ltd",
+        "name_latin": "DentalPro Supplies Ltd",
+        "vat_number": "CY10190244Z",
+        "country": "CY",
+        "address": "9 Spyrou Kyprianou Avenue, 6051 Larnaca",
+        "iban": "CY12002001950000357044710021"
+      },
+      "bill_to": {
+        "name": "Kalamies Dental Clinic Ltd",
+        "vat_number": null
+      },
+      "client_ref": null,
+      "invoice_number": "DP2610-021",
+      "issue_date": "2026-10-15",
+      "due_date": "2026-11-14",
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Composite resin kits A2",
+          "description_en": "Composite resin kits A2",
+          "net": 384,
+          "vat_rate": 19,
+          "vat_amount": 72.96,
+          "account_code": "310"
+        },
+        {
+          "description": "Nitrile gloves, box of 100",
+          "description_en": "Nitrile gloves, box of 100",
+          "net": 158,
+          "vat_rate": 19,
+          "vat_amount": 30.02,
+          "account_code": "310"
+        },
+        {
+          "description": "Impression material, fast set",
+          "description_en": "Impression material, fast set",
+          "net": 154,
+          "vat_rate": 19,
+          "vat_amount": 29.26,
+          "account_code": "310"
+        }
+      ],
+      "totals": {
+        "net": 696,
+        "vat": 132.24,
+        "total": 828.24
+      },
+      "reverse_charge": false,
+      "handwritten_or_photo": false,
+      "confidence": "high",
+      "warnings": []
+    }
+  },
+  {
+    "file": "harbour-pilotage-october.pdf",
+    "media": "application/pdf",
+    "org": "aegean-blue-marine",
+    "extraction": {
+      "pages": "1",
+      "document_type": "invoice",
+      "language": "en",
+      "supplier": {
+        "name": "Harbour Pilotage Services Ltd",
+        "name_latin": "Harbour Pilotage Services Ltd",
+        "vat_number": "CY10233190L",
+        "country": "CY",
+        "address": "Limassol Port, Gate 3, 3042 Limassol",
+        "iban": "CY81002001280000001290902410"
+      },
+      "bill_to": {
+        "name": "Aegean Blue Marine Services Ltd",
+        "vat_number": "CY10412907G"
+      },
+      "client_ref": null,
+      "invoice_number": "HP2610-024",
+      "issue_date": "2026-10-18",
+      "due_date": "2026-11-17",
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Pilotage, MV Horizon Star inbound",
+          "description_en": "Pilotage, MV Horizon Star inbound",
+          "net": 1240,
+          "vat_rate": 19,
+          "vat_amount": 235.6,
+          "account_code": "310"
+        },
+        {
+          "description": "Mooring and line handling",
+          "description_en": "Mooring and line handling",
+          "net": 385,
+          "vat_rate": 19,
+          "vat_amount": 73.15,
+          "account_code": "310"
+        }
+      ],
+      "totals": {
+        "net": 1625,
+        "vat": 308.75,
+        "total": 1933.75
+      },
+      "reverse_charge": false,
+      "handwritten_or_photo": false,
+      "confidence": "high",
+      "warnings": []
+    }
+  }
+]

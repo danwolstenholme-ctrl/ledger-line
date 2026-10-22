@@ -1,0 +1,395 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* A finger, or a window too narrow to be anything else. Density is a feature of
+   this product on a desk; none of what `touch:` adds applies with a mouse on a
+   wide screen. */
+@custom-variant touch {
+  @media (pointer: coarse), (max-width: 639.98px) {
+    @slot;
+  }
+}
+
+/* ===========================================================================
+   LEDGERLINE — DESIGN TOKENS
+
+   One brand colour, --brand, drives every accent: the practice sets it in
+   Settings and the whole app takes it on (white label). The ramp below is
+   mixed from it, so any colour the practice picks gets a coherent set of
+   tints and shades. Surfaces, text and status colours are fixed.
+   =========================================================================== */
+
+@theme inline {
+  /* shadcn/ui contract ---------------------------------------------------- */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Surface and text scale ------------------------------------------------ */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  /* The practice's brand ramp -------------------------------------------- */
+  --color-brand: var(--brand);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-600: var(--brand-600);
+  --color-brand-400: var(--brand-400);
+  --color-brand-200: var(--brand-200);
+  --color-brand-100: var(--brand-100);
+  --color-brand-50: var(--brand-50);
+
+  /* Status semantics ------------------------------------------------------ */
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-positive-line: var(--positive-line);
+  --color-caution: var(--caution);
+  --color-caution-soft: var(--caution-soft);
+  --color-caution-line: var(--caution-line);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-critical-line: var(--critical-line);
+
+  /* Charts: three categorical hues — a blue for what is billed
+     and earned, teal for money received and held, coral for costs — validated
+     together for colour-blind separation; teal sits under 3:1 on white, so
+     every chart ships a table view. Debt ages on one orange-red hue, light to
+     dark, so the oldest debt reads hottest (validated as an ordinal ramp). -- */
+  --color-chart-billed: #3a5bb8;
+  --color-chart-received: #1baf7a;
+  --color-chart-cost: #eb6834;
+  --color-chart-age-1: #f4966a;
+  --color-chart-age-2: #d97a4d;
+  --color-chart-age-3: #bf5e2d;
+  --color-chart-age-4: #a44200;
+  --color-chart-age-5: #8a2400;
+
+  /* Type ------------------------------------------------------------------ */
+  --font-sans: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-roboto-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-display: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --font-heading: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radii ------------------------------------------------------------------ */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* --- Brand: Ledgerline teal unless the practice chooses its own -------- */
+  --brand: #0d6e6e;
+  --brand-dark: color-mix(in oklab, var(--brand) 82%, black);
+  --brand-deep: color-mix(in oklab, var(--brand) 55%, black);
+  --brand-600: color-mix(in oklab, var(--brand) 86%, white);
+  --brand-400: color-mix(in oklab, var(--brand) 58%, white);
+  --brand-200: color-mix(in oklab, var(--brand) 26%, white);
+  --brand-100: color-mix(in oklab, var(--brand) 13%, white);
+  --brand-50: color-mix(in oklab, var(--brand) 6%, white);
+
+  /* --- Surfaces + hairlines ---------------------------------------------- */
+  --canvas: #f5f6f8;
+  --surface: #ffffff;
+  --surface-sunken: #fafbfc;
+  --hairline: #e5e8ec;
+  --hairline-strong: #d7d7d7;
+
+  /* --- Text -------------------------------------------------------------- */
+  --ink: #23282d;
+  --ink-muted: #5b6771;
+  --ink-faint: #8b949d;
+
+  /* --- Status ------------------------------------------------------------ */
+  --positive: #137a3a;
+  --positive-soft: #ebf7ee;
+  --positive-line: #bfe5cb;
+  --caution: #a85106;
+  --caution-soft: #fdf3e1;
+  --caution-line: #f3d7a6;
+  --critical: #b91c1c;
+  --critical-soft: #fdecec;
+  --critical-line: #f5c6c6;
+
+  /* --- shadcn/ui mapping ------------------------------------------------- */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: #ffffff;
+  --secondary: #eceef2;
+  --secondary-foreground: var(--ink);
+  --muted: #f0f2f5;
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--brand-50);
+  --accent-foreground: var(--brand);
+  --destructive: var(--critical);
+  --border: var(--hairline);
+  --input: var(--hairline-strong);
+  --ring: var(--brand-400);
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-50);
+  --sidebar-accent-foreground: var(--brand);
+  --sidebar-border: var(--hairline);
+  --sidebar-ring: var(--brand-400);
+
+  /* Tight corners: a bookkeeping tool. Every rounded-* except rounded-full derives from this. */
+  --radius: 0.125rem;
+}
+
+/* Dark surface treatment, defined so no component can land in an undefined state. */
+.dark {
+  --canvas: #12151c;
+  --surface: #1a1e27;
+  --surface-sunken: #161a22;
+  --hairline: #272c38;
+  --hairline-strong: #333a49;
+
+  --ink: #e8eaee;
+  --ink-muted: #a2abb6;
+  --ink-faint: #78828f;
+
+
+  --positive: #4fd18b;
+  --positive-soft: #142a1d;
+  --positive-line: #23492f;
+  --caution: #f2b54d;
+  --caution-soft: #2d2313;
+  --caution-line: #4d3a1c;
+  --critical: #f47c7c;
+  --critical-soft: #2a1b1b;
+  --critical-line: #472c2c;
+
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: #8f9ec9;
+  --primary-foreground: #10141f;
+  --secondary: #242a36;
+  --secondary-foreground: var(--ink);
+  --muted: #222733;
+  --muted-foreground: var(--ink-muted);
+  --accent: #232b40;
+  --accent-foreground: #c3cadf;
+  --destructive: var(--critical);
+  --border: var(--hairline);
+  --input: var(--hairline-strong);
+  --ring: #6f7ba8;
+
+  --sidebar: #161a22;
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: #8f9ec9;
+  --sidebar-primary-foreground: #10141f;
+  --sidebar-accent: #232b40;
+  --sidebar-accent-foreground: #c3cadf;
+  --sidebar-border: var(--hairline);
+  --sidebar-ring: #6f7ba8;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/40;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas text-ink;
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Numerals in tables, KPIs and money must not jitter between renders. */
+  table,
+  [data-numeric],
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply text-ink;
+    letter-spacing: -0.011em;
+  }
+
+  ::selection {
+    background-color: var(--brand-100);
+    color: var(--brand-deep);
+  }
+
+  /* Restrained, non-intrusive scrollbars for the long-running workday. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--hairline-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--hairline-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ink-faint);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* A single flat panel. Panels do not nest: a subdivision inside a panel is
+     a section separated by a hairline, never another bordered box. */
+  .ll-panel {
+    @apply rounded-lg border border-hairline bg-surface;
+  }
+
+  /* Small uppercase section label, used in place of a second heading level so
+     density stays high without shouting. */
+  .ll-eyebrow {
+    @apply text-[0.6875rem] font-semibold tracking-[0.08em] text-ink-faint uppercase;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Deliberately outside any layer, so it holds over the size utilities on every
+   field there is and every field added later. */
+@media (pointer: coarse), (max-width: 639.98px) {
+  /* iOS Safari zooms the whole page when a focused field's text is under 16px,
+     and does not zoom back. 44px is the smallest target a fingertip hits reliably. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  /* At 16px a medium-weight select reads as a heading. */
+  select { font-weight: 400; }
+  /* iOS draws date fields centred and wider than their cell. */
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+  }
+  input::-webkit-date-and-time-value { text-align: left; }
+  /* No 300ms wait and no accidental double-tap zoom on anything pressable. */
+  a, button, summary, select, input, textarea, label, [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* The AI panels at work: bars rising and falling like figures being read, a
+   sheen passing over the words, the inputs ticked off in turn, and the answer's
+   outline shimmering where it will land. Transform, opacity and a moving
+   highlight only; all of it stops for anyone who asks for less motion. */
+@keyframes ll-ai-bars { 0%, 100% { transform: scaleY(0.28); } 50% { transform: scaleY(1); } }
+@keyframes ll-ai-sheen { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+@keyframes ll-ai-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.ll-ai-bars > span { transform-origin: bottom; animation: ll-ai-bars 1.05s ease-in-out infinite; }
+.ll-ai-bars > span:nth-child(2) { animation-delay: 0.12s; }
+.ll-ai-bars > span:nth-child(3) { animation-delay: 0.24s; }
+.ll-ai-bars > span:nth-child(4) { animation-delay: 0.36s; }
+.ll-ai-bars > span:nth-child(5) { animation-delay: 0.48s; }
+.ll-ai-sheen {
+  background-image: linear-gradient(100deg, var(--ink-muted) 38%, var(--color-brand) 50%, var(--ink-muted) 62%);
+  background-size: 260% 100%; background-clip: text; -webkit-background-clip: text; color: transparent;
+  animation: ll-ai-sheen 2.1s linear infinite;
+}
+.ll-ai-enter { animation: ll-ai-enter 0.32s ease-out both; }
+.ll-ai-shimmer {
+  background-color: var(--surface-sunken);
+  background-image: linear-gradient(100deg, transparent 30%, var(--hairline) 50%, transparent 70%);
+  background-size: 260% 100%; animation: ll-ai-sheen 1.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ll-ai-bars > span, .ll-ai-sheen, .ll-ai-enter, .ll-ai-shimmer { animation: none; }
+  .ll-ai-bars > span { transform: scaleY(0.6); }
+  .ll-ai-sheen { background: none; color: var(--ink-muted); }
+}
+
+/* A report prints as the statement alone: the navigation and controls carry
+   print:hidden, the page fills the sheet, and rows do not split across pages. */
+@media print {
+  @page { margin: 14mm 12mm; }
+  html, body { background: #ffffff; }
+  .ll-panel { overflow: visible !important; }
+  tr, li { break-inside: avoid; }
+  thead { display: table-header-group; }
+}
+
+/* Icons drawn a touch finer than Lucide's default, as the rest of the type is. */
+svg.lucide { stroke-width: 1.75; }
+
+/* Disclosures open smoothly where the browser can animate to auto height; elsewhere they simply open. */
+@supports (interpolate-size: allow-keywords) {
+  :root { interpolate-size: allow-keywords; }
+  details::details-content { block-size: 0; overflow-y: clip; transition: block-size .22s cubic-bezier(.2,.7,.2,1), content-visibility .22s allow-discrete; }
+  details[open]::details-content { block-size: auto; }
+}
+@media (prefers-reduced-motion: reduce) { details::details-content { transition: none; } }

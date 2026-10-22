@@ -1,0 +1,26 @@
+import type { Metadata } from "next";
+
+import { getPractice } from "@/lib/org";
+import { resetDemoData } from "@/lib/actions/practice";
+import { PageBody } from "@/components/common/primitives";
+import { BrandForm } from "@/components/settings/brand-form";
+import { RecordHeader, RecordSection } from "@/components/records/record-layout";
+
+export const metadata: Metadata = { title: "Practice settings" };
+
+/** Journey 5: white label. The practice's name, initials and colour run through every screen. */
+export default async function PracticeSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const practice = await getPractice();
+  // Resetting is for rehearsals: it appears only at /settings?demo=1.
+  const showReset = (await searchParams).demo === "1";
+  return <PageBody width="5xl" className="space-y-4">
+    <RecordHeader title="Practice settings" description="Ledgerline runs under your firm's brand: your name, your initials, your colour. Your clients see your practice; Ledgerline stays in the small print." />
+    <RecordSection title="Your brand"><div className="p-4 sm:p-5"><BrandForm practice={practice} /></div></RecordSection>
+    {showReset ? <RecordSection title="Demo data" hint="For rehearsing: back to the state the demo starts in">
+      <form action={resetDemoData} className="flex flex-wrap items-center gap-3 p-4 sm:p-5">
+        <button className="border-critical-line text-critical hover:bg-critical-soft h-8 rounded-md border px-3 text-[12.5px] font-medium">Reset demo data</button>
+        <p className="text-ink-muted text-[12px]">Rebuilds the six companies from the seed: every posting, match, capture and brand change since is discarded.</p>
+      </form>
+    </RecordSection> : null}
+  </PageBody>;
+}

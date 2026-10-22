@@ -1,0 +1,61 @@
+{
+  "invoices": [
+    {
+      "pages": "1",
+      "document_type": "invoice",
+      "language": "en",
+      "supplier": {
+        "name": "Nimbus Cloud Services BV",
+        "name_latin": "Nimbus Cloud Services BV",
+        "vat_number": "NL822334458B01",
+        "country": "NL",
+        "address": "Keizersgracht 210, 1016 DZ Amsterdam, Netherlands",
+        "iban": "NL91ABNA0417164300"
+      },
+      "bill_to": {
+        "name": "Pixelforge Studio Ltd",
+        "vat_number": "CY10420118V"
+      },
+      "client_ref": null,
+      "invoice_number": "NCS-202610-7711",
+      "issue_date": "2026-10-01",
+      "due_date": "2026-10-01",
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Compute instances, September usage",
+          "description_en": "Compute instances, September usage",
+          "net": 842.4,
+          "vat_rate": 0,
+          "vat_amount": 0,
+          "account_code": "485"
+        },
+        {
+          "description": "Managed database, standard tier",
+          "description_en": "Managed database, standard tier",
+          "net": 196,
+          "vat_rate": 0,
+          "vat_amount": 0,
+          "account_code": "485"
+        },
+        {
+          "description": "Object storage and egress",
+          "description_en": "Object storage and egress",
+          "net": 48,
+          "vat_rate": 0,
+          "vat_amount": 0,
+          "account_code": "485"
+        }
+      ],
+      "totals": {
+        "net": 1086.4,
+        "vat": 0,
+        "total": 1086.4
+      },
+      "reverse_charge": true,
+      "handwritten_or_photo": false,
+      "confidence": "high",
+      "warnings": []
+    }
+  ]
+}

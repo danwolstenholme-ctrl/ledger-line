@@ -1,0 +1,1070 @@
+import fs from "node:fs";
+import path from "node:path";
+import { createHash, randomInt, randomUUID } from "node:crypto";
+import type { PGlite } from "@electric-sql/pglite";
+
+/**
+ * The demo practice: fictional through and through. One practice, six client
+ * companies, Jul 2025 – Oct 2026. Generated from a fixed seed, so a reset
+ * always rebuilds the same books. Every historical bank line is reconciled;
+ * October's lines are imported and left to match in the meeting.
+ */
+
+const START = "2025-07-01";
+const LAST_LINE = "2026-10-20";
+const RECONCILED_TO = "2026-09-30";
+
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let rand = mulberry32(22102026);
+const pick = <T,>(items: T[]) => items[Math.floor(rand() * items.length)];
+const between = (low: number, high: number) => low + rand() * (high - low);
+const money = (low: number, high: number, step = 1) => Math.round(between(low, high) / step) * step;
+const r2 = (value: number) => Math.round(value * 100) / 100;
+const vatOn = (net: number, rate: number) => Math.round(net * rate) / 100;
+const uuid = () => randomUUID();
+/**
+ * A fictional IBAN with correct check digits, made from a name so a reset gives
+ * the same one: a made-up account number at a real bank code, never a real account.
+ */
+function fictionalIban(seed: string, country = "CY") {
+  const digits = createHash("sha256").update(`ledgerline-demo:${seed}`).digest("hex").replace(/[a-f]/g, "").padEnd(32, "4");
+  const bban = country === "CY" ? `${["002", "005", "018"][Number(digits[0]) % 3]}${digits.slice(1, 6)}${digits.slice(6, 22)}`
+    : country === "NL" ? `ABNA${digits.slice(0, 10)}` : country === "DE" ? digits.slice(0, 18) : country === "GR" ? digits.slice(0, 23) : null;
+  if (!bban) return null;
+  let remainder = 0;
+  for (const digit of `${bban}${country}00`.replace(/[A-Z]/g, letter => String(letter.charCodeAt(0) - 55))) remainder = (remainder * 10 + Number(digit)) % 97;
+  return `${country}${String(98 - remainder).padStart(2, "0")}${bban}`;
+}
+
+const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+const day = (month: string, d: number) => `${month}-${String(Math.min(d, lastDay(month))).padStart(2, "0")}`;
+const lastDay = (month: string) => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+const MONTHS: string[] = [];
+for (let y = 2025, m = 7; y < 2026 || (y === 2026 && m <= 10); m === 12 ? (y++, m = 1) : m++) MONTHS.push(`${y}-${String(m).padStart(2, "0")}`);
+
+type Rate = 0 | 3 | 5 | 9 | 19;
+type Account = { code: string; name: string; type: string; role?: string; description?: string; bank?: string };
+type CustomerSpec = { name: string; vat?: string; country?: string; eu?: boolean; treatment?: "standard" | "exempt" | "reverse_charge" | "outside_scope"; lines: { code: string; rate: Rate; range: [number, number]; text: string[] }[]; perMonth: number; payDays: [number, number]; terms: number };
+type SupplierSpec = { name: string; greek?: string; vat?: string; country?: string; code: string; rate: Rate; range: [number, number]; perMonth: number; text: string; number: (seq: number, month: string) => string; reverseCharge?: boolean; payDays: [number, number] };
+type CardSpec = { text: string; code: string; rate: Rate; range: [number, number]; perMonth: number; kind?: "spend" | "receive" };
+type Profile = {
+  slug: string; name: string; greek: string; industry: string; he: string; vat: string | null; tic: string; registered: boolean; quarterEnd: 1 | 2 | 3;
+  address: string; contact: string; email: string; bank: { name: string; details: string }; prefix: string; lock: string;
+  accounts: Account[]; customers: CustomerSpec[]; suppliers: SupplierSpec[]; card: CardSpec[];
+  payroll?: { salaries: number; social: number }; bankFee: number;
+  opening: { bank: number; capital: number; fixed?: [string, number][]; loan?: number; directors?: number };
+  filed?: { periodTo: string; filedOn: string }[];
+  /** Sales are scaled so each company earns a believable margin. */
+  scale?: number;
+};
+
+const BASE: Account[] = [
+  { code: "610", name: "Accounts receivable", type: "current_asset", role: "receivable", description: "What customers owe on issued invoices" },
+  { code: "620", name: "Prepayments", type: "current_asset" },
+  { code: "630", name: "Stock", type: "current_asset" },
+  { code: "720", name: "Computer equipment", type: "fixed_asset" },
+  { code: "730", name: "Motor vehicles", type: "fixed_asset" },
+  { code: "740", name: "Plant, machinery and fittings", type: "fixed_asset" },
+  { code: "800", name: "Accounts payable", type: "current_liability", role: "payable", description: "What the company owes on unpaid bills" },
+  { code: "820", name: "VAT", type: "current_liability", role: "vat", description: "VAT on sales less VAT on purchases" },
+  { code: "825", name: "Social insurance and GESY payable", type: "current_liability" },
+  { code: "830", name: "Accruals", type: "current_liability" },
+  { code: "840", name: "Corporation tax payable", type: "current_liability" },
+  { code: "850", name: "Directors' current account", type: "current_liability" },
+  { code: "900", name: "Bank loan", type: "non_current_liability" },
+  { code: "950", name: "Share capital", type: "equity" },
+  { code: "960", name: "Retained earnings", type: "equity", role: "retained_earnings", description: "Profit kept from earlier years" },
+  { code: "260", name: "Other income", type: "other_income" },
+  { code: "270", name: "Interest income", type: "other_income" },
+  { code: "400", name: "Advertising and marketing", type: "expense" },
+  { code: "404", name: "Bank charges", type: "expense" },
+  { code: "408", name: "Cleaning", type: "expense" },
+  { code: "412", name: "Accounting and audit fees", type: "expense" },
+  { code: "416", name: "Depreciation", type: "depreciation" },
+  { code: "420", name: "Entertainment and meals", type: "expense" },
+  { code: "425", name: "Postage and courier", type: "expense" },
+  { code: "429", name: "General expenses", type: "expense" },
+  { code: "433", name: "Insurance", type: "expense" },
+  { code: "437", name: "Interest paid", type: "expense" },
+  { code: "441", name: "Licences, levies and subscriptions", type: "expense" },
+  { code: "445", name: "Electricity and water", type: "expense" },
+  { code: "449", name: "Motor vehicle running costs and fuel", type: "expense" },
+  { code: "453", name: "Office expenses and stationery", type: "expense" },
+  { code: "469", name: "Rent", type: "expense" },
+  { code: "473", name: "Repairs and maintenance", type: "expense" },
+  { code: "477", name: "Salaries and wages", type: "expense" },
+  { code: "478", name: "Social insurance, GESY and employer funds", type: "expense" },
+  { code: "485", name: "Software and IT", type: "expense" },
+  { code: "489", name: "Telephone and internet", type: "expense" },
+  { code: "493", name: "Travel", type: "expense" },
+];
+
+const seqNumber = (prefix: string) => (seq: number, month: string) => `${prefix}${month.slice(2, 4)}${month.slice(5, 7)}-${String(seq).padStart(3, "0")}`;
+const UTILITIES = (registered = true): SupplierSpec[] => [
+  { name: "Island Energy Supply Ltd", greek: "ΑΙΛΑΝΤ ΕΝΕΡΤΖΙ ΣΑΠΛΑΪ ΛΤΔ", vat: "CY10411252B", code: "445", rate: 19, range: registered ? [380, 620] : [180, 320], perMonth: 1, text: "ISLAND ENERGY SUPPLY", number: (seq, month) => `IES-${month.replace("-", "")}-${4400 + seq}`, payDays: [12, 20] },
+  { name: "AstraNet Telecom Ltd", vat: "CY10299881L", code: "489", rate: 19, range: [96, 96], perMonth: 1, text: "ASTRANET TELECOM", number: (seq, month) => `AT${month.replace("-", "")}${String(seq).padStart(4, "0")}`, payDays: [5, 10] },
+];
+
+const PROFILES: Profile[] = [
+  {
+    slug: "aegean-blue-marine", scale: 1.42, name: "Aegean Blue Marine Services Ltd", greek: "ΑΙΓΑΙΟ ΜΠΛΟΥ ΘΑΛΑΣΣΙΕΣ ΥΠΗΡΕΣΙΕΣ ΛΤΔ", industry: "Marine services and yacht management",
+    he: "HE 412907", vat: "CY10412907G", tic: "12412907K", registered: true, quarterEnd: 3, lock: "2026-06-30",
+    address: "14 Franklin Roosevelt Avenue, 3011 Limassol", contact: "Christos Panayiotou", email: "accounts@aegeanblue.example",
+    bank: { name: "Bank of Cyprus current account", details: "IBAN CY74 0020 0128 0000 0012 0063 8415\nBIC BCYPCY2N" }, prefix: "ABM-",
+    accounts: [
+      { code: "200", name: "Port agency services", type: "revenue", role: "sales" },
+      { code: "205", name: "Yacht management fees", type: "revenue" },
+      { code: "210", name: "Crew and logistics services", type: "revenue" },
+      { code: "310", name: "Port dues and pilotage", type: "direct_costs" },
+      { code: "315", name: "Marine fuel and lubricants", type: "direct_costs" },
+      { code: "320", name: "Chandlery and provisions", type: "direct_costs" },
+    ],
+    customers: [
+      { name: "Akrotiri Yacht Charters Ltd", vat: "CY10388412O", perMonth: 1.6, payDays: [18, 40], terms: 30, lines: [{ code: "205", rate: 19, range: [1800, 4200], text: ["Yacht management, monthly fee", "Berth coordination and crew changes"] }] },
+      { name: "Blue Horizon Shipping Ltd", vat: "CY10277610J", perMonth: 2.2, payDays: [20, 45], terms: 30, lines: [{ code: "200", rate: 19, range: [1200, 3900], text: ["Port agency, MV Horizon Star call", "Husbandry services and clearance"] }, { code: "210", rate: 19, range: [400, 1400], text: ["Crew transfers Larnaca airport"] }] },
+      { name: "Kourion Bay Tours Ltd", vat: "CY10519933C", perMonth: 1.2, payDays: [10, 30], terms: 14, lines: [{ code: "210", rate: 19, range: [600, 1800], text: ["Logistics for charter season", "Provisioning coordination"] }] },
+      { name: "Meridian Ship Management Ltd", vat: "CY10104477L", perMonth: 1.6, payDays: [25, 55], terms: 30, lines: [{ code: "200", rate: 19, range: [2500, 6800], text: ["Port agency, tanker call Vassiliko", "Agency fee and disbursements handling"] }] },
+    ],
+    suppliers: [
+      { name: "Harbour Pilotage Services Ltd", greek: "ΧΑΡΜΠΟΥΡ ΠΙΛΟΤΑΖ ΣΕΡΒΙΣΙΣ ΛΤΔ", vat: "CY10233190L", code: "310", rate: 19, range: [900, 2600], perMonth: 1.4, text: "HARBOUR PILOTAGE", number: seqNumber("HP"), payDays: [14, 30] },
+      { name: "Island Marine Fuels Ltd", greek: "ΑΙΛΑΝΤ ΜΑΡΙΝ ΦΙΟΥΛΣ ΛΤΔ", vat: "CY10355021F", code: "315", rate: 19, range: [1400, 3800], perMonth: 1.2, text: "ISLAND MARINE FUELS", number: (seq, month) => `IMF/${month.slice(0, 4)}/${1200 + seq * 7}`, payDays: [10, 28] },
+      { name: "Limassol Ship Chandlers Ltd", vat: "CY10166734N", code: "320", rate: 19, range: [300, 1500], perMonth: 1.5, text: "LIMASSOL SHIP CHANDLERS", number: seqNumber("LSC"), payDays: [7, 21] },
+      { name: "Neapolis Business Centre Ltd", vat: "CY10455510G", code: "469", rate: 19, range: [1650, 1650], perMonth: 1, text: "NEAPOLIS BUSINESS CENTRE RENT", number: (seq, month) => `NBC-R-${month.replace("-", "")}`, payDays: [1, 4] },
+      ...UTILITIES(),
+      { name: "Kypros General Insurance Ltd", vat: "CY10090451D", code: "433", rate: 0, range: [310, 310], perMonth: 1, text: "KYPROS GENERAL INSURANCE", number: (seq, month) => `POL-77812-${month.replace("-", "")}`, payDays: [5, 12] },
+    ],
+    card: [
+      { text: "CARD PURCHASE FUEL STATION GERMASOGEIA", code: "449", rate: 19, range: [45, 95], perMonth: 4 },
+      { text: "CARD PURCHASE HARBOUR CAFE LIMASSOL", code: "420", rate: 9, range: [18, 75], perMonth: 2 },
+      { text: "CARD PURCHASE OFFICE MEGASTORE", code: "453", rate: 19, range: [25, 140], perMonth: 1 },
+    ],
+    payroll: { salaries: 9840, social: 2463 }, bankFee: 18.5,
+    opening: { bank: 46250, capital: 5000, fixed: [["730", 21500], ["740", 9800]], loan: 18000 },
+    filed: [{ periodTo: "2025-09-30", filedOn: "2025-11-06" }, { periodTo: "2025-12-31", filedOn: "2026-02-04" }, { periodTo: "2026-03-31", filedOn: "2026-05-07" }, { periodTo: "2026-06-30", filedOn: "2026-08-06" }],
+  },
+  {
+    slug: "troodos-gold", scale: 1.7, name: "Troodos Gold Olive Oil Ltd", greek: "ΤΡΟΟΔΟΣ ΓΚΟΛΝΤ ΕΛΑΙΟΛΑΔΟ ΛΤΔ", industry: "Olive oil producer",
+    he: "HE 388104", vat: "CY10388104O", tic: "12388104D", registered: true, quarterEnd: 1, lock: "2026-07-31",
+    address: "3 Makariou III Street, 2800 Kakopetria", contact: "Eleni Kyprianou", email: "eleni@troodosgold.example",
+    bank: { name: "Hellenic Bank current account", details: "IBAN CY78 0050 0145 0001 4501 3330 1201\nBIC HEBACY2N" }, prefix: "TG-",
+    accounts: [
+      { code: "200", name: "Olive oil sales", type: "revenue", role: "sales" },
+      { code: "205", name: "Olive oil soap and cosmetics", type: "revenue" },
+      { code: "210", name: "Tastings and mill tours", type: "revenue" },
+      { code: "310", name: "Olives and pressing", type: "direct_costs" },
+      { code: "315", name: "Bottles, labels and packaging", type: "direct_costs" },
+    ],
+    customers: [
+      { name: "Nicosia Fine Foods Ltd", vat: "CY10144782P", perMonth: 1.8, payDays: [20, 45], terms: 30, lines: [{ code: "200", rate: 5, range: [900, 2600], text: ["Extra virgin olive oil 750ml × 120", "Extra virgin olive oil 5L tins × 40"] }] },
+      { name: "Paphos Gourmet Deli Ltd", vat: "CY10288453A", perMonth: 1.2, payDays: [15, 40], terms: 30, lines: [{ code: "200", rate: 5, range: [400, 1300], text: ["Early harvest olive oil 500ml × 60"] }, { code: "205", rate: 19, range: [150, 480], text: ["Olive oil soap gift boxes"] }] },
+      { name: "Coral Sands Hotel Ltd", vat: "CY10501127A", perMonth: 1, payDays: [30, 60], terms: 45, lines: [{ code: "200", rate: 5, range: [700, 1900], text: ["Olive oil for restaurant, monthly supply"] }, { code: "210", rate: 19, range: [300, 900], text: ["Guest tastings at the mill"] }] },
+    ],
+    suppliers: [
+      { name: "Marathasa Olive Pressing Ltd", greek: "ΕΛΑΙΟΤΡΙΒΕΙΟ ΜΑΡΑΘΑΣΑΣ ΛΤΔ", vat: "CY10120339W", code: "310", rate: 5, range: [600, 2400], perMonth: 1.1, text: "MARATHASA OLIVE PRESSING", number: (seq, month) => `ΤΔΑ ${month.slice(2, 4)}${String(100 + seq)}`, payDays: [15, 35] },
+      { name: "Mediterranean Glass Bottles Ltd", vat: "CY10233611W", code: "315", rate: 19, range: [450, 1600], perMonth: 0.9, text: "MEDITERRANEAN GLASS BOTTLES", number: seqNumber("MGB"), payDays: [20, 40] },
+      ...UTILITIES(),
+      { name: "Kypros General Insurance Ltd", vat: "CY10090451D", code: "433", rate: 0, range: [145, 145], perMonth: 1, text: "KYPROS GENERAL INSURANCE", number: (seq, month) => `POL-55120-${month.replace("-", "")}`, payDays: [5, 12] },
+    ],
+    card: [
+      { text: "CARD PURCHASE FUEL STATION KAKOPETRIA", code: "449", rate: 19, range: [40, 80], perMonth: 2 },
+      { text: "CARD PURCHASE BUILDERS MERCHANT EVRYCHOU", code: "473", rate: 19, range: [30, 260], perMonth: 1 },
+      { text: "ONLINE SHOP PAYOUT WEB SALES", code: "200", rate: 5, range: [180, 640], perMonth: 2, kind: "receive" },
+    ],
+    payroll: { salaries: 4120, social: 1031 }, bankFee: 12,
+    opening: { bank: 18400, capital: 2000, fixed: [["740", 38500]], loan: 25000 },
+    filed: [{ periodTo: "2025-07-31", filedOn: "2025-09-05" }, { periodTo: "2025-10-31", filedOn: "2025-12-08" }, { periodTo: "2026-01-31", filedOn: "2026-03-06" }, { periodTo: "2026-04-30", filedOn: "2026-06-04" }, { periodTo: "2026-07-31", filedOn: "2026-09-08" }],
+  },
+  {
+    slug: "kalamies-dental", scale: 1.55, name: "Kalamies Dental Clinic Ltd", greek: "ΟΔΟΝΤΙΑΤΡΙΚΗ ΚΛΙΝΙΚΗ ΚΑΛΑΜΙΕΣ ΛΤΔ", industry: "Dental clinic (exempt supplies)",
+    he: "HE 401266", vat: null, tic: "12401266Q", registered: false, quarterEnd: 3, lock: "2025-12-31",
+    address: "22 Grigori Afxentiou Avenue, 6023 Larnaca", contact: "Dr Sofia Hadjioannou", email: "office@kalamiesdental.example",
+    bank: { name: "Bank of Cyprus current account", details: "IBAN CY71 0020 0195 0000 3570 2251 4400\nBIC BCYPCY2N" }, prefix: "KDC-",
+    accounts: [
+      { code: "200", name: "Dental treatment fees", type: "revenue", role: "sales", description: "Exempt from VAT: medical care" },
+      { code: "310", name: "Dental supplies and materials", type: "direct_costs" },
+      { code: "315", name: "Dental laboratory fees", type: "direct_costs" },
+    ],
+    customers: [
+      { name: "Medisure Health Insurance Ltd", vat: "CY10077120F", treatment: "exempt", perMonth: 1, payDays: [25, 50], terms: 30, lines: [{ code: "200", rate: 0, range: [2200, 5200], text: ["Insured patients, treatment claims for the month"] }] },
+      { name: "Olympic Health Cover Ltd", vat: "CY10244501Z", treatment: "exempt", perMonth: 1, payDays: [30, 55], terms: 30, lines: [{ code: "200", rate: 0, range: [1400, 3600], text: ["Insured patients, treatment claims"] }] },
+    ],
+    suppliers: [
+      { name: "DentalPro Supplies Ltd", greek: "ΝΤΕΝΤΑΛΠΡΟ ΠΡΟΜΗΘΕΙΕΣ ΛΤΔ", vat: "CY10190244Z", code: "310", rate: 19, range: [600, 1700], perMonth: 1.3, text: "DENTALPRO SUPPLIES", number: seqNumber("DP"), payDays: [10, 30] },
+      { name: "Larnaca Dental Laboratory Ltd", vat: "CY10301877N", code: "315", rate: 19, range: [700, 2100], perMonth: 1, text: "LARNACA DENTAL LAB", number: seqNumber("LDL"), payDays: [14, 30] },
+      { name: "Phinikoudes Properties Ltd", vat: "CY10411900U", code: "469", rate: 19, range: [1400, 1400], perMonth: 1, text: "PHINIKOUDES PROPERTIES RENT", number: (seq, month) => `RENT-${month.replace("-", "")}`, payDays: [1, 3] },
+      ...UTILITIES(false),
+    ],
+    card: [
+      { text: "CARD TERMINAL SETTLEMENT PATIENT PAYMENTS", code: "200", rate: 0, range: [380, 1650], perMonth: 6, kind: "receive" },
+      { text: "CARD PURCHASE PHARMACY LARNACA", code: "310", rate: 19, range: [20, 120], perMonth: 2 },
+    ],
+    payroll: { salaries: 6900, social: 1727 }, bankFee: 14,
+    opening: { bank: 22800, capital: 1000, fixed: [["740", 64000], ["720", 4200]], loan: 40000 },
+  },
+  {
+    slug: "larnaka-roast", scale: 2.1, name: "Larnaka Roast Coffee Co Ltd", greek: "ΛΑΡΝΑΚΑ ΡΟΣΤ ΚΑΦΕΣ ΛΤΔ", industry: "Coffee roaster and coffee bar",
+    he: "HE 395540", vat: "CY10395540R", tic: "12395540G", registered: true, quarterEnd: 2, lock: "2026-08-31",
+    address: "41 Ermou Street, 6021 Larnaca", contact: "Marios Georgiou", email: "marios@larnakaroast.example",
+    bank: { name: "Eurobank current account", details: "IBAN CY15 0180 0001 0000 0020 1774 3301\nBIC ERBKCY2N" }, prefix: "LRC-",
+    accounts: [
+      { code: "200", name: "Coffee bar sales", type: "revenue", role: "sales" },
+      { code: "205", name: "Equipment and merchandise", type: "revenue" },
+      { code: "210", name: "Barista training", type: "revenue" },
+      { code: "310", name: "Green coffee", type: "direct_costs" },
+      { code: "315", name: "Milk and consumables", type: "direct_costs" },
+    ],
+    customers: [
+      { name: "Coral Sands Hotel Ltd", vat: "CY10501127A", perMonth: 1, payDays: [25, 50], terms: 30, lines: [{ code: "200", rate: 9, range: [900, 2100], text: ["Coffee service for conference events"] }, { code: "205", rate: 19, range: [200, 900], text: ["Grinder and espresso machine servicing kit"] }] },
+      { name: "Finikoudes Beach Kiosk Ltd", vat: "CY10472210X", perMonth: 0.8, payDays: [10, 30], terms: 14, lines: [{ code: "205", rate: 19, range: [300, 1200], text: ["Espresso machine lease and parts"] }, { code: "210", rate: 19, range: [150, 450], text: ["Barista training, two staff"] }] },
+    ],
+    suppliers: [
+      { name: "Highland Green Coffee Traders Ltd", vat: "CY10322908G", code: "310", rate: 5, range: [1300, 3400], perMonth: 1, text: "HIGHLAND GREEN COFFEE", number: seqNumber("HGC"), payDays: [20, 35] },
+      { name: "Troodos Dairy Ltd", greek: "ΓΑΛΑΚΤΟΚΟΜΕΙΟ ΤΡΟΟΔΟΥΣ ΛΤΔ", vat: "CY10134400R", code: "315", rate: 5, range: [380, 760], perMonth: 2, text: "TROODOS DAIRY", number: seqNumber("TD"), payDays: [7, 15] },
+      { name: "Ermou Street Properties Ltd", vat: "CY10288700O", code: "469", rate: 19, range: [1200, 1200], perMonth: 1, text: "ERMOU STREET PROPERTIES RENT", number: (seq, month) => `ESP-${month.replace("-", "")}`, payDays: [1, 3] },
+      ...UTILITIES(),
+    ],
+    card: [
+      { text: "CARD SETTLEMENT MERCHANT 4471 COFFEE BAR", code: "200", rate: 9, range: [310, 980], perMonth: 9, kind: "receive" },
+      { text: "CARD PURCHASE CASH AND CARRY ARADIPPOU", code: "315", rate: 19, range: [40, 210], perMonth: 2 },
+    ],
+    payroll: { salaries: 5650, social: 1414 }, bankFee: 16,
+    opening: { bank: 12900, capital: 5000, fixed: [["740", 27800]], loan: 15000 },
+    filed: [{ periodTo: "2025-08-31", filedOn: "2025-10-07" }, { periodTo: "2025-11-30", filedOn: "2026-01-08" }, { periodTo: "2026-02-28", filedOn: "2026-04-07" }, { periodTo: "2026-05-31", filedOn: "2026-07-08" }, { periodTo: "2026-08-31", filedOn: "2026-10-08" }],
+  },
+  {
+    slug: "pixelforge", scale: 1.45, name: "Pixelforge Studio Ltd", greek: "ΠΙΞΕΛΦΟΡΤΖ ΣΤΟΥΝΤΙΟ ΛΤΔ", industry: "Software studio (EU clients)",
+    he: "HE 420118", vat: "CY10420118V", tic: "12420118S", registered: true, quarterEnd: 3, lock: "2026-09-30",
+    address: "8 Diagorou Street, 1097 Nicosia", contact: "Nikos Savva", email: "finance@pixelforge.example",
+    bank: { name: "Bank of Cyprus current account", details: "IBAN CY24 0020 0128 0000 0012 8814 9902\nBIC BCYPCY2N" }, prefix: "PF-",
+    accounts: [
+      { code: "200", name: "Software development, EU clients", type: "revenue", role: "sales", description: "Services to EU businesses under the reverse charge" },
+      { code: "205", name: "Software development, Cyprus clients", type: "revenue" },
+      { code: "210", name: "Hosting and support retainers", type: "revenue" },
+      { code: "310", name: "Subcontracted developers", type: "direct_costs" },
+    ],
+    customers: [
+      { name: "Nordlicht Software GmbH", vat: "DE298765435", country: "DE", eu: true, treatment: "reverse_charge", perMonth: 1, payDays: [20, 35], terms: 30, lines: [{ code: "200", rate: 0, range: [6800, 11800], text: ["Mobile app development, sprint", "Backend API development"] }] },
+      { name: "Brabant Digital BV", vat: "NL859123455B01", country: "NL", eu: true, treatment: "reverse_charge", perMonth: 0.8, payDays: [25, 45], terms: 30, lines: [{ code: "200", rate: 0, range: [4200, 8800], text: ["E-commerce platform build", "UX research and prototyping"] }, { code: "210", rate: 0, range: [600, 1200], text: ["Hosting and support retainer"] }] },
+      { name: "Atelier Lumière SAS", vat: "FR72823456785", country: "FR", eu: true, treatment: "reverse_charge", perMonth: 0.5, payDays: [30, 50], terms: 45, lines: [{ code: "200", rate: 0, range: [3600, 7400], text: ["Booking system development"] }] },
+      { name: "Helios Hotels Cyprus Ltd", vat: "CY10233457N", perMonth: 0.7, payDays: [20, 40], terms: 30, lines: [{ code: "205", rate: 19, range: [2400, 5200], text: ["Guest app development"] }, { code: "210", rate: 19, range: [450, 450], text: ["Support retainer"] }] },
+    ],
+    suppliers: [
+      { name: "Nimbus Cloud Services BV", vat: "NL822334458B01", country: "NL", code: "485", rate: 19, range: [640, 1180], perMonth: 1, text: "NIMBUS CLOUD SERVICES", number: (seq, month) => `NCS-${month.replace("-", "")}-77${seq}`, reverseCharge: true, payDays: [1, 3] },
+      { name: "Workspace Nicosia Ltd", vat: "CY10388921X", code: "469", rate: 19, range: [2100, 2100], perMonth: 1, text: "WORKSPACE NICOSIA RENT", number: (seq, month) => `WN-${month.replace("-", "")}`, payDays: [1, 4] },
+      { name: "Andreas Ioannou (freelance developer)", code: "310", rate: 0, range: [2200, 3600], perMonth: 1, text: "ANDREAS IOANNOU", number: (seq, month) => `AI-${month.replace("-", "")}`, payDays: [3, 8] },
+      ...UTILITIES(),
+    ],
+    card: [
+      { text: "CARD PURCHASE SOFTWARE SUBSCRIPTION DESIGNKIT", code: "485", rate: 19, range: [49, 49], perMonth: 1 },
+      { text: "CARD PURCHASE TAXI NICOSIA", code: "493", rate: 9, range: [12, 38], perMonth: 2 },
+    ],
+    payroll: { salaries: 14800, social: 3704 }, bankFee: 22,
+    opening: { bank: 61200, capital: 10000, fixed: [["720", 18600]] },
+    filed: [{ periodTo: "2025-09-30", filedOn: "2025-11-05" }, { periodTo: "2025-12-31", filedOn: "2026-02-06" }, { periodTo: "2026-03-31", filedOn: "2026-05-05" }, { periodTo: "2026-06-30", filedOn: "2026-08-05" }, { periodTo: "2026-09-30", filedOn: "2026-10-14" }],
+  },
+  {
+    slug: "mesogeios-holdings", name: "Mesogeios Holdings Ltd", greek: "ΜΕΣΟΓΕΙΟΣ ΧΟΛΝΤΙΝΓΚΣ ΛΤΔ", industry: "Holding company",
+    he: "HE 301770", vat: null, tic: "12301770M", registered: false, quarterEnd: 3, lock: "2025-12-31",
+    address: "1 Archbishop Makarios III Avenue, 1065 Nicosia", contact: "Petros Constantinou", email: "petros@mesogeios.example",
+    bank: { name: "Bank of Cyprus current account", details: "IBAN CY59 0020 0128 0000 0099 1220 4417\nBIC BCYPCY2N" }, prefix: "MH-",
+    accounts: [
+      { code: "200", name: "Management fees", type: "revenue", role: "sales" },
+      { code: "265", name: "Dividends received", type: "other_income" },
+      { code: "650", name: "Loan to subsidiary", type: "current_asset" },
+      { code: "750", name: "Investment in subsidiaries", type: "fixed_asset" },
+    ],
+    customers: [
+      { name: "Mesogeios Hotels Ltd", vat: "CY10300456F", treatment: "exempt", perMonth: 0.34, payDays: [10, 25], terms: 30, lines: [{ code: "270", rate: 0, range: [3750, 3750], text: ["Interest on shareholder loan, quarter"] }] },
+    ],
+    suppliers: [
+      { name: "Kition Audit Partners Ltd", vat: "CY10166001X", code: "412", rate: 19, range: [450, 450], perMonth: 0.34, text: "KITION AUDIT PARTNERS", number: seqNumber("KAP"), payDays: [10, 30] },
+    ],
+    card: [{ text: "DIVIDEND MESOGEIOS HOTELS LTD", code: "265", rate: 0, range: [25000, 25000], perMonth: 0.17, kind: "receive" }],
+    bankFee: 9,
+    opening: { bank: 84500, capital: 100000, fixed: [["750", 350000]], directors: 0 },
+  },
+];
+
+// ---------------------------------------------------------------------------
+
+type Row = Record<string, unknown>;
+const T: Record<string, Row[]> = {
+  practices: [], app_users: [], organisations: [], ledger_accounts: [], customers: [], suppliers: [], invoices: [], invoice_lines: [],
+  invoice_payments: [], bills: [], bill_lines: [], bill_payments: [], bank_transactions: [], bank_transaction_lines: [], journal_entries: [], journal_lines: [],
+  bank_statement_imports: [], bank_statement_lines: [], bank_line_matches: [],
+};
+const ORDER = ["practices", "app_users", "organisations", "ledger_accounts", "customers", "suppliers", "invoices", "invoice_lines", "bills", "bill_lines",
+  "bank_transactions", "bank_transaction_lines", "journal_entries", "journal_lines", "bank_statement_imports", "bank_statement_lines", "invoice_payments", "bill_payments", "bank_line_matches"];
+
+type Movement = { date: string; amount: number; text: string; reference: string | null; counterparty: string | null; match: Row | null };
+
+/** Who at the practice looks after each company. */
+const MANAGERS: Record<string, string> = {
+  "aegean-blue-marine": "Andreas Kyriakou", "kalamies-dental": "Sofia Georgiou", "larnaka-roast": "Maria Antoniou",
+  "mesogeios-holdings": "Maria Antoniou", "pixelforge": "Sofia Georgiou", "troodos-gold": "Andreas Kyriakou",
+};
+
+export async function seedDemo(pg: PGlite) {
+  rand = mulberry32(22102026);
+  for (const key of Object.keys(T)) T[key] = [];
+  const practiceId = uuid();
+  T.practices.push({ id: practiceId, name: "Saltlake Accounting", initials: "SA", brand_color: "#0d6e6e", tagline: "Chartered accountants, Larnaca" });
+  T.app_users.push({ id: uuid(), name: "Maria Antoniou", email: "maria@saltlake.example", initials: "MA" });
+  const vatFacts: { org: string; profile: Profile; quarters: Map<string, number> }[] = [];
+
+  for (const profile of PROFILES) {
+    const org = uuid();
+    const accounts = new Map<string, string>();
+    const bankId = uuid();
+    accounts.set("090", bankId);
+    T.ledger_accounts.push({ id: bankId, organisation_id: org, code: "090", name: profile.bank.name, type: "bank", bank_details: profile.bank.details });
+    for (const account of [...BASE, ...profile.accounts]) {
+      if (accounts.has(account.code)) continue;
+      const id = uuid();
+      accounts.set(account.code, id);
+      T.ledger_accounts.push({ id, organisation_id: org, code: account.code, name: account.name, type: account.type, system_role: account.role ?? null, description: account.description ?? null });
+    }
+    T.organisations.push({
+      id: org, practice_id: practiceId, slug: profile.slug, name: profile.name, greek_name: profile.greek, industry: profile.industry, he_number: profile.he,
+      vat_number: profile.vat, tic: profile.tic, vat_registered: profile.registered, vat_quarter_end_month: profile.quarterEnd, year_end_month: 12,
+      default_bank_account_id: bankId, contact_name: profile.contact, contact_email: profile.email, address: profile.address,
+      invoice_prefix: profile.prefix, payment_terms_days: profile.slug === "larnaka-roast" ? 14 : 30, manager: MANAGERS[profile.slug] ?? "Maria Antoniou",
+    });
+    const acc = (code: string) => { const id = accounts.get(code); if (!id) throw new Error(`${profile.slug}: no account ${code}`); return id; };
+    const movements: Movement[] = [];
+    const quarterVat = new Map<string, number>();
+    const quarterOf = (date: string) => {
+      const month = Number(date.slice(5, 7)), year = Number(date.slice(0, 4));
+      let end = month; while ((end - profile.quarterEnd) % 3 !== 0) end += 1;
+      const endYear = end > 12 ? year + 1 : year, endMonth = end > 12 ? end - 12 : end;
+      return `${endYear}-${String(endMonth).padStart(2, "0")}`;
+    };
+    const addVat = (date: string, amount: number) => { if (profile.registered) quarterVat.set(quarterOf(date), r2((quarterVat.get(quarterOf(date)) ?? 0) + amount)); };
+
+    // Opening balances, 1 July 2025.
+    const opening = uuid();
+    const fixed = profile.opening.fixed ?? [];
+    const openingLines: [string, number, number][] = [["090", profile.opening.bank, 0], ...fixed.map(([code, amount]) => [code, amount, 0] as [string, number, number]), ["950", 0, profile.opening.capital]];
+    if (profile.opening.loan) openingLines.push(["900", 0, profile.opening.loan]);
+    const retained = r2(profile.opening.bank + fixed.reduce((sum, [, amount]) => sum + amount, 0) - profile.opening.capital - (profile.opening.loan ?? 0));
+    openingLines.push(["960", retained >= 0 ? 0 : -retained, retained >= 0 ? retained : 0]);
+    T.journal_entries.push({ id: opening, organisation_id: org, entry_date: START, source: "manual", reference: "OB-2025", narration: "Opening balances on moving the books to Ledgerline", created_at: "2025-07-03T09:00:00.000Z" });
+    for (const [code, debit, credit] of openingLines) if (debit || credit) T.journal_lines.push({ id: uuid(), organisation_id: org, entry_id: opening, account_id: acc(code), debit, credit, is_tax: false });
+
+    // Customers and their invoices.
+    let invoiceSeq = 0;
+    for (const spec of profile.customers) {
+      const customer = uuid();
+      T.customers.push({ id: customer, organisation_id: org, name: spec.name, vat_number: spec.vat ?? null, country: spec.country ?? "CY", eu_business: Boolean(spec.eu), default_account_id: acc(spec.lines[0].code),
+        payment_terms_days: spec.terms === (profile.slug === "larnaka-roast" ? 14 : 30) ? null : spec.terms });
+      for (const month of MONTHS) {
+        let count = Math.floor(spec.perMonth) + (rand() < spec.perMonth % 1 ? 1 : 0);
+        if (month === "2026-10") count = Math.min(count, 1);
+        for (let n = 0; n < count; n++) {
+          const issued = day(month, Math.floor(between(2, month === "2026-10" ? 14 : 26)));
+          if (issued > LAST_LINE) continue;
+          invoiceSeq += 1;
+          const id = uuid(), number = `${profile.prefix}${issued.slice(0, 4)}-${String(invoiceSeq + 100).padStart(4, "0")}`;
+          const treatment = spec.treatment ?? "standard";
+          const lines = spec.lines.filter((_, index) => index === 0 || rand() < 0.55).map((line, position) => {
+            const net = money(line.range[0] * (profile.scale ?? 1), line.range[1] * (profile.scale ?? 1), line.range[0] === line.range[1] ? 1 : 5);
+            const vat = treatment === "standard" ? vatOn(net, line.rate) : 0;
+            return { id: uuid(), organisation_id: org, invoice_id: id, position: position + 1, description: pick(line.text), account_id: acc(line.code), net, vat_rate: treatment === "standard" ? line.rate : 0, vat_amount: vat };
+          });
+          const net = r2(lines.reduce((sum, line) => sum + line.net, 0)), vat = r2(lines.reduce((sum, line) => sum + line.vat_amount, 0)), total = r2(net + vat);
+          T.invoices.push({ id, organisation_id: org, customer_id: customer, number, issued_on: issued, due_on: addDays(issued, spec.terms), vat_treatment: treatment, net, vat_amount: vat, status: "issued", created_at: `${issued}T08:30:00.000Z`, sent_at: `${issued}T09:15:00.000Z` });
+          T.invoice_lines.push(...lines);
+          addVat(issued, vat);
+          // Most are paid in full; one in twenty-five is still owed, long overdue.
+          if (rand() < 0.04 && month < "2026-09") continue;
+          const paid = addDays(issued, Math.floor(between(spec.payDays[0], spec.payDays[1])));
+          if (paid > LAST_LINE) continue;
+          const reference = rand() < 0.75 ? number : null;
+          const text = `TRANSFER FROM ${spec.name.toUpperCase()}${reference ? ` ${reference}` : ""}`;
+          if (paid > RECONCILED_TO) {
+            // October: on the statement, not yet in the books. One customer pays part.
+            const part = movements.filter(item => item.date > RECONCILED_TO && item.amount > 0 && item.match === null).length === 1 && total > 500;
+            movements.push({ date: paid, amount: part ? r2(Math.round(total / 2)) : total, text: part ? `TRANSFER FROM ${spec.name.toUpperCase()} PART PAYMENT ${number}` : text, reference, counterparty: spec.name, match: null });
+            continue;
+          }
+          const payment = { id: uuid(), organisation_id: org, invoice_id: id, received_on: paid, amount: total, bank_account_id: bankId, method: "bank_transfer", reference: reference ?? number };
+          T.invoice_payments.push(payment);
+          movements.push({ date: paid, amount: total, text, reference, counterparty: spec.name, match: { invoice_payment_id: payment.id } });
+        }
+      }
+    }
+
+    // Suppliers and their bills.
+    for (const spec of profile.suppliers) {
+      const supplier = uuid();
+      // Utilities take their money by direct debit; everyone else is paid by transfer to the IBAN they print.
+      const utility = /ENERGY|TELECOM/.test(spec.text);
+      T.suppliers.push({ id: supplier, organisation_id: org, name: spec.name, greek_name: spec.greek ?? null, vat_number: spec.vat ?? null, country: spec.country ?? "CY",
+        default_account_id: acc(spec.code), reverse_charge: Boolean(spec.reverseCharge), iban: utility ? null : fictionalIban(spec.name, spec.country ?? "CY") });
+      let seq = 0;
+      for (const month of MONTHS) {
+        const count = Math.floor(spec.perMonth) + (rand() < spec.perMonth % 1 ? 1 : 0);
+        for (let n = 0; n < count; n++) {
+          const issued = day(month, Math.floor(between(1, month === "2026-10" ? 12 : 27)));
+          if (issued > LAST_LINE) continue;
+          seq += 1;
+          const id = uuid(), number = spec.number(seq, month);
+          const net = money(spec.range[0], spec.range[1], spec.range[0] === spec.range[1] ? 1 : 0.01);
+          const lineVat = vatOn(net, spec.rate);
+          const rc = Boolean(spec.reverseCharge);
+          T.bills.push({ id, organisation_id: org, supplier_id: supplier, number, issued_on: issued, due_on: addDays(issued, 30), net, vat_amount: rc ? 0 : lineVat,
+            reverse_charge: rc, reverse_charge_vat: rc ? lineVat : 0, status: "awaiting_payment", created_at: `${issued}T10:15:00.000Z` });
+          T.bill_lines.push({ id: uuid(), organisation_id: org, bill_id: id, position: 1, description: `${spec.name.split(" (")[0]} · ${new Date(`${month}-01T00:00:00Z`).toLocaleString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })}`, account_id: acc(spec.code), net, vat_rate: spec.rate, vat_amount: lineVat });
+          if (!rc) addVat(issued, -lineVat);
+          const total = rc ? net : r2(net + lineVat);
+          const paid = addDays(issued, Math.floor(between(spec.payDays[0], spec.payDays[1])));
+          if (paid > LAST_LINE || (month >= "2026-09" && rand() < 0.25)) continue;
+          const text = `TRANSFER TO ${spec.text} ${number}`;
+          if (paid > RECONCILED_TO) { movements.push({ date: paid, amount: -total, text, reference: number, counterparty: spec.name, match: null }); continue; }
+          const payment = { id: uuid(), organisation_id: org, bill_id: id, paid_on: paid, amount: total, bank_account_id: bankId, method: "bank_transfer", reference: number };
+          T.bill_payments.push(payment);
+          movements.push({ date: paid, amount: -total, text, reference: number, counterparty: spec.name, match: { bill_payment_id: payment.id } });
+        }
+      }
+    }
+
+    // Money straight out of and into the bank.
+    const spend = (date: string, text: string, code: string, rate: Rate, gross: number, kind: "spend" | "receive" = "spend", counterparty: string | null = null) => {
+      const net = r2(gross / (1 + rate / 100)), vat = r2(gross - net);
+      if (date > RECONCILED_TO) { movements.push({ date, amount: kind === "spend" ? -gross : gross, text, reference: null, counterparty, match: null }); return; }
+      const id = uuid();
+      T.bank_transactions.push({ id, organisation_id: org, kind, bank_account_id: bankId, txn_date: date, contact: counterparty, reference: null, amount: gross, net, vat_amount: vat, created_at: `${date}T16:00:00.000Z` });
+      T.bank_transaction_lines.push({ id: uuid(), organisation_id: org, transaction_id: id, position: 1, description: text.slice(0, 300), account_id: acc(code), net, vat_rate: rate, vat_amount: vat });
+      if (code !== "820") addVat(date, kind === "spend" ? -vat : vat);
+      movements.push({ date, amount: kind === "spend" ? -gross : gross, text, reference: null, counterparty, match: { bank_transaction_id: id } });
+    };
+    for (const month of MONTHS) {
+      const until = month === "2026-10" ? 20 : lastDay(month);
+      for (const card of profile.card) {
+        const count = Math.floor(card.perMonth) + (rand() < card.perMonth % 1 ? 1 : 0);
+        const factor = card.kind === "receive" ? profile.scale ?? 1 : 1;
+        for (let n = 0; n < count; n++) spend(day(month, Math.floor(between(1, until + 1))), card.text, card.code, card.rate, money(card.range[0] * factor, card.range[1] * factor, 0.01), card.kind ?? "spend");
+      }
+      if (profile.payroll && day(month, 28) <= LAST_LINE) {
+        spend(day(month, 28), "PAYROLL TRANSFER STAFF SALARIES", "477", 0, profile.payroll.salaries);
+      }
+      if (profile.payroll && day(month, 14) <= LAST_LINE && month > "2025-07") spend(day(month, 14), "SOCIAL INSURANCE SERVICES CONTRIBUTIONS", "478", 0, profile.payroll.social);
+      if (day(month, lastDay(month)) <= LAST_LINE || month === "2026-10") spend(month === "2026-10" ? "2026-10-19" : day(month, lastDay(month)), "BANK CHARGES ACCOUNT MAINTENANCE", "404", 0, profile.bankFee);
+    }
+
+    // VAT returns filed, and paid by the tenth of the second month after the quarter.
+    for (const filed of profile.filed ?? []) {
+      const key = filed.periodTo.slice(0, 7);
+      const net = quarterVat.get(key) ?? 0;
+      if (net > 0) {
+        const id = uuid();
+        T.bank_transactions.push({ id, organisation_id: org, kind: "spend", bank_account_id: bankId, txn_date: filed.filedOn, contact: "Tax Department", reference: `VAT ${key}`, amount: net, net, vat_amount: 0 });
+        T.bank_transaction_lines.push({ id: uuid(), organisation_id: org, transaction_id: id, position: 1, description: `VAT return to ${filed.periodTo}`, account_id: acc("820"), net, vat_rate: 0, vat_amount: 0 });
+        movements.push({ date: filed.filedOn, amount: -net, text: "TAX DEPARTMENT VAT PAYMENT", reference: `VAT ${key}`, counterparty: "Tax Department", match: { bank_transaction_id: id } });
+      }
+    }
+    vatFacts.push({ org, profile, quarters: quarterVat });
+
+    // The bank's statements: one import a month, running balance, closing balance.
+    movements.sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
+    let balance = profile.opening.bank;
+    for (const month of MONTHS) {
+      const own = movements.filter(item => item.date.startsWith(month));
+      if (!own.length) continue;
+      const importId = uuid();
+      const october = month === "2026-10";
+      let seq = 0;
+      for (const item of own) {
+        balance = r2(balance + item.amount);
+        seq += 1;
+        const lineId = uuid();
+        T.bank_statement_lines.push({ id: lineId, organisation_id: org, bank_account_id: bankId, import_id: importId, txn_date: item.date, amount: item.amount, description: item.text,
+          reference: item.reference, counterparty: item.counterparty, balance, external_id: `${profile.slug}-${item.date}-${String(seq).padStart(3, "0")}` });
+        if (item.match) T.bank_line_matches.push({ id: uuid(), organisation_id: org, line_id: lineId, bank_account_id: bankId, ...item.match, matched_at: `${addDays(item.date, 3)}T09:00:00.000Z` });
+      }
+      T.bank_statement_imports.push({ id: importId, organisation_id: org, bank_account_id: bankId, source: "file", file_name: `${profile.bank.name.split(" ")[0].toLowerCase()}-statement-${month}.csv`,
+        added: own.length, skipped: 0, first_date: own[0].date, last_date: own[own.length - 1].date, closing_balance: balance,
+        imported_at: october ? `2026-10-${21 - (PROFILES.indexOf(profile) % 3)}T${String(6 + PROFILES.indexOf(profile)).padStart(2, "0")}:${String(10 + PROFILES.indexOf(profile) * 7)}:00.000Z` : `${addDays(day(month, lastDay(month)), 3)}T08:00:00.000Z` });
+    }
+  }
+
+  await pg.transaction(async tx => {
+    await tx.query("set local ledgerline.seeding = 'on'");
+    for (const table of ORDER) {
+      // Rows with the same columns go in together; a column a row leaves out takes its default.
+      const groups = new Map<string, Row[]>();
+      for (const row of T[table]) {
+        const key = Object.keys(row).filter(column => row[column] !== undefined).sort().join(",");
+        groups.set(key, [...(groups.get(key) ?? []), row]);
+      }
+      for (const [key, rows] of groups) {
+        for (let start = 0; start < rows.length; start += 400) {
+          await tx.query(`insert into ${table} (${key}) select ${key} from jsonb_populate_recordset(null::${table}, $1::jsonb)`, [JSON.stringify(rows.slice(start, start + 400))]);
+        }
+      }
+    }
+  });
+
+  // History: entries carry the time their documents were recorded, not the time of the seed.
+  await pg.exec(`update journal_entries set created_at = (entry_date + time '10:30') at time zone 'Asia/Nicosia' where created_at > now() - interval '1 hour'`);
+
+  // Filed returns, lock dates and the opening of the audit trail.
+  for (const { org, profile, quarters } of vatFacts) {
+    for (const filed of profile.filed ?? []) {
+      const key = filed.periodTo.slice(0, 7);
+      const from = new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 3, 1)).toISOString().slice(0, 10);
+      await pg.query("insert into vat_returns (organisation_id, period_from, period_to, filed_on, net_vat) values ($1, greatest($2::date, $3::date), $4, $5, $6)",
+        [org, from, START, filed.periodTo, filed.filedOn, quarters.get(key) ?? 0]);
+    }
+    await pg.query("update organisations set lock_date = $2 where id = $1", [org, profile.lock]);
+  }
+  await seedCaptures(pg, practiceId);
+  await seedCrm(pg);
+  await seedQuotes(pg);
+  await seedItems(pg);
+  await seedCredits(pg);
+  await seedRepeating(pg);
+  await seedDesign(pg);
+  await seedSupplierCredits(pg);
+  await seedPractice(pg);
+  await seedDeadlines(pg);
+  await seedVies(pg);
+}
+
+// ---------------------------------------------------------------------------
+// A supplier's credit note: Larnaka Roast's green coffee supplier credits two damaged sacks on its open bill.
+// ---------------------------------------------------------------------------
+
+export async function seedSupplierCredits(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const bill = (await pg.query<{ id: string; organisation_id: string; supplier_id: string; reverse_charge: boolean }>(`
+    select b.id, b.organisation_id, b.supplier_id, b.reverse_charge from bills b join suppliers s on s.id = b.supplier_id join organisations o on o.id = b.organisation_id
+     where o.slug = 'larnaka-roast' and s.name = 'Highland Green Coffee Traders Ltd' and b.status in ('awaiting_payment', 'part_paid') order by b.issued_on desc limit 1`)).rows[0];
+  if (!bill) return;
+  const line = (await pg.query<{ account_id: string; net: number; vat_rate: number }>("select account_id, net, vat_rate from bill_lines where bill_id = $1 order by position limit 1", [bill.id])).rows[0];
+  const net = Math.round(Number(line.net) * 0.12 * 100) / 100;
+  const lines = [{ description: "Two sacks damaged in transit, credited", account_id: line.account_id, net, vat_rate: Number(line.vat_rate), vat_amount: Math.round(net * Number(line.vat_rate)) / 100 }];
+  await pg.query("select save_supplier_credit($1, null, $2, $3, $4, $5, $6, $7::jsonb, $8)",
+    [bill.organisation_id, bill.supplier_id, bill.id, "HGC-CN-2026-07", addDays(today, -4), "Damaged on delivery: photos sent to the supplier.", JSON.stringify(lines), bill.reverse_charge]);
+}
+
+// ---------------------------------------------------------------------------
+// How Larnaka Roast's documents look: its logo, its colour, its terms. The others print their names.
+// ---------------------------------------------------------------------------
+
+export async function seedDesign(pg: PGlite) {
+  const file = path.join(process.cwd(), "src/lib/db/seed-files/larnaka-roast-logo.png");
+  if (!fs.existsSync(file)) return;
+  await pg.query("update organisations set invoice_accent = '#7c4a2d', invoice_footer = $2 where slug = $1",
+    ["larnaka-roast", "Coffee is roasted to order. Please tell us of any damaged or missing goods within 7 days of delivery.\nLate payments may be charged interest at the rate allowed by law."]);
+  await pg.query("insert into organisation_logos (organisation_id, media_type, content) select id, 'image/png', $2 from organisations where slug = $1", ["larnaka-roast", fs.readFileSync(file)]);
+}
+
+// ---------------------------------------------------------------------------
+// Repeating invoices: a lease and a management fee already due, a support retainer due next week.
+// ---------------------------------------------------------------------------
+
+export async function seedRepeating(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const plans = [
+    { slug: "larnaka-roast", customer: "Finikoudes Beach Kiosk Ltd", name: "Espresso machine lease", item: "MCH-LEASE", days: 0 },
+    { slug: "aegean-blue-marine", customer: "Akrotiri Yacht Charters Ltd", name: "Yacht management fee", item: "YM-MONTH", days: -3 },
+    { slug: "pixelforge", customer: "Helios Hotels Cyprus Ltd", name: "Hosting and support", item: "SUPPORT", days: 9 },
+  ];
+  for (const plan of plans) {
+    const found = (await pg.query<{ org: string; registered: boolean; customer: string; eu: boolean }>(
+      "select o.id as org, o.vat_registered as registered, c.id as customer, c.eu_business as eu from organisations o join customers c on c.organisation_id = o.id and c.name = $2 where o.slug = $1", [plan.slug, plan.customer])).rows[0];
+    const item = found && (await pg.query<{ id: string; name: string; unit: string | null; unit_price: number; vat_rate: number; account_id: string }>(
+      "select id, name, unit, unit_price, vat_rate, account_id from items where organisation_id = $1 and code = $2", [found.org, plan.item])).rows[0];
+    if (!found || !item) continue;
+    const next = addDays(today, plan.days);
+    const lines = [{ item_id: item.id, description: item.name, unit: item.unit, account_id: item.account_id, quantity: 1, unit_price: Number(item.unit_price), discount_pct: 0, vat_rate: Number(item.vat_rate) }];
+    await pg.query(`insert into repeating_invoices (organisation_id, customer_id, name, every_months, day_of_month, next_on, issue, vat_treatment, lines)
+                    values ($1, $2, $3, 1, $4, $5, true, $6, $7::jsonb)`,
+      [found.org, found.customer, plan.name, Number(next.slice(8, 10)), next, !found.registered ? "exempt" : found.eu ? "reverse_charge" : "standard", JSON.stringify(lines)]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Products and services, priced once: code, name, unit, price before VAT, VAT rate, income account.
+// ---------------------------------------------------------------------------
+
+const ITEMS: Record<string, [string, string, string | null, number, Rate, string][]> = {
+  "larnaka-roast": [
+    ["ESP-1KG", "House espresso blend, 1 kg", "kg", 18.5, 5, "205"],
+    ["DEC-1KG", "Swiss water decaf, 1 kg", "kg", 22, 5, "205"],
+    ["SVC-EVENT", "Coffee service, per event", "event", 450, 9, "200"],
+    ["CUP", "Barista coffee at events, per cup", "each", 2.4, 9, "200"],
+    ["MCH-LEASE", "Espresso machine lease, monthly", "month", 165, 19, "205"],
+    ["MCH-SVC", "Grinder and machine servicing", "visit", 85, 19, "205"],
+    ["TRAIN", "Barista training, half day", "person", 95, 19, "210"],
+  ],
+  "troodos-gold": [
+    ["EVOO-750", "Extra virgin olive oil, 750 ml", "bottle", 7.8, 5, "200"],
+    ["EVOO-5L", "Extra virgin olive oil, 5 L tin", "each", 38, 5, "200"],
+    ["EH-500", "Early harvest olive oil, 500 ml", "bottle", 9.5, 5, "200"],
+    ["SOAP-6", "Olive oil soap, box of six", "box", 14, 19, "205"],
+    ["TOUR", "Mill tour and tasting", "person", 18, 19, "210"],
+  ],
+  "aegean-blue-marine": [
+    ["PA-CALL", "Port agency, vessel call", "each", 1450, 19, "200"],
+    ["YM-MONTH", "Yacht management, monthly fee", "month", 2400, 19, "205"],
+    ["CREW", "Crew change coordination", "each", 320, 19, "210"],
+    ["PROV-HR", "Provisioning coordination", "hour", 45, 19, "210"],
+  ],
+  "kalamies-dental": [
+    ["CHECK", "Check-up and clean", "visit", 60, 0, "200"],
+    ["FILL", "Composite filling", "each", 85, 0, "200"],
+    ["XRAY", "Panoramic X-ray", "each", 45, 0, "200"],
+    ["ROOT", "Root canal treatment", "each", 320, 0, "200"],
+  ],
+  pixelforge: [
+    ["DEV-EU", "Development day, EU client", "day", 640, 0, "200"],
+    ["UX-EU", "UX research and design day, EU client", "day", 560, 0, "200"],
+    ["DEV-CY", "Development day, Cyprus client", "day", 600, 19, "205"],
+    ["DEV-HR", "Development, per hour", "hour", 85, 19, "205"],
+    ["SUPPORT", "Hosting and support, monthly", "month", 450, 19, "210"],
+  ],
+  "mesogeios-holdings": [
+    ["MGMT-Q", "Management fee, quarter", null, 3750, 0, "200"],
+    ["DIRECTOR", "Director services, monthly", "month", 800, 0, "200"],
+  ],
+};
+
+export async function seedItems(pg: PGlite) {
+  for (const [slug, items] of Object.entries(ITEMS)) {
+    for (const [code, name, unit, price, rate, account] of items) {
+      await pg.query(`insert into items (organisation_id, code, name, unit, unit_price, vat_rate, account_id)
+                      select o.id, $2, $3, $4, $5, $6, a.id from organisations o join ledger_accounts a on a.organisation_id = o.id and a.code = $7 where o.slug = $1`,
+        [slug, code, name, unit, price, rate, account]);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Two credit notes: a discount taken off an invoice still owed, and a credit kept for a customer who had already paid.
+// ---------------------------------------------------------------------------
+
+export async function seedCredits(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const cases = [
+    { slug: "larnaka-roast", status: "in ('issued', 'part_paid')", share: 0.1, reason: "Discount after sale", text: "Discount agreed on", days: -2 },
+    { slug: "pixelforge", status: "= 'paid'", share: 0.1, reason: "Service not delivered", text: "Days not delivered:", days: -5 },
+  ];
+  for (const item of cases) {
+    const org = (await pg.query<{ id: string; invoice_prefix: string }>("select id, invoice_prefix from organisations where slug = $1", [item.slug])).rows[0];
+    if (!org) continue;
+    const invoice = (await pg.query<{ id: string; customer_id: string; vat_treatment: string }>(
+      `select id, customer_id, vat_treatment from invoices where organisation_id = $1 and status ${item.status} order by issued_on desc, number desc limit 1`, [org.id])).rows[0];
+    if (!invoice) continue;
+    const line = (await pg.query<{ description: string; account_id: string; net: number; vat_rate: number }>("select description, account_id, net, vat_rate from invoice_lines where invoice_id = $1 order by position limit 1", [invoice.id])).rows[0];
+    const net = Math.round(Number(line.net) * item.share * 100) / 100;
+    const rate = invoice.vat_treatment === "standard" ? Number(line.vat_rate) : 0;
+    const lines = [{ description: `${item.text} ${line.description.charAt(0).toLowerCase()}${line.description.slice(1)}`, account_id: line.account_id, net, vat_rate: rate }];
+    await pg.query("select save_credit_note($1, null, $2, $3, $4, $5, $6, $7, null, $8::jsonb, 'issued')",
+      [org.id, invoice.customer_id, invoice.id, `${org.invoice_prefix}CN-${today.slice(0, 4)}-0001`, addDays(today, item.days), invoice.vat_treatment, item.reason, JSON.stringify(lines)]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Documents already captured, waiting for someone to review them.
+// ---------------------------------------------------------------------------
+
+type SeedCapture = { file: string; media: string; org: string; supplier: string; extraction: Record<string, unknown> };
+
+async function seedCaptures(pg: PGlite, practiceId: string) {
+  const dir = path.join(process.cwd(), "src/lib/db/seed-files");
+  const manifest = path.join(dir, "captures.json");
+  if (!fs.existsSync(manifest)) return;
+  const captures = JSON.parse(fs.readFileSync(manifest, "utf8")) as SeedCapture[];
+  for (const capture of captures) {
+    const file = path.join(dir, capture.file);
+    if (!fs.existsSync(file)) continue;
+    const content = fs.readFileSync(file);
+    const org = (await pg.query<{ id: string }>("select id from organisations where slug = $1", [capture.org])).rows[0]?.id ?? null;
+    const fileId = uuid();
+    await pg.query("insert into capture_files (id, practice_id, file_name, media_type, size_bytes, sha256, content, status, uploaded_at, read_at) values ($1, $2, $3, $4, $5, $6, $7, 'read', $8, $8)",
+      [fileId, practiceId, capture.file, capture.media, content.length, createHash("sha256").update(content).digest("hex"), content, "2026-10-21T06:55:00.000Z"]);
+    await pg.query("insert into capture_items (file_id, position, organisation_id, extraction, routing, status, created_at) values ($1, 1, $2, $3::jsonb, $4::jsonb, 'review', $5)",
+      [fileId, org, JSON.stringify(capture.extraction), JSON.stringify({ method: "vat_number", confidence: "high" }), "2026-10-21T06:56:00.000Z"]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The CRM inside each company: enquiries, its clients' people, matters, tasks.
+// ---------------------------------------------------------------------------
+
+type EnquirySeed = [company: string, person: string, service: string, value: number];
+const CRM: Record<string, { staff: string[]; enquiries: EnquirySeed[]; matters: string[]; sources: string[] }> = {
+  "aegean-blue-marine": { staff: ["Christos Panayiotou", "Anna Demetriou", "Loukas Ioannides"], sources: ["Website", "Referral", "Marina office", "Phone"], enquiries: [
+    ["Thalassa Yachting Ltd", "Andreas Kyriakou", "Charter season management, MY Selene", 18000], ["Nordsee Bulk Carriers GmbH", "Lena Hoffmann", "Port agency for bulk carrier calls at Vassiliko", 42000],
+    ["Adriatic Crew Services d.o.o.", "Marko Petrović", "Crew change logistics, Larnaca airport", 9600], ["Limassol Sailing Club", "Christina Ioannou", "Winter berth coordination for the club fleet", 6500],
+    ["Blue Wave Charters Ltd", "Stavros Michael", "Yacht management, two catamarans", 21000], ["Kypros Ferry Lines Ltd", "Elena Charalambous", "Husbandry services for the summer ferry", 15000],
+    ["Orion Offshore Ltd", "James Whitfield", "Provisioning for a survey vessel", 8200], ["Aphrodite Cruises Ltd", "Maria Georgiou", "Shore excursion logistics", 12000],
+    ["Delta Marine Survey Ltd", "Nikos Antoniou", "Agency for survey vessel rotation", 7400]],
+    matters: ["Yacht management, MY Akrotiri Star", "Port agency contract 2026–27", "Crew transfers, winter rota", "Vassiliko tanker calls, Q4"] },
+  "troodos-gold": { staff: ["Eleni Kyprianou", "Michalis Georgiades", "Rena Phylactou"], sources: ["Website", "Trade fair", "Referral", "Shop visit"], enquiries: [
+    ["Mesogeios Hotels Ltd", "Petros Hadjigeorgiou", "Olive oil for three hotel restaurants", 14000], ["Feinkost Berger GmbH", "Katrin Berger", "Early harvest oil for Munich delicatessens", 26000],
+    ["Larnaca Gourmet Market", "Sofia Neophytou", "Shelf listing, 500ml and 750ml", 5200], ["Nicosia Cooking School", "Alexis Pavlou", "Tasting sessions for students", 2400],
+    ["Paphos Wedding Co", "Irene Savva", "Olive oil wedding favours, 400 bottles", 3800], ["Kyrenia Street Taverna", "Giorgos Loizou", "Monthly 5L tin supply", 4100],
+    ["Agrotourism Cyprus", "Helen Markides", "Mill tours for agrotourism guests", 3000], ["Delikatessen Nord AB", "Erik Sandberg", "Distributor enquiry, Sweden", 31000],
+    ["Troodos Hiking Tours", "Panos Christou", "Mill visit add-on for hiking groups", 1800]],
+    matters: ["Hotel supply agreement 2026", "Christmas gift box range", "Wholesale price list review", "Shelf listing at Nicosia Fine Foods"] },
+  "kalamies-dental": { staff: ["Dr Sofia Hadjioannou", "Dr Marios Evagorou", "Niki Solomou"], sources: ["Website", "Phone", "Referral", "Walk-in"], enquiries: [
+    ["", "Katerina Pavlidou", "Implant consultation, upper molar", 2400], ["", "Michael Stylianou", "Clear aligner treatment plan", 3900],
+    ["Larnaca Primary School No. 4", "School office", "Dental check-up day for pupils", 1500], ["", "Andrea Constantinou", "Whitening and hygiene package", 450],
+    ["Medisure Health Insurance Ltd", "Claims team", "Direct-billing agreement renewal", 18000], ["", "Yiannis Kyprianou", "Crown and bridge work", 1800],
+    ["Harbour Staff Benefit Fund", "Fund secretary", "Staff dental scheme", 6000], ["", "Eleni Michaelidou", "Children's orthodontic assessment", 900],
+    ["", "George Hadjimichael", "Root canal follow-up", 650]],
+    matters: ["Medisure direct billing 2026", "Olympic Health Cover claims backlog", "Surgery 2 refurbishment", "Implant cases, October"] },
+  "larnaka-roast": { staff: ["Marios Georgiou", "Chloe Antoniades", "Stelios Papas"], sources: ["Website", "Instagram", "Café counter", "Referral"], enquiries: [
+    ["Coral Sands Hotel Ltd", "Petros Hadjigeorgiou", "Coffee service for the conference season", 9800], ["Finikoudes Beach Kiosk Ltd", "Savvas Ioannou", "Espresso machine lease renewal", 3600],
+    ["Seaview Café Ltd", "Despina Kyriacou", "House blend supply, 20kg a month", 7200], ["CoWork Nicosia Ltd", "Rania Haddad", "Office coffee subscription, three floors", 5400],
+    ["Ayia Napa Beach Bars Ltd", "Kostas Efthymiou", "Barista training for summer staff", 2800], ["Larnaca Book Café", "Marina Petrou", "Retail bags of single origin", 1900],
+    ["Mesogeios Hotels Ltd", "Natalia Ioannidou", "Breakfast coffee programme", 16000], ["Kition Wedding Venues", "Lucia Romano", "Coffee cart for weddings", 4500],
+    ["Paralimni Bakery Ltd", "Andreas Theodorou", "Wholesale beans, weekly", 6100]],
+    matters: ["Coral Sands conference season", "Kiosk machine lease 2026", "Barista academy, autumn intake", "Single-origin launch"] },
+  "pixelforge": { staff: ["Nikos Savva", "Ioanna Kleanthous", "Marcus Lee"], sources: ["Website", "Referral", "Clutch", "LinkedIn"], enquiries: [
+    ["Nordlicht Software GmbH", "Jonas Weber", "Phase 2: offline mode for the mobile app", 48000], ["Brabant Digital BV", "Sanne de Vries", "Checkout redesign", 26000],
+    ["Atelier Lumière SAS", "Camille Laurent", "Booking system for a second venue", 18000], ["Helios Hotels Cyprus Ltd", "Nicolas Pierides", "Loyalty programme in the guest app", 22000],
+    ["Medisure Health Insurance Ltd", "Product team", "Claims app prototype", 35000], ["Kypros Ferry Lines Ltd", "Elena Charalambous", "Ticketing website rebuild", 40000],
+    ["Fjord Analytics AS", "Ingrid Nilsen", "Data dashboard, two-week discovery", 12000], ["Olive Grove Estates Ltd", "Christos Pallis", "Online shop", 9000],
+    ["Brightline Learning Ltd", "Oliver Grant", "Learning platform MVP", 55000]],
+    matters: ["Nordlicht app, sprints 14–16", "Brabant support retainer", "Helios guest app 2.0", "Atelier booking system go-live"] },
+  "mesogeios-holdings": { staff: ["Petros Constantinou", "Andri Kallis"], sources: ["Board", "Bank", "Introducer"], enquiries: [
+    ["Kourion Boutique Hotel Ltd", "Board of directors", "Acquisition of a 40% stake", 1200000], ["Larnaca Logistics Park Ltd", "Chief financial officer", "Shareholder loan, €400,000", 400000],
+    ["Mesogeios Hotels Ltd", "Finance director", "Dividend for the 2025 year", 50000], ["Troodos Retreats Ltd", "Founder", "Seed investment", 150000],
+    ["Levant Private Bank", "Relationship manager", "Refinancing of the group facility", 2000000], ["Akamas Eco Lodges Ltd", "Managing director", "Joint venture proposal", 600000]],
+    matters: ["Annual general meeting 2026", "Group restructuring review", "Loan to Mesogeios Hotels: interest schedule", "2025 audit with Kition Audit Partners"] },
+};
+/** What each demo matter is, in a line, for the two companies the demo opens most. */
+const MATTER_SUMMARIES: Record<string, string> = {
+  "Coral Sands conference season": "Coffee bar and barista cover for the hotel's conference season, October to December, billed monthly.",
+  "Kiosk machine lease 2026": "Renewal of the espresso machine lease at the beach kiosk, with servicing and a spare grinder.",
+  "Barista academy, autumn intake": "A six-week barista course for the hotel's new bar staff: twelve places.",
+  "Single-origin launch": "Three single-origin coffees for retail, sold at the kiosk and the café counter.",
+  "Nordlicht app, sprints 14–16": "Three two-week sprints on the Nordlicht mobile app: offline mode and push notifications.",
+  "Brabant support retainer": "Support and small changes on the Brabant checkout, up to 20 hours a month.",
+  "Helios guest app 2.0": "The second version of the hotel guest app: loyalty points and room-service ordering.",
+  "Atelier booking system go-live": "Launch of the booking system for Atelier's second venue, with two weeks of close support.",
+};
+const PEOPLE = ["Andreas Christodoulou", "Maria Iacovou", "Kyriakos Neocleous", "Anastasia Petridou", "Constantinos Louca", "Despo Charalambidou", "Thomas Kleopa", "Ioanna Papadopoulou", "Simon Hart", "Julia Becker", "Pieter Jansen", "Claire Dubois"];
+const ROLES = ["Director", "Finance manager", "Operations manager", "Accounts payable", "Purchasing"];
+const STAGES = ["new", "new", "contact_attempted", "contacted", "contacted", "qualified", "proposal", "proposal", "won"];
+const DUE = [-3, -1, 0, 0, 1, 3, 6, 10, 14];
+
+export async function seedCrm(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const orgs = (await pg.query<{ id: string; slug: string }>("select id, slug from organisations")).rows;
+  const rows: Record<string, Row[]> = { crm_enquiries: [], crm_contacts: [], crm_matters: [], crm_tasks: [], crm_activities: [] };
+  for (const org of orgs) {
+    const spec = CRM[org.slug];
+    if (!spec) continue;
+    const customers = (await pg.query<{ id: string; name: string }>("select id, name from customers where organisation_id = $1 order by name", [org.id])).rows;
+    const overdue = (await pg.query<{ customer_id: string; number: string; client_name: string }>("select customer_id, number, client_name from v_invoice_directory where organisation_id = $1 and days_overdue > 0 order by days_overdue desc limit 2", [org.id])).rows;
+    const prefix = org.slug.split("-").map(part => part[0]).join("").toUpperCase();
+    const at = (offset: number, hour = 10) => new Date(Date.parse(`${addDays(today, offset)}T${String(hour).padStart(2, "0")}:15:00Z`)).toISOString();
+    const enquiryIds: { id: string; name: string; company: string; stage: string }[] = [];
+    spec.enquiries.forEach(([company, person, service, value], index) => {
+      const id = uuid(), stage = STAGES[index] ?? "contacted";
+      const won = stage === "won";
+      const due = won ? null : addDays(today, DUE[index] ?? 7);
+      const next = won ? null : [`Call ${person.split(" ")[0]} back`, `Send the proposal for ${service.toLowerCase()}`, `Chase ${company || person} for a decision`, `Book a meeting with ${person.split(" ")[0]}`][index % 4];
+      rows.crm_enquiries.push({ id, organisation_id: org.id, reference: `${prefix}-${2026}-${String(40 + index).padStart(4, "0")}`, full_name: person, company: company || null,
+        email: `${person.toLowerCase().replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, "")}@example.test`, phone: `+357 9${String(9100000 + index * 7331).slice(0, 7)}`,
+        source: spec.sources[index % spec.sources.length], channel: spec.sources[index % spec.sources.length] === "Website" ? "form" : "manual", service, stage, value, owner: spec.staff[index % spec.staff.length], priority: index === 1 ? "urgent" : index === 4 ? "high" : "normal",
+        next_action: next, next_action_due: due, summary: `${service}. ${company ? `${company} ` : ""}${won ? "Agreed; set up as a client." : "Requirement being clarified."}`,
+        stage_changed_at: at(-(index + 2)), created_at: at(-(index * 4 + 6), 9) });
+      rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "email", body: `Enquiry received via ${spec.sources[index % spec.sources.length].toLowerCase()}: ${service.toLowerCase()}.`, actor: spec.staff[index % spec.staff.length], occurred_at: at(-(index * 4 + 6), 9) });
+      if (stage !== "new") rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "call", body: `Spoke to ${person.split(" ")[0]}: wants ${service.toLowerCase()}${value ? `, budget around €${value.toLocaleString("en-GB")}` : ""}.`, actor: spec.staff[index % spec.staff.length], occurred_at: at(-(index * 2 + 3), 11) });
+      if (stage === "proposal") rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "stage", body: "Moved to Proposal sent. Proposal emailed with terms and timing.", actor: spec.staff[index % spec.staff.length], occurred_at: at(-(index + 2), 15) });
+      if (won) rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "won", body: "Won: terms agreed and set up as a client.", actor: spec.staff[0], occurred_at: at(-3, 16) });
+      enquiryIds.push({ id, name: person, company, stage });
+    });
+    customers.forEach((customer, index) => {
+      const count = 1 + (index % 2);
+      for (let n = 0; n < count; n++) {
+        const name = PEOPLE[(index * 3 + n * 5 + orgs.indexOf(org)) % PEOPLE.length];
+        rows.crm_contacts.push({ id: uuid(), organisation_id: org.id, customer_id: customer.id, name, role: ROLES[(index + n) % ROLES.length],
+          email: `${name.toLowerCase().split(" ")[0]}@${customer.name.toLowerCase().replace(/ (ltd|limited|gmbh|bv|sas|ab)$/, "").replace(/[^a-z]+/g, "")}.example`, phone: `+357 2${String(2200000 + index * 913 + n * 37).slice(0, 7)}` });
+      }
+    });
+    const matterIds: string[] = [];
+    spec.matters.forEach((title, index) => {
+      const id = uuid();
+      const customer = customers[index % Math.max(1, customers.length)];
+      matterIds.push(id);
+      rows.crm_matters.push({ id, organisation_id: org.id, reference: `${prefix}-M-${String(101 + index)}`, title, customer_id: customer?.id ?? null, owner: spec.staff[index % spec.staff.length],
+        status: ["active", "waiting_on_client", "active", "on_hold"][index], priority: index === 0 ? "high" : "normal", value: [12000, 8400, 5600, 3200][index] * (org.slug === "mesogeios-holdings" ? 5 : 1),
+        next_action: ["Send the monthly report", "Chase the signed agreement", "Confirm the schedule", "Agree the revised scope"][index], next_action_due: addDays(today, [-2, 0, 2, 9][index]),
+        summary: MATTER_SUMMARIES[title] ?? (customer ? `For ${customer.name}.` : null), opened_on: addDays(today, -(40 + index * 21)) });
+      rows.crm_activities.push({ id: uuid(), organisation_id: org.id, matter_id: id, kind: "note", body: customer ? `Matter opened for ${customer.name}.` : "Matter opened.", actor: spec.staff[index % spec.staff.length], occurred_at: at(-(40 + index * 21), 10) });
+    });
+    const open = enquiryIds.filter(item => item.stage !== "won");
+    const tasks: [string, number, string, Partial<Row>][] = [
+      [`Call ${open[0]?.name.split(" ")[0] ?? "the prospect"} back`, -2, "high", { enquiry_id: open[0]?.id }],
+      [`Send the revised proposal to ${open[6]?.company || open[6]?.name || "the client"}`, -1, "urgent", { enquiry_id: open[6]?.id }],
+      [spec.matters[0] ? `${spec.matters[0]}: monthly report` : "Monthly report", 0, "normal", { matter_id: matterIds[0] }],
+      [`Chase ${open[2]?.company || open[2]?.name || "the client"} for a decision`, 0, "normal", { enquiry_id: open[2]?.id }],
+      ...(overdue[0] ? [[`Chase invoice ${overdue[0].number} with ${overdue[0].client_name}`, 1, "high", { customer_id: overdue[0].customer_id }] as [string, number, string, Partial<Row>]] : []),
+      [`Prepare quote: ${open[3]?.company || open[3]?.name || "new enquiry"}`, 2, "normal", { enquiry_id: open[3]?.id }],
+      [spec.matters[1] ? `${spec.matters[1]}: confirm terms` : "Confirm terms", 4, "normal", { matter_id: matterIds[1] }],
+      [`Book a meeting with ${open[4]?.name.split(" ")[0] ?? "the prospect"}`, 6, "normal", { enquiry_id: open[4]?.id }],
+      ...(overdue[1] ? [[`Agree a payment plan with ${overdue[1].client_name}`, 8, "normal", { customer_id: overdue[1].customer_id }] as [string, number, string, Partial<Row>]] : []),
+      [spec.matters[2] ? `${spec.matters[2]}: review` : "Quarterly review", 13, "normal", { matter_id: matterIds[2] }],
+    ];
+    tasks.forEach(([title, offset, priority, link], index) => rows.crm_tasks.push({ id: uuid(), organisation_id: org.id, title, due_on: addDays(today, offset), priority, owner: spec.staff[index % spec.staff.length],
+      enquiry_id: link.enquiry_id ?? null, matter_id: link.matter_id ?? null, customer_id: link.customer_id ?? null, created_at: at(-(5 + index), 9) }));
+  }
+  for (const table of ["crm_enquiries", "crm_contacts", "crm_matters", "crm_tasks", "crm_activities"]) {
+    const groups = new Map<string, Row[]>();
+    for (const row of rows[table]) {
+      const key = Object.keys(row).filter(column => row[column] !== undefined).sort().join(",");
+      groups.set(key, [...(groups.get(key) ?? []), row]);
+    }
+    for (const [key, list] of groups) await pg.query(`insert into ${table} (${key}) select ${key} from jsonb_populate_recordset(null::${table}, $1::jsonb)`, [JSON.stringify(list)]);
+  }
+  // Every company's website form starts switched on, with a key of its own.
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (const org of orgs) {
+    const token = `ll_form_${Array.from({ length: 24 }, () => letters[randomInt(letters.length)]).join("")}`;
+    await pg.query("insert into enquiry_form_keys (organisation_id, token) values ($1, $2)", [org.id, token]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Open quotes: one still a draft, one with the customer.
+// ---------------------------------------------------------------------------
+
+export async function seedQuotes(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const orgs = (await pg.query<{ id: string; slug: string; invoice_prefix: string; vat_registered: boolean }>("select id, slug, invoice_prefix, vat_registered from organisations order by slug")).rows;
+  for (const org of orgs) {
+    const spec = CRM[org.slug];
+    const customers = (await pg.query<{ id: string; name: string; eu_business: boolean; default_account_id: string }>("select id, name, eu_business, default_account_id from customers where organisation_id = $1 order by name", [org.id])).rows;
+    if (!spec || !customers.length) continue;
+    const profile = PROFILES.find(item => item.slug === org.slug)!;
+    const codes = new Map((await pg.query<{ id: string; code: string }>("select id, code from ledger_accounts where organisation_id = $1", [org.id])).rows.map(row => [row.code, row.id]));
+    for (let index = 0; index < 2; index++) {
+      // Two customers where there are two: a quote each, priced from what each is usually sold.
+      const customer = customers[index % customers.length];
+      const sold = profile.customers.find(item => item.name === customer.name)?.lines ?? [];
+      const treatment = !org.vat_registered ? "exempt" : customer.eu_business ? "reverse_charge" : "standard";
+      const lines = (sold.length ? sold : [{ code: "", rate: 19 as Rate, range: [900, 2400] as [number, number], text: [spec.matters[index] ?? "Services"] }]).map(item => {
+        const rate = treatment === "standard" ? item.rate : 0;
+        const net = Math.round((index === 0 ? item.range[1] : (item.range[0] + item.range[1]) / 2) * (profile.scale ?? 1) / 10) * 10;
+        return { description: item.text[0], account_id: codes.get(item.code) ?? customer.default_account_id, net, vat_rate: rate, vat_amount: Math.round(net * rate) / 100 };
+      });
+      const issued = addDays(today, index === 0 ? -1 : -6);
+      const quote = (await pg.query<{ id: string }>("select save_quote($1, null, $2, $3, $4, $5, $6, $7, $8::jsonb) as id",
+        [org.id, customer.id, `${org.invoice_prefix}Q-${String(index + 1).padStart(3, "0")}`, issued, addDays(issued, 30), treatment, null, JSON.stringify(lines)])).rows[0];
+      if (index === 1) await pg.query("update quotes set status = 'sent' where id = $1", [quote.id]);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Deadlines already dealt with: provisional tax paid and VIES statements sent,
+// except one instalment that slipped, which the deadline list catches.
+// ---------------------------------------------------------------------------
+
+async function seedDeadlines(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const orgs = (await pg.query<{ id: string; slug: string; manager: string }>("select id, slug, manager from organisations")).rows;
+  const managerOf = new Map(orgs.map(org => [org.id, org.manager]));
+  const marks: Row[] = [];
+  for (const org of orgs) for (const due of ["2025-07-31", "2025-12-31", "2026-07-31"]) {
+    if (due >= today || (org.slug === "kalamies-dental" && due === "2026-07-31")) continue;
+    marks.push({ organisation_id: org.id, kind: "provisional_tax", period_end: due, done_on: addDays(due, -3), done_by: org.manager });
+  }
+  const months = (await pg.query<{ organisation_id: string; month_end: string }>(`
+    select i.organisation_id, (date_trunc('month', i.issued_on) + interval '1 month - 1 day')::date::text as month_end
+      from invoices i join customers c on c.id = i.customer_id
+     where i.vat_treatment = 'reverse_charge' and c.eu_business and i.status in ('issued', 'part_paid', 'paid') group by 1, 2`)).rows;
+  for (const row of months) {
+    const [year, month] = row.month_end.split("-").map(Number);
+    const due = month === 12 ? `${year + 1}-01-15` : `${year}-${String(month + 1).padStart(2, "0")}-15`;
+    if (due < today) marks.push({ organisation_id: row.organisation_id, kind: "vies", period_end: row.month_end, done_on: addDays(due, -2), done_by: managerOf.get(row.organisation_id) ?? "Maria Antoniou" });
+  }
+  if (marks.length) await pg.query("insert into deadline_marks (organisation_id, kind, period_end, done_on, done_by) select organisation_id, kind, period_end, done_on, done_by from jsonb_populate_recordset(null::deadline_marks, $1::jsonb)", [JSON.stringify(marks)]);
+}
+
+// ---------------------------------------------------------------------------
+// The practice's own books and work: its people, Saltlake Accounting Ltd as a
+// company of its own (its clients its customers, its fees its sales), July to
+// September's fee invoices, and the hours each person has put into each client.
+// ---------------------------------------------------------------------------
+
+const STAFF = [
+  { name: "Maria Antoniou", role: "Partner", weekly_hours: 35 },
+  { name: "Andreas Kyriakou", role: "Senior accountant", weekly_hours: 37.5 },
+  { name: "Sofia Georgiou", role: "Accountant", weekly_hours: 35 },
+];
+/** Each client's monthly fee, rate for extra work, what the firm charges it for the app, and the hours a month its books take. */
+const FEES: Record<string, { fee: number; rate: number; app: number; hours: number }> = {
+  "aegean-blue-marine": { fee: 450, rate: 60, app: 25, hours: 9.5 }, "kalamies-dental": { fee: 250, rate: 60, app: 0, hours: 7.8 },
+  "larnaka-roast": { fee: 300, rate: 60, app: 25, hours: 5.1 }, "mesogeios-holdings": { fee: 600, rate: 90, app: 0, hours: 6.5 },
+  "pixelforge": { fee: 380, rate: 60, app: 25, hours: 4.2 }, "troodos-gold": { fee: 280, rate: 60, app: 25, hours: 4.4 },
+};
+const WORK = ["Bookkeeping", "Bank reconciliation", "VAT return", "Payroll", "Call with the owner", "Supplier invoices", "Management accounts"];
+
+// ---------------------------------------------------------------------------
+// VIES. The companies are invented, so the real register has never heard of
+// them: the demo register answers for them instead. Each Cyprus company is in
+// it under its own name, as Cyprus discloses names but not addresses. Of
+// Pixelforge's EU customers, Nordlicht was checked last week (Germany
+// discloses nothing), Brabant in June, so is due a fresh check before the next
+// zero-rated invoice, and Atelier Lumière never. Nimbus, its Dutch hosting
+// supplier, is registered under its parent's name: the check shows that.
+// ---------------------------------------------------------------------------
+
+const VIES_EU = [
+  { number: "DE298765435", name: null, address: null },
+  { number: "NL859123455B01", name: "BRABANT DIGITAL B.V.", address: "MARKT 00014, 5611EB EINDHOVEN" },
+  { number: "FR72823456785", name: "SAS ATELIER LUMIERE", address: "12 RUE DES TANNEURS, 69002 LYON" },
+  { number: "NL822334458B01", name: "STRATOCUMULUS HOSTING B.V.", address: "ZUIDPLEIN 00200, 1077XV AMSTERDAM" },
+];
+
+async function seedVies(pg: PGlite) {
+  for (const entry of VIES_EU)
+    await pg.query("insert into vies_demo_register (country, number, valid, name, address) values ($1, $2, true, $3, $4)", [entry.number.slice(0, 2), entry.number.slice(2), entry.name, entry.address]);
+  await pg.query(`insert into vies_demo_register (country, number, valid, name)
+    select distinct on (left(vat, 2), substr(vat, 3)) left(vat, 2), substr(vat, 3), true, upper(name)
+      from (select vat_number as vat, name from organisations union all select vat_number, name from customers union all select vat_number, name from suppliers) known
+     where vat ~ '^CY[0-9]{8}[A-Z]$'
+    on conflict do nothing`);
+  const pixelforge = (await pg.query<{ id: string }>("select id from organisations where slug = 'pixelforge'")).rows[0].id;
+  const today = new Date();
+  const ago = (days: number, time: string) => `${addDays(today.toISOString().slice(0, 10), -days)}T${time}.000Z`;
+  for (const check of [
+    { number: "DE298765435", name: null, address: null, at: ago(9, "08:41:12"), by: "Andreas Kyriakou" },
+    { number: "NL859123455B01", name: VIES_EU[1].name, address: VIES_EU[1].address, at: ago(142, "11:05:47"), by: "Sofia Georgiou" },
+  ])
+    await pg.query("insert into vat_checks (organisation_id, country, number, valid, name, address, source, checked_by, checked_at) values ($1, $2, $3, true, $4, $5, 'demo', $6, $7)",
+      [pixelforge, check.number.slice(0, 2), check.number.slice(2), check.name, check.address, check.by, check.at]);
+}
+
+async function seedPractice(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const practiceId = (await pg.query<{ id: string }>("select id from practices limit 1")).rows[0].id;
+  for (const person of STAFF) await pg.query("insert into practice_staff (practice_id, name, role, weekly_hours) values ($1, $2, $3, $4)", [practiceId, person.name, person.role, person.weekly_hours]);
+  const clients = (await pg.query<{ id: string; slug: string; name: string; vat_number: string | null; vat_registered: boolean; contact_email: string | null; address: string | null; manager: string }>(
+    "select id, slug, name, vat_number, vat_registered, contact_email, address, manager from organisations order by name")).rows;
+
+  // Saltlake Accounting Ltd: the firm's own books, from July 2026.
+  const org = randomUUID(), bank = randomUUID(), fees = randomUUID(), payroll = randomUUID();
+  await pg.query(`insert into organisations (id, practice_id, slug, name, greek_name, industry, he_number, vat_number, tic, vat_registered, vat_quarter_end_month, year_end_month,
+      contact_name, contact_email, address, invoice_prefix, payment_terms_days, invoice_accent, invoice_footer, manager, is_practice)
+    values ($1, $2, 'saltlake-accounting', 'Saltlake Accounting Ltd', 'ΣΑΛΤΛΕΪΚ ΛΟΓΙΣΤΙΚΗ ΛΤΔ', 'Chartered accountants: the firm''s own books', 'HE 402881', 'CY10402881S', '12402881S', true, 3, 12,
+      'Maria Antoniou', 'maria@saltlake.example', '18 Grigori Afxentiou Avenue, 6023 Larnaca', 'SAL-', 14, '#0d6e6e', 'Fees are due within 14 days. Thank you for your business.', 'Maria Antoniou', true)`, [org, practiceId]);
+  const accounts: Row[] = [
+    { id: bank, organisation_id: org, code: "090", name: "Bank of Cyprus current account", type: "bank", bank_details: "IBAN CY63 0020 0195 0000 3570 0128 4419\nBIC BCYPCY2N" },
+    { id: fees, organisation_id: org, code: "200", name: "Accounting and tax fees", type: "revenue", system_role: "sales" },
+    { id: payroll, organisation_id: org, code: "205", name: "Payroll and company secretarial", type: "revenue" },
+    ...BASE.map(account => ({ id: randomUUID(), organisation_id: org, code: account.code, name: account.name, type: account.type, system_role: account.role ?? null, description: account.description ?? null })),
+  ];
+  await pg.query(`insert into ledger_accounts (id, organisation_id, code, name, type, system_role, description, bank_details)
+    select id, organisation_id, code, name, type, system_role, description, bank_details from jsonb_populate_recordset(null::ledger_accounts, $1::jsonb)`, [JSON.stringify(accounts)]);
+  await pg.query("update organisations set default_bank_account_id = $2 where id = $1", [org, bank]);
+
+  // Each client company is a customer of the firm, with its fee.
+  const customerOf = new Map<string, string>();
+  for (const client of clients) {
+    const plan = FEES[client.slug];
+    if (!plan) continue;
+    const customer = (await pg.query<{ id: string }>(`insert into customers (organisation_id, name, email, vat_number, country, address, default_account_id)
+      values ($1, $2, $3, $4, 'CY', $5, $6) returning id`, [org, client.name, client.contact_email, client.vat_registered ? client.vat_number : null, client.address, fees])).rows[0].id;
+    customerOf.set(client.id, customer);
+    await pg.query("insert into client_fees (organisation_id, customer_id, monthly_fee, hourly_rate, app_fee) values ($1, $2, $3, $4, $5)", [client.id, customer, plan.fee, plan.rate, plan.app]);
+  }
+
+  // July to September's fees, invoiced on the first of each month. July and August are paid; two of September's are not.
+  let number = 0;
+  const month = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  for (const period of ["2026-07-01", "2026-08-01", "2026-09-01"]) {
+    if (period > today) continue;
+    for (const client of clients) {
+      const plan = FEES[client.slug], customer = customerOf.get(client.id);
+      if (!plan || !customer) continue;
+      number += 1;
+      const lines = [{ description: `Accounting services, ${month(period)}`, account_id: fees, net: plan.fee, vat_rate: 19, vat_amount: Math.round(plan.fee * 19) / 100 }];
+      if (plan.app) lines.push({ description: `Online books and invoicing, ${month(period)}`, account_id: fees, net: plan.app, vat_rate: 19, vat_amount: Math.round(plan.app * 19) / 100 });
+      const invoice = (await pg.query<{ id: string }>("select save_invoice($1, null, $2, $3, $4, $5, 'standard', null, $6::jsonb, 'issued', $7) as id",
+        [org, customer, `SAL-2026-${String(number).padStart(4, "0")}`, period, addDays(period, 14), JSON.stringify(lines), `Fees ${month(period)}`])).rows[0].id;
+      await pg.query("update invoices set sent_at = $2, sent_to = $3 where id = $1", [invoice, `${period}T08:30:00Z`, client.contact_email]);
+      await pg.query("insert into fee_invoices (client_organisation_id, period, invoice_id) values ($1, $2, $3)", [client.id, period, invoice]);
+      const unpaid = period === "2026-09-01" && ["aegean-blue-marine", "kalamies-dental"].includes(client.slug);
+      const paidOn = addDays(period, 6 + (number % 7));
+      if (!unpaid && paidOn <= today) await pg.query(`insert into invoice_payments (organisation_id, invoice_id, received_on, amount, bank_account_id, method, reference)
+        select organisation_id, id, $2, total, $3, 'bank_transfer', number from invoices where id = $1`, [invoice, paidOn, bank]);
+    }
+  }
+
+  // Hours: each client's books take about the same time each month, mostly by the person who looks after them.
+  const entries: Row[] = [];
+  const staffNames = STAFF.map(person => person.name);
+  const workingDays = (from: string, to: string) => {
+    const days: string[] = [];
+    for (let day = from; day <= to; day = addDays(day, 1)) { const weekday = new Date(`${day}T12:00:00Z`).getUTCDay(); if (weekday !== 0 && weekday !== 6) days.push(day); }
+    return days;
+  };
+  const add = (orgId: string, person: string, day: string, minutes: number, work: string, extra = false) => {
+    const start = new Date(Date.parse(`${day}T06:00:00Z`) + Math.floor(rand() * 7) * 30 * 60_000);
+    entries.push({ organisation_id: orgId, person, work, started_at: start.toISOString(), ended_at: new Date(start.getTime() + minutes * 60_000).toISOString(), minutes, extra });
+  };
+  const monthStart = `${today.slice(0, 7)}-01`;
+  for (const period of ["2026-08-01", "2026-09-01", monthStart]) {
+    const end = period === monthStart ? today : addDays(addDays(period, 32).slice(0, 8) + "01", -1);
+    const days = workingDays(period, end);
+    if (!days.length) continue;
+    for (const client of clients) {
+      const plan = FEES[client.slug];
+      if (!plan) continue;
+      let left = Math.round(plan.hours * 60);
+      while (left > 0) {
+        const minutes = Math.min(left, [30, 45, 60, 75, 90][Math.floor(rand() * 5)]);
+        const person = rand() < 0.8 ? client.manager : staffNames[Math.floor(rand() * staffNames.length)];
+        add(client.id, person, days[Math.floor(rand() * days.length)], minutes, WORK[Math.floor(rand() * WORK.length)]);
+        left -= minutes;
+      }
+    }
+  }
+  // Extra work this month, billed on top of the fee.
+  const extraFor = (slug: string) => clients.find(client => client.slug === slug);
+  const thisMonth = workingDays(monthStart, today);
+  if (thisMonth.length) {
+    const mesogeios = extraFor("mesogeios-holdings"), pixelforge = extraFor("pixelforge");
+    if (mesogeios) add(mesogeios.id, "Maria Antoniou", thisMonth[Math.floor(thisMonth.length / 2)], 180, "Refinancing pack for the bank", true);
+    if (pixelforge) add(pixelforge.id, "Sofia Georgiou", thisMonth[thisMonth.length - 1], 90, "Advice: registering for VAT in Germany", true);
+  }
+  // This week: the firm's own work fills each person's week, and Sofia's runs over.
+  const monday = addDays(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7));
+  const week = workingDays(monday, today);
+  const target: Record<string, number> = { "Maria Antoniou": 14, "Andreas Kyriakou": 24.5, "Sofia Georgiou": 37 };
+  for (const person of staffNames) {
+    const logged = entries.filter(entry => entry.person === person && String(entry.started_at).slice(0, 10) >= monday).reduce((sum, entry) => sum + Number(entry.minutes), 0);
+    let left = Math.round(target[person] * 60) - logged;
+    if (left <= 0 || !week.length) continue;
+    // A day's own work is one or two entries, as people log it, not a stack of identical blocks.
+    const internal = ["Practice admin", "Team meeting", "Training: VAT changes", "New client proposals", "Quality review", "Planning the week"];
+    const perDay = Math.ceil(left / week.length / 15) * 15;
+    week.forEach((day, index) => {
+      const minutes = Math.min(left, perDay);
+      const parts = minutes > 240 ? [Math.round(minutes / 2 / 15) * 15, minutes - Math.round(minutes / 2 / 15) * 15] : [minutes];
+      parts.forEach((part, which) => {
+        if (part <= 0) return;
+        add(org, person, day, part, internal[(index * 2 + which + staffNames.indexOf(person)) % internal.length]);
+        left -= part;
+      });
+    });
+  }
+  await pg.query(`insert into time_entries (organisation_id, person, work, started_at, ended_at, minutes, extra)
+    select organisation_id, person, work, started_at, ended_at, minutes, extra from jsonb_populate_recordset(null::time_entries, $1::jsonb)`, [JSON.stringify(entries)]);
+}

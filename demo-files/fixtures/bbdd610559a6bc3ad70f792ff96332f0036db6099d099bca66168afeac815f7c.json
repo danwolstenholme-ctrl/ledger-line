@@ -1,0 +1,53 @@
+{
+  "invoices": [
+    {
+      "pages": "1",
+      "document_type": "invoice",
+      "language": "el",
+      "supplier": {
+        "name": "ΤΥΠΟΓΡΑΦΕΙΟ ΛΕΥΚΩΣΙΑΣ ΛΤΔ",
+        "name_latin": "Lefkosia Print Shop Ltd",
+        "vat_number": "CY10477120T",
+        "country": "CY",
+        "address": "Οδός Ονασαγόρου 31, 1011 Λευκωσία",
+        "iban": "CY71002001280000001233180937"
+      },
+      "bill_to": {
+        "name": "PIXELFORGE STUDIO LTD",
+        "vat_number": "CY10420118V"
+      },
+      "client_ref": null,
+      "invoice_number": "2026/0937",
+      "issue_date": "2026-10-19",
+      "due_date": null,
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Επαγγελματικές κάρτες, 500 τεμ.",
+          "description_en": "Business cards, 500 pcs",
+          "net": 90,
+          "vat_rate": 19,
+          "vat_amount": 17.1,
+          "account_code": "400"
+        },
+        {
+          "description": "Φυλλάδια Α5, 1000 τεμ.",
+          "description_en": "A5 brochures, 1000 pcs",
+          "net": 240,
+          "vat_rate": 19,
+          "vat_amount": 45.6,
+          "account_code": "400"
+        }
+      ],
+      "totals": {
+        "net": 330,
+        "vat": 62.7,
+        "total": 392.7
+      },
+      "reverse_charge": false,
+      "handwritten_or_photo": true,
+      "confidence": "medium",
+      "warnings": []
+    }
+  ]
+}

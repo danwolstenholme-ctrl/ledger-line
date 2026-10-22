@@ -1,0 +1,53 @@
+{
+  "invoices": [
+    {
+      "pages": "1",
+      "document_type": "invoice",
+      "language": "el",
+      "supplier": {
+        "name": "ΑΙΛΑΝΤ ΜΑΡΙΝ ΦΙΟΥΛΣ ΛΤΔ",
+        "name_latin": "Island Marine Fuels Ltd",
+        "vat_number": "CY10355021F",
+        "country": "CY",
+        "address": "Λιμάνι Λεμεσού, Κρηπίδωμα 7, 3042 Λεμεσός",
+        "iban": "CY62002001950000357000112233"
+      },
+      "bill_to": {
+        "name": "ΑΙΓΑΙΟ ΜΠΛΟΥ ΘΑΛΑΣΣΙΕΣ ΥΠΗΡΕΣΙΕΣ ΛΤΔ",
+        "vat_number": "CY10412907G"
+      },
+      "client_ref": null,
+      "invoice_number": "IMF/2026/1318",
+      "issue_date": "2026-10-16",
+      "due_date": "2026-11-15",
+      "currency": "EUR",
+      "lines": [
+        {
+          "description": "Ναυτιλιακό πετρέλαιο (Marine gasoil) — λίτρα",
+          "description_en": "Marine gasoil, litres",
+          "net": 1416,
+          "vat_rate": 19,
+          "vat_amount": 269.04,
+          "account_code": "315"
+        },
+        {
+          "description": "Λιπαντικό κινητήρα 15W40 — δοχεία 20L",
+          "description_en": "Engine lubricant 15W40, 20L drums",
+          "net": 196,
+          "vat_rate": 19,
+          "vat_amount": 37.24,
+          "account_code": "315"
+        }
+      ],
+      "totals": {
+        "net": 1612,
+        "vat": 306.28,
+        "total": 1918.28
+      },
+      "reverse_charge": false,
+      "handwritten_or_photo": false,
+      "confidence": "high",
+      "warnings": []
+    }
+  ]
+}
