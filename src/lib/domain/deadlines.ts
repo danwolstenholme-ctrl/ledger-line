@@ -9,11 +9,12 @@ import { quarterLabel, vatQuarters } from "@/lib/domain/vat";
  * - VIES statement: the 15th of the month after a month with EU business sales.
  * - Provisional tax: two instalments, 31 July and 31 December.
  * - Company tax return: within 15 months of the tax year's end, so 31 March two years on.
+ * - AML review: the client's due diligence and risk rating, every 1, 2 or 3 years by risk (from its client file, not here).
  */
 
-export const DEADLINE_KINDS = ["vat_return", "vies", "provisional_tax", "tax_return"] as const;
+export const DEADLINE_KINDS = ["vat_return", "vies", "provisional_tax", "tax_return", "aml_review"] as const;
 export type DeadlineKind = (typeof DEADLINE_KINDS)[number];
-export const DEADLINE_LABELS: Record<DeadlineKind, string> = { vat_return: "VAT return", vies: "VIES statement", provisional_tax: "Provisional tax", tax_return: "Company tax return" };
+export const DEADLINE_LABELS: Record<DeadlineKind, string> = { vat_return: "VAT return", vies: "VIES statement", provisional_tax: "Provisional tax", tax_return: "Company tax return", aml_review: "AML review" };
 
 export type Obligation = { kind: DeadlineKind; periodStart: string | null; periodEnd: string; due: string; title: string };
 

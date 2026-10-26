@@ -12,3 +12,17 @@ export const EU_COUNTRIES = new Set(["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "
 export function countryName(code: string | null | undefined) {
   return COUNTRIES.find(([key]) => key === code)?.[1] ?? code ?? "";
 }
+
+/** For people: nationality and where they live. The invoicing list, and more, including every EU high-risk third country. */
+export const PERSON_COUNTRIES: readonly (readonly [string, string])[] = [
+  ...COUNTRIES,
+  ...[["AF", "Afghanistan"], ["DZ", "Algeria"], ["AO", "Angola"], ["AM", "Armenia"], ["AU", "Australia"], ["BY", "Belarus"], ["BO", "Bolivia"], ["BR", "Brazil"],
+  ["VG", "British Virgin Islands"], ["CM", "Cameroon"], ["CA", "Canada"], ["CN", "China"], ["CI", "Côte d’Ivoire"], ["CD", "Democratic Republic of the Congo"],
+  ["EG", "Egypt"], ["GE", "Georgia"], ["HT", "Haiti"], ["IS", "Iceland"], ["IN", "India"], ["IR", "Iran"], ["JO", "Jordan"], ["KZ", "Kazakhstan"], ["KE", "Kenya"],
+  ["LA", "Laos"], ["LI", "Liechtenstein"], ["MC", "Monaco"], ["MM", "Myanmar"], ["NA", "Namibia"], ["NP", "Nepal"], ["KP", "North Korea"], ["PK", "Pakistan"],
+  ["PH", "Philippines"], ["RU", "Russia"], ["RS", "Serbia"], ["SC", "Seychelles"], ["ZA", "South Africa"], ["SS", "South Sudan"], ["LK", "Sri Lanka"], ["SY", "Syria"],
+  ["TT", "Trinidad and Tobago"], ["TR", "Türkiye"], ["UA", "Ukraine"], ["VU", "Vanuatu"], ["VE", "Venezuela"], ["VN", "Vietnam"], ["YE", "Yemen"],
+  ] as [string, string][],
+].sort((a, b) => a[0] === "CY" ? -1 : b[0] === "CY" ? 1 : a[1].localeCompare(b[1]));
+
+export const personCountry = (code: string | null | undefined) => PERSON_COUNTRIES.find(([key]) => key === code)?.[1] ?? code ?? "";

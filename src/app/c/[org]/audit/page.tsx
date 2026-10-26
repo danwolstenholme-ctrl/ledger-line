@@ -17,6 +17,14 @@ const LIMIT = 150;
 const ENTITIES: Record<string, string> = { invoice: "Sales invoice", credit_note: "Credit note", supplier_credit: "Supplier's credit note", invoice_payment: "Payment received", bill: "Bill", bill_payment: "Bill payment", bank: "Bank entry", manual: "Journal", bank_line: "Bank line", captured_bill: "Bill from capture" };
 const VERBS: Record<string, string> = { posted: "posted", reversed: "reversed", matched: "matched", unmatched: "unmatched" };
 
+/** A client file's events, on the practice's own trail. */
+const CLIENT_EVENTS: Record<string, string> = {
+  "client_file:opened": "Client file started", "client_file:active": "Client taken on: books opened", "client_file:declined": "Client declined",
+  "engagement_letter:sent": "Engagement letter sent", "engagement_letter:signed": "Engagement letter signed", "client_document:received": "Due diligence document received",
+  "sanctions:screened": "Screened against the EU sanctions list", "sanctions:resolved": "Possible sanctions match decided",
+  "risk:assessed": "Risk assessed", "risk:approved": "Risk rating approved",
+};
+
 type AuditRow = { seq: number; at: string; actor: string; action: string; entity: string; detail: Record<string, unknown>; hash: string; prev_hash: string };
 
 /** What happened, in words: "Bill posted", "Lock date moved", "VAT return filed". */
@@ -24,6 +32,8 @@ function headline(row: AuditRow) {
   if (row.action === "locked") return "Lock date moved";
   if (row.action === "filed") return "VAT return filed";
   if (row.action === "checked") return "VAT number checked in VIES";
+  const client = CLIENT_EVENTS[`${row.entity}:${row.action}`];
+  if (client) return client;
   return `${ENTITIES[row.entity] ?? row.entity} ${VERBS[row.action] ?? row.action}`;
 }
 
@@ -32,6 +42,15 @@ function describe(row: AuditRow) {
   const day = (value: unknown) => typeof value === "string" && value ? formatDate(value) : null;
   if (row.action === "locked") return detail.to ? `Locked up to ${day(detail.to)}${detail.from ? `, from ${day(detail.from)}` : ""}` : `Unlocked${detail.from ? `, from ${day(detail.from)}` : ""}`;
   if (row.action === "filed") return `${periodLabel(String(detail.from), String(detail.to))} · net VAT ${formatAmount(Number(detail.net_vat ?? 0))}`;
+  if (CLIENT_EVENTS[`${row.entity}:${row.action}`]) {
+    const parts: unknown[] = [detail.company];
+    if (row.entity === "engagement_letter") parts.push(detail.by ? `by ${detail.by}` : null, detail.ip ? `from ${detail.ip}` : null, detail.hash ? `fingerprint ${String(detail.hash).slice(0, 12)}…` : null);
+    if (row.entity === "client_document") parts.push(detail.document, detail.file, detail.sha256 ? `SHA-256 ${String(detail.sha256).slice(0, 12)}…` : null);
+    if (row.entity === "sanctions") parts.push(detail.name, row.action === "screened" ? (detail.result === "clear" ? `clear on the list of ${day(detail.list)}` : `${detail.matches} possible match${detail.matches === 1 ? "" : "es"}`) : `${detail.resolution === "confirmed" ? "confirmed" : "not the same"}: ${detail.note}`);
+    if (row.entity === "risk") parts.push(row.action === "assessed" ? `${detail.level} risk, ${detail.total} of 20${detail.forced ? `: ${detail.forced}` : ""}` : `${detail.level} risk, approved as ${detail.as === "partner" ? "partner" : "compliance officer"}, next review ${day(detail.next_review)}`);
+    if (row.entity === "client_file" && detail.reason) parts.push(detail.reason);
+    return parts.filter(Boolean).join(" · ");
+  }
   if (row.action === "checked") {
     const answer = detail.error ? "no answer from the register" : detail.valid ? "valid" : "not valid";
     return [`${detail.number}: ${answer}`, detail.name, detail.consultation ? `consultation ${detail.consultation}` : null, detail.source === "demo" ? "demo answer" : null].filter(Boolean).join(" · ");

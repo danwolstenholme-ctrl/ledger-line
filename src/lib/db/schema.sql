@@ -45,6 +45,8 @@ create table organisations (
   manager                 text,
   -- The practice's own books: its clients are its customers, its fees its sales. One per practice.
   is_practice             boolean not null default false,
+  -- The first month the practice keeps the books for: deadlines start here until the first entry is posted.
+  books_from              date,
   created_at              timestamptz not null default now()
 );
 create unique index organisations_one_practice on organisations (practice_id) where is_practice;
@@ -2161,6 +2163,8 @@ create table practice_staff (
   name         text not null,
   role         text,
   weekly_hours numeric(4, 1) not null default 35 check (weekly_hours between 1 and 80),
+  -- The money laundering compliance officer: approves the risk rating of low and normal risk clients.
+  mlco         boolean not null default false,
   unique (practice_id, name)
 );
 
@@ -2331,3 +2335,227 @@ create table crm_activities (
   occurred_at     timestamptz not null default now()
 );
 create index crm_activities_enquiry_idx on crm_activities (enquiry_id, occurred_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Client files: taking a client on, and keeping them on. One file per client
+-- company, from the won enquiry to the opened books and every review after:
+-- the engagement letter as sent and as signed, the people behind the company,
+-- the documents that prove who they are, their screening against the EU
+-- sanctions list, and the risk assessment, scored as ICPAC's client
+-- risk-based approach guidance sets out. Kept on the practice's own audit trail.
+-- ---------------------------------------------------------------------------
+create table client_files (
+  id                    uuid primary key default gen_random_uuid(),
+  practice_id           uuid not null references practices (id) on delete cascade,
+  -- Set when the books are opened; an existing client's file has it from the start.
+  organisation_id       uuid unique references organisations (id) on delete cascade,
+  enquiry_id            uuid references crm_enquiries (id) on delete set null,
+  status                text not null default 'onboarding' check (status in ('onboarding', 'active', 'declined')),
+  company_name          text not null check (length(btrim(company_name)) between 1 and 200),
+  he_number             text,
+  incorporated_on       date,
+  registered_address    text,
+  business              text not null default '',
+  contact_name          text,
+  contact_email         text,
+  contact_phone         text,
+  -- What the practice will do, and for how much. The engagement letter says the same.
+  services              text[] not null default array['bookkeeping', 'vat', 'tax_return']
+                          check (services <@ array['bookkeeping', 'vat', 'payroll', 'tax_return', 'annual_accounts', 'secretarial']),
+  monthly_fee           numeric(12, 2) not null default 0 check (monthly_fee >= 0),
+  hourly_rate           numeric(12, 2) not null default 0 check (hourly_rate >= 0),
+  app_fee               numeric(12, 2) not null default 0 check (app_fee >= 0),
+  -- How the books will be set up.
+  vat_registered        boolean not null default true,
+  vat_number            text,
+  vat_quarter_end_month smallint not null default 3 check (vat_quarter_end_month between 1 and 3),
+  year_end_month        smallint not null default 12 check (year_end_month between 1 and 12),
+  books_from            date,
+  manager               text,
+  -- How the client came: met in person for identification, or not; introduced by someone else.
+  face_to_face          boolean not null default true,
+  introduced_by         text,
+  -- The one link the client uses, with no login: the letter to sign and the documents to upload.
+  client_token          text unique check (client_token ~ '^ll_cf_[A-Za-z0-9]{24}$'),
+  letter_sent_at        timestamptz,
+  letter_text           text,
+  letter_hash           text check (letter_hash ~ '^[0-9a-f]{64}$'),
+  signed_at             timestamptz,
+  signed_name           text,
+  signed_position       text,
+  signed_ip             text,
+  signed_agent          text,
+  signed_hash           text check (signed_hash ~ '^[0-9a-f]{64}$'),
+  opened_at             timestamptz,
+  opened_by             text,
+  declined_reason       text,
+  created_by            text not null,
+  created_at            timestamptz not null default now(),
+  constraint client_files_signed check ((signed_at is null) = (signed_name is null) and (signed_at is null) = (signed_hash is null)),
+  constraint client_files_active check (status <> 'active' or organisation_id is not null)
+);
+
+-- The people behind a client: its directors, secretary, shareholders, beneficial owners and anyone who signs for it.
+create table client_people (
+  id             uuid primary key default gen_random_uuid(),
+  file_id        uuid not null references client_files (id) on delete cascade,
+  name           text not null check (length(btrim(name)) between 2 and 200),
+  roles          text[] not null check (cardinality(roles) > 0 and roles <@ array['director', 'secretary', 'shareholder', 'beneficial_owner', 'signatory']),
+  ownership      numeric(5, 2) check (ownership between 0 and 100),
+  date_of_birth  date,
+  nationality    char(2),
+  residence      char(2),
+  id_kind        text check (id_kind in ('passport', 'id_card')),
+  id_number      text,
+  id_expires     date,
+  -- Politically exposed: the person, a family member of one, a known close associate, or no longer in office.
+  pep            text not null default 'no' check (pep in ('no', 'pep', 'family', 'associate', 'former')),
+  pep_detail     text,
+  created_at     timestamptz not null default now()
+);
+create index client_people_file on client_people (file_id);
+
+-- What the practice asked the client for, and what came back.
+create table client_documents (
+  id             uuid primary key default gen_random_uuid(),
+  file_id        uuid not null references client_files (id) on delete cascade,
+  person_id      uuid references client_people (id) on delete cascade,
+  kind           text not null check (kind in ('incorporation', 'registered_office', 'officers', 'shareholders', 'identity', 'address', 'bank_statements', 'prior_accounts', 'other')),
+  label          text not null,
+  requested_at   timestamptz not null default now(),
+  file_name      text,
+  media_type     text check (media_type in ('application/pdf', 'image/jpeg', 'image/png')),
+  content        bytea,
+  size_bytes     integer,
+  received_at    timestamptz,
+  received_from  text,
+  constraint client_documents_received check ((received_at is null) = (content is null))
+);
+create index client_documents_file on client_documents (file_id);
+
+-- The EU's consolidated list of persons, groups and entities subject to financial sanctions, as last fetched.
+create table sanctions_lists (
+  id            uuid primary key default gen_random_uuid(),
+  source        text not null default 'eu' check (source in ('eu')),
+  generated_on  date not null,
+  fetched_at    timestamptz not null default now(),
+  entries       integer not null
+);
+create table sanctions_entries (
+  list_id       uuid not null references sanctions_lists (id) on delete cascade,
+  entity_id     text not null,
+  kind          text not null check (kind in ('person', 'enterprise')),
+  names         text[] not null,
+  birth_dates   text[] not null default '{}',
+  countries     text[] not null default '{}',
+  programme     text,
+  reference     text,
+  designated_on date,
+  url           text,
+  primary key (list_id, entity_id)
+);
+
+-- Each screening of a name against the list: of a person, or (person_id null) of the company itself.
+create table sanctions_screenings (
+  id             uuid primary key default gen_random_uuid(),
+  file_id        uuid not null references client_files (id) on delete cascade,
+  person_id      uuid references client_people (id) on delete cascade,
+  name           text not null,
+  list_date      date not null,
+  result         text not null check (result in ('clear', 'possible')),
+  matches        jsonb not null default '[]'::jsonb,
+  -- A possible match is closed by a person: not the same, with the reason; or confirmed, which stops the client being taken on.
+  resolution     text check (resolution in ('not_the_same', 'confirmed')),
+  resolved_note  text,
+  resolved_by    text,
+  resolved_at    timestamptz,
+  screened_by    text not null,
+  screened_at    timestamptz not null default now(),
+  constraint sanctions_screenings_resolved check ((resolution is null) = (resolved_at is null) and (resolution is null or result = 'possible') and (resolution is null or length(btrim(coalesce(resolved_note, ''))) > 0))
+);
+create index sanctions_screenings_file on sanctions_screenings (file_id, screened_at desc);
+
+-- The client risk assessment: four areas scored 1 to 5, summed to 4 to 20; 17 and over high, 9 to 16 normal, 8 and under low.
+-- A politically exposed person, or a link to an EU high-risk third country, makes it high whatever the score.
+create table risk_assessments (
+  id               uuid primary key default gen_random_uuid(),
+  file_id          uuid not null references client_files (id) on delete cascade,
+  -- Each factor considered, as {area, label, score}: an area's score is the average of its factors, rounded up.
+  factors          jsonb not null check (jsonb_typeof(factors) = 'array' and jsonb_array_length(factors) >= 4),
+  client_score     smallint not null check (client_score between 1 and 5),
+  service_score    smallint not null check (service_score between 1 and 5),
+  geography_score  smallint not null check (geography_score between 1 and 5),
+  channel_score    smallint not null check (channel_score between 1 and 5),
+  total            smallint generated always as (client_score + service_score + geography_score + channel_score) stored,
+  scored_level     text not null check (scored_level in ('low', 'normal', 'high')),
+  forced_reason    text,
+  level            text not null check (level in ('low', 'normal', 'high')),
+  override_reason  text,
+  notes            text,
+  assessed_by      text not null,
+  assessed_at      timestamptz not null default now(),
+  approved_by      text,
+  approved_as      text check (approved_as in ('mlco', 'partner')),
+  approved_at      timestamptz,
+  next_review_on   date,
+  constraint risk_assessments_override check (level = scored_level or forced_reason is not null or length(btrim(coalesce(override_reason, ''))) > 0),
+  constraint risk_assessments_forced check (forced_reason is null or level = 'high'),
+  constraint risk_assessments_approved check ((approved_at is null) = (approved_by is null) and (approved_at is null) = (next_review_on is null))
+);
+create index risk_assessments_file on risk_assessments (file_id, assessed_at desc);
+
+-- A client file's events go on the practice's own audit trail.
+create function practice_org(p_practice uuid) returns uuid language sql stable as $$ select id from organisations where practice_id = p_practice and is_practice $$;
+create function audit_client_file() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    perform audit_append(practice_org(new.practice_id), 'opened', 'client_file', new.id, jsonb_build_object('company', new.company_name, 'status', new.status));
+  else
+    if new.letter_sent_at is distinct from old.letter_sent_at and new.letter_sent_at is not null then
+      perform audit_append(practice_org(new.practice_id), 'sent', 'engagement_letter', new.id, jsonb_build_object('company', new.company_name, 'hash', new.letter_hash));
+    end if;
+    if new.signed_at is distinct from old.signed_at and new.signed_at is not null then
+      perform audit_append(practice_org(new.practice_id), 'signed', 'engagement_letter', new.id, jsonb_build_object('company', new.company_name, 'by', new.signed_name, 'hash', new.signed_hash, 'ip', new.signed_ip));
+    end if;
+    if new.status is distinct from old.status then
+      perform audit_append(practice_org(new.practice_id), new.status, 'client_file', new.id, jsonb_build_object('company', new.company_name, 'reason', new.declined_reason));
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger client_files_audit after insert or update on client_files for each row execute function audit_client_file();
+
+create function audit_client_check() returns trigger language plpgsql as $$
+declare v_file client_files;
+begin
+  select * into v_file from client_files where id = new.file_id;
+  if tg_table_name = 'sanctions_screenings' then
+    if tg_op = 'INSERT' then
+      perform audit_append(practice_org(v_file.practice_id), 'screened', 'sanctions', new.id, jsonb_build_object('company', v_file.company_name, 'name', new.name, 'result', new.result, 'list', new.list_date, 'matches', jsonb_array_length(new.matches)));
+    elsif new.resolution is distinct from old.resolution then
+      perform audit_append(practice_org(v_file.practice_id), 'resolved', 'sanctions', new.id, jsonb_build_object('company', v_file.company_name, 'name', new.name, 'resolution', new.resolution, 'note', new.resolved_note));
+    end if;
+  else
+    if tg_op = 'INSERT' then
+      perform audit_append(practice_org(v_file.practice_id), 'assessed', 'risk', new.id, jsonb_build_object('company', v_file.company_name, 'total', new.total, 'level', new.level, 'forced', new.forced_reason, 'override', new.override_reason));
+    elsif new.approved_at is distinct from old.approved_at and new.approved_at is not null then
+      perform audit_append(practice_org(v_file.practice_id), 'approved', 'risk', new.id, jsonb_build_object('company', v_file.company_name, 'level', new.level, 'as', new.approved_as, 'next_review', new.next_review_on));
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger sanctions_screenings_audit after insert or update on sanctions_screenings for each row execute function audit_client_check();
+
+-- A document received for due diligence, with the fingerprint of the file as it arrived.
+create function audit_client_document() returns trigger language plpgsql as $$
+declare v_file client_files;
+begin
+  if new.received_at is not null and old.received_at is null then
+    select * into v_file from client_files where id = new.file_id;
+    perform audit_append(practice_org(v_file.practice_id), 'received', 'client_document', new.id, jsonb_build_object('company', v_file.company_name, 'document', new.label,
+      'file', new.file_name, 'from', new.received_from, 'sha256', encode(sha256(new.content), 'hex')));
+  end if;
+  return new;
+end $$;
+create trigger client_documents_audit after update on client_documents for each row execute function audit_client_document();
+create trigger risk_assessments_audit after insert or update on risk_assessments for each row execute function audit_client_check();

@@ -475,8 +475,10 @@ test("every client's deadlines are worked out from their books, and one that sli
   await page.getByRole("listitem").filter({ hasText: "Provisional tax 2026, first instalment" }).getByRole("button", { name: "Mark done" }).click();
   await expect(page.getByRole("listitem").filter({ hasText: "Provisional tax 2026, first instalment" })).toContainText("Done");
 
+  // What is still overdue is Mesogeios' AML review: a deadline of the practice's own, from the client file.
   await page.goto("/deadlines?view=overdue");
-  await expect(page.getByText("Nothing is overdue")).toBeVisible();
+  await expect(page.getByText("Provisional tax 2026, first instalment")).toHaveCount(0);
+  await expect(page.getByText("AML review, low risk")).toBeVisible();
 });
 
 test("a timer started on a client from the top bar runs, stops, and its time lands on the Time page", async ({ page }) => {
@@ -565,4 +567,77 @@ test("the practice checks any EU VAT number, sees every client's EU numbers, and
   await expect(page.getByText(/^\d+ numbers checked against VIES just now/)).toBeVisible();
   await expect(table.getByRole("row", { name: /Brabant Digital BV/ })).toContainText(/^.*Valid, /);
   await expect(table.getByRole("row", { name: /Nimbus Cloud Services BV/ })).toContainText("Registered to STRATOCUMULUS HOSTING B.V.");
+});
+
+test("a new client is taken on: the letter signed through their link, everyone screened, the risk approved, then the books open", async ({ page, context }) => {
+  await page.goto("/clients");
+  await page.getByRole("link", { name: /Kypros Ferry Lines Ltd/ }).first().click();
+  await page.getByRole("button", { name: "Send the engagement letter" }).click();
+  await expect(page.getByText(/Waiting for Andreas Michaelides to sign/)).toBeVisible();
+  const link = (await page.locator("pre").first().innerText()).trim();
+  expect(link).toMatch(/\/o\/ll_cf_[A-Za-z0-9]{24}$/);
+
+  const client = await context.newPage();
+  await client.goto(link);
+  await expect(client.getByRole("heading", { name: "Read and sign your engagement letter" })).toBeVisible();
+  await client.getByLabel(/I am authorised/).check();
+  await client.getByRole("button", { name: "Sign the letter" }).click();
+  await expect(client.getByText("Thank you: the letter is signed. You can download a copy below.")).toBeVisible();
+  const signed = await client.request.get(`${link}/letter.pdf`);
+  expect(signed.headers()["content-type"]).toContain("application/pdf");
+  await client.getByLabel("Alexander Petrov: proof of address, no more than six months old").setInputFiles({ name: "utility-bill.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+  await client.getByRole("listitem").filter({ hasText: "Alexander Petrov: proof of address" }).getByRole("button", { name: "Upload" }).click();
+  await expect(client.getByText("Received. Thank you.")).toBeVisible();
+  await client.close();
+
+  await page.reload();
+  await expect(page.getByText(/Signed by Andreas Michaelides, Director/)).toBeVisible();
+  await page.getByRole("button", { name: "Screen everyone" }).click();
+  await expect(page.getByText("2 possible matches")).toBeVisible();
+  await expect(page.getByText("Alexander PETROV", { exact: true })).toBeVisible();
+  await page.getByLabel("The reason for your decision").fill("Born 2 September 1984, Russian passport seen at our office: the listed persons were born in 1958 and 1979.");
+  await page.getByRole("button", { name: "Record the decision" }).click();
+  await expect(page.getByText(/Not the same person · decided by Maria Antoniou/)).toBeVisible();
+
+  await expect(page.getByText(/Total 9 of 20/)).toBeVisible();
+  await page.getByRole("button", { name: "Record the assessment" }).click();
+  await page.getByRole("button", { name: "Approve as compliance officer" }).click();
+  await expect(page.getByText(/Approved by Maria Antoniou as compliance officer/)).toBeVisible();
+  await page.getByRole("button", { name: "Take them on: open the books" }).click();
+  await expect(page).toHaveURL(/\/c\/kypros-ferry-lines\?opened=1$/);
+  await expect(page.getByText(/Kypros Ferry Lines Ltd is taken on, and its books are open/)).toBeVisible();
+
+  await page.goto("/c/saltlake-accounting/audit");
+  await expect(page.getByRole("row", { name: /Engagement letter signed/ })).toContainText("Andreas Michaelides (client)");
+  await expect(page.getByText("Client taken on: books opened")).toBeVisible();
+});
+
+test("a politically exposed director makes a client high risk whatever the score, approved by a partner", async ({ page }) => {
+  await page.goto("/clients/new");
+  await page.getByLabel("Company name").fill("Akamas Wind Energy Ltd");
+  await page.getByRole("button", { name: "Start the client file" }).click();
+  await expect(page.getByRole("heading", { name: "Akamas Wind Energy Ltd" })).toBeVisible();
+  await page.getByLabel("Full name, as on the passport").fill("Stavros Kleanthous");
+  await page.getByLabel("Shares %").fill("100");
+  await page.getByLabel("Politically exposed?").selectOption("pep");
+  await page.getByLabel("The public function").fill("Member of the House of Representatives since 2021");
+  await page.getByRole("button", { name: "Add the person" }).click();
+  await expect(page.getByText(/Holding 100%, Stavros Kleanthous is recorded as a beneficial owner/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/High whatever the score: Stavros Kleanthous is a politically exposed person/)).toBeVisible();
+  await page.getByRole("button", { name: "Record the assessment" }).click();
+  await expect(page.getByText("Enhanced due diligence · total")).toBeVisible();
+  await page.getByRole("button", { name: "Approve as partner" }).click();
+  await expect(page.getByText(/Approved by Maria Antoniou as partner/)).toBeVisible();
+});
+
+test("each client's AML review is a deadline, and the file it opens shows the risk to review", async ({ page }) => {
+  await page.goto("/deadlines");
+  const review = page.getByRole("listitem").filter({ hasText: "AML review" }).filter({ hasText: "Mesogeios Holdings" });
+  await expect(review).toContainText("7 days overdue");
+  await review.getByRole("link", { name: "Open the file" }).click();
+  await expect(page.getByRole("heading", { name: "Mesogeios Holdings Ltd" })).toBeVisible();
+  await expect(page.getByText(/Approved by Maria Antoniou as compliance officer/)).toBeVisible();
+  await page.goto("/clients");
+  await expect(page.getByRole("row", { name: /Kalamies Dental Clinic/ })).toContainText("in 19 days");
 });

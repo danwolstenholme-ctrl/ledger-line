@@ -3,6 +3,7 @@ import "server-only";
 import { sql } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
 import { daysUntil, obligations, type DeadlineKind } from "@/lib/domain/deadlines";
+import { RISK_LEVELS, type RiskLevel } from "@/lib/domain/onboarding";
 import { getDemoUser, getOrganisations } from "@/lib/org";
 
 /**
@@ -17,6 +18,8 @@ export type DeadlineState = "overdue" | "due" | "running" | "done";
 export type DeadlineRow = {
   key: string; kind: DeadlineKind; title: string; due: string; daysLeft: number; periodStart: string | null; periodEnd: string;
   state: DeadlineState; doneOn: string | null; doneBy: string | null; ready: { bankLines: number; documents: number } | null; amount: number | null;
+  /** An AML review: the client file it belongs to, and the risk it was rated at. */
+  review?: { fileId: string; level: RiskLevel } | null;
   company: { id: string; slug: string; name: string; manager: string | null };
 };
 export const DEADLINE_VIEWS = [{ key: "all", label: "All" }, { key: "mine", label: "Mine" }, { key: "overdue", label: "Overdue" }] as const;
@@ -28,7 +31,7 @@ const AHEAD_DAYS = 90;
 export async function getDeadlines(filters: { view?: DeadlineView; client?: string } = {}) {
   const today = firmToday();
   const until = new Date(Date.parse(`${today}T12:00:00Z`) + AHEAD_DAYS * 86_400_000).toISOString().slice(0, 10);
-  const [organisations, user, filed, marks, euMonths, lines, reviews, starts] = await Promise.all([
+  const [organisations, user, filed, marks, euMonths, lines, reviews, starts, amlReviews] = await Promise.all([
     getOrganisations(),
     getDemoUser(),
     sql<{ organisation_id: string; period_to: string; filed_on: string }>("select organisation_id, period_to, filed_on from vat_returns"),
@@ -40,12 +43,16 @@ export async function getDeadlines(filters: { view?: DeadlineView; client?: stri
     sql<{ organisation_id: string; txn_date: string }>("select organisation_id, txn_date from v_bank_statement_lines where status in ('unmatched', 'partial')"),
     sql<{ organisation_id: string; count: number }>("select organisation_id, count(*) as count from capture_items where status = 'review' and organisation_id is not null group by organisation_id"),
     sql<{ organisation_id: string; start: string }>("select organisation_id, to_char(date_trunc('month', min(entry_date)), 'YYYY-MM-DD') as start from journal_entries group by organisation_id"),
+    // Each client's next AML review: set by its latest approved risk assessment. Approving the next one moves it on.
+    sql<{ file_id: string; organisation_id: string; level: RiskLevel; next_review_on: string }>(`select f.id as file_id, f.organisation_id, a.level, a.next_review_on from client_files f
+      join lateral (select level, to_char(next_review_on, 'YYYY-MM-DD') as next_review_on from risk_assessments where file_id = f.id and approved_at is not null order by approved_at desc limit 1) a on true
+      where f.status = 'active' and f.organisation_id is not null`),
   ]);
   const rows: DeadlineRow[] = [];
   for (const org of organisations) {
     if (filters.client && org.slug !== filters.client) continue;
     const own = euMonths.filter(row => row.organisation_id === org.id);
-    const booksFrom = starts.find(row => row.organisation_id === org.id)?.start ?? BOOKS_FROM;
+    const booksFrom = starts.find(row => row.organisation_id === org.id)?.start ?? (org.books_from ? String(org.books_from).slice(0, 10) : BOOKS_FROM);
     for (const item of obligations({ registered: org.vat_registered, quarterEndMonth: org.vat_quarter_end_month, booksFrom, until, euSalesMonths: own.map(row => row.month) })) {
       let doneOn: string | null = null, doneBy: string | null = null;
       if (item.kind === "vat_return") {
@@ -68,6 +75,14 @@ export async function getDeadlines(filters: { view?: DeadlineView; client?: stri
       rows.push({ key: `${org.id}:${item.kind}:${item.periodEnd}`, kind: item.kind, title: item.title, due: item.due, daysLeft, periodStart: item.periodStart, periodEnd: item.periodEnd,
         state, doneOn, doneBy, ready, amount, company: { id: org.id, slug: org.slug, name: org.name, manager: org.manager } });
     }
+  }
+  for (const review of amlReviews) {
+    const org = organisations.find(item => item.id === review.organisation_id);
+    if (!org || (filters.client && org.slug !== filters.client) || review.next_review_on > until) continue;
+    const daysLeft = daysUntil(today, review.next_review_on);
+    rows.push({ key: `${org.id}:aml_review:${review.next_review_on}`, kind: "aml_review", title: `AML review, ${RISK_LEVELS[review.level].label.toLowerCase()} risk`, due: review.next_review_on, daysLeft,
+      periodStart: null, periodEnd: review.next_review_on, state: daysLeft < 0 ? "overdue" : "due", doneOn: null, doneBy: null, ready: null, amount: null,
+      review: { fileId: review.file_id, level: review.level }, company: { id: org.id, slug: org.slug, name: org.name, manager: org.manager } });
   }
   const view = filters.view ?? "all";
   const shown = rows.filter(row => view === "mine" ? row.company.manager === user.name : view === "overdue" ? row.state === "overdue" : true)

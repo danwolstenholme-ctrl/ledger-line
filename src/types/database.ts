@@ -172,7 +172,9 @@ export type OrganisationRow = {
   lock_date: string | null; default_bank_account_id: string | null; ai_suggestions: boolean; contact_name: string | null;
   contact_email: string | null; address: string | null; invoice_prefix: string; payment_terms_days: number;
   /** The colour of its documents' headings and totals, and the terms printed at their foot. */
-  invoice_accent: string; invoice_footer: string | null; manager: string | null; is_practice: boolean; created_at: string;
+  invoice_accent: string; invoice_footer: string | null; manager: string | null; is_practice: boolean;
+  /** The first month kept in Ledgerline, for a company whose books were opened before anything was posted. */
+  books_from: string | null; created_at: string;
 };
 export type CustomerRow = { id: string; organisation_id: string; name: string; email: string | null; phone: string | null; vat_number: string | null; country: string; address: string | null; eu_business: boolean; default_account_id: string | null;
   /** Days to pay; the company's terms when null. */

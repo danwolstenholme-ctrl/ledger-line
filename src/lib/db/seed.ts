@@ -3,6 +3,12 @@ import path from "node:path";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 
+import { gunzipSync } from "node:zlib";
+
+import { STANDARD_CHART } from "@/lib/domain/chart";
+import { assessRisk, documentRequests, engagementLetter, letterText, nextReview, suggestFactors, type Person, type Role, type Service } from "@/lib/domain/onboarding";
+import { SANCTIONS_INSERT, type SanctionsEntry } from "@/lib/domain/sanctions";
+
 /**
  * The demo practice: fictional through and through. One practice, six client
  * companies, Jul 2025 – Oct 2026. Generated from a fixed seed, so a reset
@@ -65,46 +71,7 @@ type Profile = {
   scale?: number;
 };
 
-const BASE: Account[] = [
-  { code: "610", name: "Accounts receivable", type: "current_asset", role: "receivable", description: "What customers owe on issued invoices" },
-  { code: "620", name: "Prepayments", type: "current_asset" },
-  { code: "630", name: "Stock", type: "current_asset" },
-  { code: "720", name: "Computer equipment", type: "fixed_asset" },
-  { code: "730", name: "Motor vehicles", type: "fixed_asset" },
-  { code: "740", name: "Plant, machinery and fittings", type: "fixed_asset" },
-  { code: "800", name: "Accounts payable", type: "current_liability", role: "payable", description: "What the company owes on unpaid bills" },
-  { code: "820", name: "VAT", type: "current_liability", role: "vat", description: "VAT on sales less VAT on purchases" },
-  { code: "825", name: "Social insurance and GESY payable", type: "current_liability" },
-  { code: "830", name: "Accruals", type: "current_liability" },
-  { code: "840", name: "Corporation tax payable", type: "current_liability" },
-  { code: "850", name: "Directors' current account", type: "current_liability" },
-  { code: "900", name: "Bank loan", type: "non_current_liability" },
-  { code: "950", name: "Share capital", type: "equity" },
-  { code: "960", name: "Retained earnings", type: "equity", role: "retained_earnings", description: "Profit kept from earlier years" },
-  { code: "260", name: "Other income", type: "other_income" },
-  { code: "270", name: "Interest income", type: "other_income" },
-  { code: "400", name: "Advertising and marketing", type: "expense" },
-  { code: "404", name: "Bank charges", type: "expense" },
-  { code: "408", name: "Cleaning", type: "expense" },
-  { code: "412", name: "Accounting and audit fees", type: "expense" },
-  { code: "416", name: "Depreciation", type: "depreciation" },
-  { code: "420", name: "Entertainment and meals", type: "expense" },
-  { code: "425", name: "Postage and courier", type: "expense" },
-  { code: "429", name: "General expenses", type: "expense" },
-  { code: "433", name: "Insurance", type: "expense" },
-  { code: "437", name: "Interest paid", type: "expense" },
-  { code: "441", name: "Licences, levies and subscriptions", type: "expense" },
-  { code: "445", name: "Electricity and water", type: "expense" },
-  { code: "449", name: "Motor vehicle running costs and fuel", type: "expense" },
-  { code: "453", name: "Office expenses and stationery", type: "expense" },
-  { code: "469", name: "Rent", type: "expense" },
-  { code: "473", name: "Repairs and maintenance", type: "expense" },
-  { code: "477", name: "Salaries and wages", type: "expense" },
-  { code: "478", name: "Social insurance, GESY and employer funds", type: "expense" },
-  { code: "485", name: "Software and IT", type: "expense" },
-  { code: "489", name: "Telephone and internet", type: "expense" },
-  { code: "493", name: "Travel", type: "expense" },
-];
+const BASE: Account[] = STANDARD_CHART;
 
 const seqNumber = (prefix: string) => (seq: number, month: string) => `${prefix}${month.slice(2, 4)}${month.slice(5, 7)}-${String(seq).padStart(3, "0")}`;
 const UTILITIES = (registered = true): SupplierSpec[] => [
@@ -536,6 +503,7 @@ export async function seedDemo(pg: PGlite) {
   await seedPractice(pg);
   await seedDeadlines(pg);
   await seedVies(pg);
+  await seedClientFiles(pg);
 }
 
 // ---------------------------------------------------------------------------
@@ -954,7 +922,7 @@ async function seedVies(pg: PGlite) {
 async function seedPractice(pg: PGlite) {
   const today = new Date().toISOString().slice(0, 10);
   const practiceId = (await pg.query<{ id: string }>("select id from practices limit 1")).rows[0].id;
-  for (const person of STAFF) await pg.query("insert into practice_staff (practice_id, name, role, weekly_hours) values ($1, $2, $3, $4)", [practiceId, person.name, person.role, person.weekly_hours]);
+  for (const person of STAFF) await pg.query("insert into practice_staff (practice_id, name, role, weekly_hours, mlco) values ($1, $2, $3, $4, $5)", [practiceId, person.name, person.role, person.weekly_hours, person.name === "Maria Antoniou"]);
   const clients = (await pg.query<{ id: string; slug: string; name: string; vat_number: string | null; vat_registered: boolean; contact_email: string | null; address: string | null; manager: string }>(
     "select id, slug, name, vat_number, vat_registered, contact_email, address, manager from organisations order by name")).rows;
 
@@ -1067,4 +1035,174 @@ async function seedPractice(pg: PGlite) {
   }
   await pg.query(`insert into time_entries (organisation_id, person, work, started_at, ended_at, minutes, extra)
     select organisation_id, person, work, started_at, ended_at, minutes, extra from jsonb_populate_recordset(null::time_entries, $1::jsonb)`, [JSON.stringify(entries)]);
+}
+
+// ---------------------------------------------------------------------------
+// Client files. The EU sanctions list as a snapshot (scripts/make-sanctions-snapshot.mts),
+// so screening works with no network. Every client's due diligence: the
+// letter signed when the books began, the people behind it, their documents,
+// screened clear on the snapshot and rated. Mesogeios' review is a week
+// overdue and Kalamies' is due in three weeks. And Kypros Ferry Lines, won
+// from the firm's own website form five days ago, half way through being
+// taken on: the letter still to send, one document still to come, nobody
+// screened yet. Its 40% owner shares his name with two listed persons, born
+// in other years: the screening shows how a namesake is ruled out.
+// ---------------------------------------------------------------------------
+
+type SeedPerson = { name: string; roles: Role[]; ownership: number | null; born: string; nationality: string; residence: string; id: ["passport" | "id_card", string, string]; pep?: Person["pep"] };
+const CLIENT_PEOPLE: Record<string, SeedPerson[]> = {
+  "aegean-blue-marine": [
+    { name: "Christos Panayiotou", roles: ["director", "shareholder"], ownership: 70, born: "1968-11-02", nationality: "CY", residence: "CY", id: ["id_card", "0811204", "2031-05-17"] },
+    { name: "Ioanna Panayiotou", roles: ["secretary", "shareholder"], ownership: 30, born: "1972-04-19", nationality: "CY", residence: "CY", id: ["id_card", "0927731", "2029-09-03"] },
+  ],
+  "troodos-gold": [{ name: "Eleni Kyprianou", roles: ["director", "shareholder"], ownership: 50, born: "1979-06-08", nationality: "CY", residence: "CY", id: ["id_card", "1044582", "2030-02-11"] },
+    { name: "Giorgos Kyprianou", roles: ["shareholder"], ownership: 50, born: "1976-01-23", nationality: "CY", residence: "CY", id: ["id_card", "0993217", "2028-12-01"] }],
+  "kalamies-dental": [{ name: "Sofia Hadjioannou", roles: ["director", "shareholder"], ownership: 100, born: "1981-09-14", nationality: "CY", residence: "CY", id: ["passport", "K00812734", "2032-03-30"] }],
+  "larnaka-roast": [{ name: "Marios Georgiou", roles: ["director", "shareholder"], ownership: 70, born: "1985-02-27", nationality: "CY", residence: "CY", id: ["id_card", "1187340", "2031-08-22"] },
+    { name: "Katerina Georgiou", roles: ["shareholder"], ownership: 30, born: "1987-07-05", nationality: "GR", residence: "CY", id: ["id_card", "AK 412873", "2033-01-14"] }],
+  "pixelforge": [{ name: "Nikos Savva", roles: ["director", "shareholder"], ownership: 70, born: "1990-03-11", nationality: "CY", residence: "CY", id: ["passport", "K01294551", "2033-06-09"] },
+    { name: "Daniel Weber", roles: ["director", "shareholder"], ownership: 30, born: "1988-12-01", nationality: "DE", residence: "CY", id: ["passport", "C4L9X2T7M", "2030-10-28"] }],
+  "mesogeios-holdings": [{ name: "Petros Constantinou", roles: ["director", "shareholder"], ownership: 100, born: "1959-05-30", nationality: "CY", residence: "CY", id: ["passport", "K00371920", "2029-04-04"] },
+    { name: "Elena Constantinou", roles: ["director"], ownership: null, born: "1962-10-12", nationality: "CY", residence: "CY", id: ["id_card", "0688415", "2030-07-19"] }],
+};
+const CLIENT_SERVICES: Record<string, Service[]> = {
+  "aegean-blue-marine": ["bookkeeping", "vat", "payroll", "tax_return", "annual_accounts"], "troodos-gold": ["bookkeeping", "vat", "payroll", "tax_return"],
+  "kalamies-dental": ["bookkeeping", "payroll", "tax_return", "annual_accounts"], "larnaka-roast": ["bookkeeping", "vat", "payroll", "tax_return"],
+  "pixelforge": ["bookkeeping", "vat", "tax_return", "annual_accounts"], "mesogeios-holdings": ["bookkeeping", "vat", "tax_return", "annual_accounts", "secretarial"],
+};
+/** Days from today to each client's next AML review. */
+const REVIEW_IN: Record<string, number> = { "aegean-blue-marine": 412, "troodos-gold": 655, "kalamies-dental": 19, "larnaka-roast": 287, "pixelforge": 530, "mesogeios-holdings": -7 };
+
+/** A one-page PDF marked as demo data, standing in for a scanned document. Latin text only. */
+function demoPdf(lines: string[]) {
+  const text = lines.map((line, index) => `BT /F1 ${index === 0 ? 15 : 10.5} Tf 56 ${770 - index * 24} Td (${line.replace(/[()\\]/g, char => `\\${char}`)}) Tj ET`).join("\n");
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", `<< /Length ${Buffer.byteLength(text, "latin1")} >>\nstream\n${text}\nendstream`];
+  let out = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((object, index) => { offsets.push(Buffer.byteLength(out, "latin1")); out += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = Buffer.byteLength(out, "latin1");
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, "latin1");
+}
+
+async function seedSanctionsSnapshot(pg: PGlite) {
+  const file = path.join(process.cwd(), "src", "lib", "db", "seed-files", "eu-sanctions.json.gz");
+  const snapshot = JSON.parse(gunzipSync(fs.readFileSync(file)).toString("utf8")) as { generatedOn: string; entries: SanctionsEntry[] };
+  const list = randomUUID();
+  await pg.query("insert into sanctions_lists (id, source, generated_on, fetched_at, entries) values ($1, 'eu', $2, $3, $4)", [list, snapshot.generatedOn, `${snapshot.generatedOn}T15:10:14Z`, snapshot.entries.length]);
+  for (let start = 0; start < snapshot.entries.length; start += 1000) await pg.query(SANCTIONS_INSERT, [list, JSON.stringify(snapshot.entries.slice(start, start + 1000))]);
+  return snapshot.generatedOn;
+}
+
+async function seedClientFiles(pg: PGlite) {
+  // The files' history is the demo's starting point, not something done in it: it stays off the audit trail.
+  await pg.query("select set_config('ledgerline.seeding', 'on', false)");
+  try { await writeClientFiles(pg); } finally { await pg.query("select set_config('ledgerline.seeding', '', false)"); }
+}
+
+async function writeClientFiles(pg: PGlite) {
+  const today = new Date().toISOString().slice(0, 10);
+  const listDate = await seedSanctionsSnapshot(pg);
+  const practice = (await pg.query<{ id: string; org: string; name: string; address: string | null }>("select p.id, o.id as org, o.name, o.address from practices p join organisations o on o.practice_id = p.id and o.is_practice limit 1")).rows[0];
+  const clients = (await pg.query<{ id: string; slug: string; name: string; he_number: string | null; industry: string; vat_number: string | null; vat_registered: boolean; vat_quarter_end_month: number;
+    contact_name: string | null; contact_email: string | null; address: string | null; manager: string | null; monthly_fee: number; hourly_rate: number; app_fee: number }>(`
+    select o.id, o.slug, o.name, o.he_number, o.industry, o.vat_number, o.vat_registered, o.vat_quarter_end_month, o.contact_name, o.contact_email, o.address, o.manager,
+           f.monthly_fee, f.hourly_rate, f.app_fee from organisations o join client_fees f on f.organisation_id = o.id where not o.is_practice order by o.name`)).rows;
+  const at = (date: string, time = "10:00:00") => `${date}T${time}.000Z`;
+
+  for (const client of clients) {
+    const people = CLIENT_PEOPLE[client.slug] ?? [];
+    const services = CLIENT_SERVICES[client.slug] ?? ["bookkeeping", "vat", "tax_return"];
+    const contact = (client.contact_name ?? people[0]?.name ?? "").replace(/^Dr\s+/, "");
+    const fileId = randomUUID(), signedOn = "2025-06-20";
+    const letter = engagementLetter({ date: "2025-06-16", practice: { name: practice.name, address: practice.address, partner: "Maria Antoniou" },
+      file: { company_name: client.name, registered_address: client.address, contact_name: contact, services, monthly_fee: Number(client.monthly_fee), hourly_rate: Number(client.hourly_rate), app_fee: Number(client.app_fee), books_from: "2025-07-01" } });
+    const hash = createHash("sha256").update(letterText(letter)).digest("hex");
+    const token = `ll_cf_${createHash("sha256").update(`client-link:${client.slug}`).digest("base64").replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`;
+    await pg.query(`insert into client_files (id, practice_id, organisation_id, status, company_name, he_number, registered_address, business, contact_name, contact_email, services, monthly_fee, hourly_rate, app_fee,
+        vat_registered, vat_number, vat_quarter_end_month, year_end_month, books_from, manager, face_to_face, client_token, letter_sent_at, letter_text, letter_hash,
+        signed_at, signed_name, signed_position, signed_ip, signed_agent, signed_hash, opened_at, opened_by, created_by, created_at)
+      values ($1, $2, $3, 'active', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 12, '2025-07-01', $17, true, $18, $19, $20, $21, $22, $23, 'Director', $24, $25, $21, $26, 'Maria Antoniou', 'Maria Antoniou', $27)`,
+      [fileId, practice.id, client.id, client.name, client.he_number, client.address, client.industry, contact, client.contact_email, services, client.monthly_fee, client.hourly_rate, client.app_fee,
+       client.vat_registered, client.vat_number, client.vat_quarter_end_month, client.manager, token, at("2025-06-16", "09:12:00"), JSON.stringify(letter), hash,
+       at(signedOn, "15:42:17"), people[0]?.name ?? contact, `203.0.113.${20 + clients.indexOf(client) * 7}`, "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)", at("2025-06-30", "11:20:00"), at("2025-06-12", "08:40:00")]);
+    const ids: string[] = [];
+    for (const person of people) {
+      const id = randomUUID();
+      ids.push(id);
+      const roles = person.ownership && person.ownership > 25 ? [...person.roles, "beneficial_owner" as const] : person.roles;
+      await pg.query(`insert into client_people (id, file_id, name, roles, ownership, date_of_birth, nationality, residence, id_kind, id_number, id_expires, pep, created_at)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [id, fileId, person.name, roles, person.ownership, person.born, person.nationality, person.residence, ...person.id, person.pep ?? "no", at("2025-06-12", "09:00:00")]);
+    }
+    const stored = (await pg.query<Person>("select id, name, roles, ownership, date_of_birth, nationality, residence, id_kind, id_number, id_expires, pep, pep_detail from client_people where file_id = $1 order by created_at, name", [fileId])).rows;
+    for (const request of documentRequests(stored, "2025-07-01")) {
+      const content = demoPdf([`Demo document: ${request.label.replace(/[^\x20-\x7e]/g, "'")}`, client.name, "Fictional demo data for Ledgerline. Not a real document."]);
+      await pg.query(`insert into client_documents (file_id, person_id, kind, label, requested_at, file_name, media_type, content, size_bytes, received_at, received_from)
+        values ($1, $2, $3, $4, $5, $6, 'application/pdf', $7, $8, $9, 'client')`, [fileId, request.personId, request.kind, request.label, at("2025-06-16", "09:12:00"),
+        `${request.label.replace(/[^A-Za-z0-9 ]+/g, " ").trim().slice(0, 60)}.pdf`, content, content.length, at("2025-06-18", "18:05:00")]);
+    }
+    // Screened when the list of the snapshot came out, and clear: the company and each person.
+    const screenedAt = at(addDays(today, -2), "08:30:00");
+    await pg.query("insert into sanctions_screenings (file_id, person_id, name, list_date, result, screened_by, screened_at) values ($1, null, $2, $3, 'clear', 'Maria Antoniou', $4)", [fileId, client.name, listDate, screenedAt]);
+    for (const person of stored) await pg.query("insert into sanctions_screenings (file_id, person_id, name, list_date, result, screened_by, screened_at) values ($1, $2, $3, $4, 'clear', 'Maria Antoniou', $5)", [fileId, person.id, person.name, listDate, screenedAt]);
+    // The latest approved assessment, dated so its next review falls where REVIEW_IN says.
+    const factors = suggestFactors({ business: client.industry, services, face_to_face: true, introduced_by: null }, stored);
+    const result = assessRisk(factors, stored);
+    const review = addDays(today, REVIEW_IN[client.slug] ?? 400);
+    const years = { low: 3, normal: 2, high: 1 }[result.level];
+    const approvedOn = `${Number(review.slice(0, 4)) - years}${review.slice(4)}`;
+    if (nextReview(approvedOn, result.level) !== review) throw new Error(`${client.slug}: review date does not line up`);
+    await pg.query(`insert into risk_assessments (file_id, factors, client_score, service_score, geography_score, channel_score, scored_level, forced_reason, level, assessed_by, assessed_at, approved_by, approved_as, approved_at, next_review_on)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Maria Antoniou', $10, 'Maria Antoniou', 'mlco', $11, $12)`,
+      [fileId, JSON.stringify(factors), result.scores.client, result.scores.service, result.scores.geography, result.scores.channel, result.scored, result.forced, result.level,
+       at(approvedOn, "09:30:00"), at(approvedOn, "16:10:00"), review]);
+  }
+
+  // The firm's own pipeline: who has asked Saltlake Accounting to keep their books.
+  const enquiries = [
+    { company: "Kypros Ferry Lines Ltd", person: "Andreas Michaelides", service: "Bookkeeping, VAT, payroll and company tax", stage: "won", value: 7800, days: 9, changed: 5, channel: "form" },
+    { company: "Limassol Car Rentals Ltd", person: "Stelios Andreou", service: "VAT registration and monthly books", stage: "new", value: 4200, days: 1, changed: 1, channel: "form" },
+    { company: "Paphos Yoga House", person: "Christina Ioannou", service: "Bookkeeping for a new studio", stage: "proposal", value: 2400, days: 12, changed: 4, channel: "manual" },
+    { company: "Olive and Thyme Catering Ltd", person: "Despina Charalambous", service: "Payroll for 14 staff and the annual accounts", stage: "contacted", value: 5400, days: 6, changed: 3, channel: "manual" },
+  ];
+  const enquiryIds: Record<string, string> = {};
+  for (const [index, enquiry] of enquiries.entries()) {
+    const id = randomUUID();
+    enquiryIds[enquiry.company] = id;
+    const won = enquiry.stage === "won";
+    await pg.query(`insert into crm_enquiries (id, organisation_id, reference, full_name, company, email, phone, source, channel, service, stage, value, owner, next_action, next_action_due, summary, stage_changed_at, created_at)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+      [id, practice.org, `SA-2026-${String(61 + index).padStart(4, "0")}`, enquiry.person, enquiry.company, `${enquiry.person.split(" ")[0].toLowerCase()}@${enquiry.company.toLowerCase().replace(/ (ltd|house)$/, "").replace(/[^a-z]+/g, "")}.example`,
+       `+357 99 ${String(512330 + index * 4417).slice(0, 6)}`, enquiry.channel === "form" ? "Website" : "Referral", enquiry.channel, enquiry.service, enquiry.stage, enquiry.value,
+       index % 2 ? "Andreas Kyriakou" : "Maria Antoniou", won ? null : ["Call Stelios back", "Send the proposal", "Chase Despina for a decision"][index - 1] ?? null, won ? null : addDays(today, index),
+       `${enquiry.service}. ${won ? "Agreed: taking them on." : "Requirement being clarified."}`, at(addDays(today, -enquiry.changed), "15:20:00"), at(addDays(today, -enquiry.days), "09:05:00")]);
+    await pg.query("insert into crm_activities (organisation_id, enquiry_id, kind, body, actor, occurred_at) values ($1, $2, 'email', $3, 'system', $4)",
+      [practice.org, id, `Enquiry received${enquiry.channel === "form" ? " from the website form" : ""}: ${enquiry.service.toLowerCase()}.`, at(addDays(today, -enquiry.days), "09:05:00")]);
+    if (won) await pg.query("insert into crm_activities (organisation_id, enquiry_id, kind, body, actor, occurred_at) values ($1, $2, 'won', 'Won: terms agreed at a meeting in the office. Taking them on.', 'Maria Antoniou', $3)",
+      [practice.org, id, at(addDays(today, -enquiry.changed), "15:20:00")]);
+  }
+
+  // Kypros Ferry Lines: taken on five days ago, half way through.
+  const kypros = randomUUID();
+  await pg.query(`insert into client_files (id, practice_id, enquiry_id, status, company_name, he_number, incorporated_on, registered_address, business, contact_name, contact_email, contact_phone,
+      services, monthly_fee, hourly_rate, app_fee, vat_registered, vat_number, vat_quarter_end_month, year_end_month, books_from, manager, face_to_face, introduced_by, created_by, created_at)
+    values ($1, $2, $3, 'onboarding', 'Kypros Ferry Lines Ltd', 'HE 431776', '2019-05-14', '27 Spyrou Kyprianou Avenue, 3070 Limassol', 'Passenger and vehicle ferry services',
+      'Andreas Michaelides', 'andreas@kyprosferrylines.example', '+357 99 512330', $4, 650, 55, 25, true, 'CY10431776Q', 2, 12, $5, 'Andreas Kyriakou', true, 'Lysandrou & Co, advocates', 'Maria Antoniou', $6)`,
+    [kypros, practice.id, enquiryIds["Kypros Ferry Lines Ltd"], ["bookkeeping", "vat", "payroll", "tax_return"], `${today.slice(0, 7)}-01`, at(addDays(today, -5), "15:40:00")]);
+  for (const person of [
+    { name: "Andreas Michaelides", roles: ["director", "shareholder", "beneficial_owner"], ownership: 60, born: "1971-03-14", nationality: "CY", residence: "CY", id: ["passport", "K00431299", "2030-08-01"] },
+    { name: "Alexander Petrov", roles: ["director", "shareholder", "beneficial_owner"], ownership: 40, born: "1984-09-02", nationality: "RU", residence: "CY", id: ["passport", "76 4417302", "2031-02-11"] },
+  ]) await pg.query(`insert into client_people (file_id, name, roles, ownership, date_of_birth, nationality, residence, id_kind, id_number, id_expires, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [kypros, person.name, person.roles, person.ownership, person.born, person.nationality, person.residence, ...person.id, at(addDays(today, -5), person.name.startsWith("Andreas") ? "15:45:00" : "15:47:00")]);
+  const kyprosPeople = (await pg.query<{ id: string; name: string; roles: Role[] }>("select id, name, roles from client_people where file_id = $1 order by created_at", [kypros])).rows;
+  for (const request of documentRequests(kyprosPeople, `${today.slice(0, 7)}-01`)) {
+    // Everything the meeting brought, but Alexander Petrov's proof of address and the bank statements.
+    const missing = request.kind === "bank_statements" || request.kind === "prior_accounts" || (request.kind === "address" && request.label.startsWith("Alexander"));
+    const content = missing ? null : demoPdf([`Demo document: ${request.label.replace(/[^\x20-\x7e]/g, "'")}`, "Kypros Ferry Lines Ltd", "Fictional demo data for Ledgerline. Not a real document."]);
+    await pg.query(`insert into client_documents (file_id, person_id, kind, label, requested_at, file_name, media_type, content, size_bytes, received_at, received_from) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [kypros, request.personId, request.kind, request.label, at(addDays(today, -5), "15:50:00"), content ? `${request.label.replace(/[^A-Za-z0-9 ]+/g, " ").trim().slice(0, 60)}.pdf` : null,
+       content ? "application/pdf" : null, content, content?.length ?? null, content ? at(addDays(today, -5), "16:05:00") : null, content ? "Maria Antoniou" : null]);
+  }
 }

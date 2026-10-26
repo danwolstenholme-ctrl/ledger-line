@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import Link from "@/components/navigation/navigation-link";
 import { CheckCircle2, Mail, MessageSquare, Phone, Users } from "lucide-react";
 
+import { takeOnFromEnquiry } from "@/lib/actions/clients";
 import { convertEnquiry } from "@/lib/actions/crm";
+import { one } from "@/lib/db";
 import { getEnquiry } from "@/lib/data/crm";
 import { CRM_STAGES, stageOf, stageSwatch } from "@/lib/domain/crm";
 import { UUID_PATTERN } from "@/lib/domain/invoices";
@@ -25,10 +27,15 @@ export default async function EnquiryPage({ params }: { params: Promise<{ id: st
   if (!data) notFound();
   const { org, enquiry, activities, tasks, customer, today } = data;
   const index = CRM_STAGES.findIndex(stage => stage.key === enquiry.stage);
+  // In the firm's own pipeline, winning an enquiry means taking the company on: it gets a client file, and its books once due diligence is done.
+  const clientFile = org.is_practice ? await one<{ id: string }>("select id from client_files where enquiry_id = $1", [enquiry.id]) : null;
+  const takeOn = org.is_practice && enquiry.stage !== "lost";
   return <PageBody className="space-y-4">
     <RecordHeader title={enquiry.full_name} description={`${enquiry.company ? `${enquiry.company} · ` : ""}${enquiry.reference} · ${enquiry.service ?? ""}`} back={{ href: `/c/${org.slug}/crm/enquiries`, label: "Enquiries" }}
       action={<div className="flex items-center gap-2"><PriorityFlag priority={enquiry.priority} /><StageBadge stage={enquiry.stage} />
-        {enquiry.stage !== "won" && enquiry.stage !== "lost" ? <form action={convertEnquiry}><input type="hidden" name="id" value={enquiry.id} /><button className="bg-brand hover:bg-brand-dark inline-flex h-8 items-center rounded-md px-3 text-[12.5px] font-medium text-white">Won: make a customer</button></form>
+        {clientFile ? <Link href={`/clients/${clientFile.id}`} className="text-brand text-[12.5px] font-medium hover:underline">Open the client file →</Link>
+          : takeOn ? <form action={takeOnFromEnquiry}><input type="hidden" name="enquiry_id" value={enquiry.id} /><button className="bg-brand hover:bg-brand-dark inline-flex h-8 items-center rounded-md px-3 text-[12.5px] font-medium text-white">{enquiry.stage === "won" ? "Take on as a client" : "Won: take on as a client"}</button></form>
+          : enquiry.stage !== "won" && enquiry.stage !== "lost" ? <form action={convertEnquiry}><input type="hidden" name="id" value={enquiry.id} /><button className="bg-brand hover:bg-brand-dark inline-flex h-8 items-center rounded-md px-3 text-[12.5px] font-medium text-white">Won: make a customer</button></form>
           : customer ? <Link href={`/c/${org.slug}/customers/${customer.id}`} className="text-brand text-[12.5px] font-medium hover:underline">Open the customer →</Link> : null}
       </div>} />
     <ol aria-label="Pipeline" className="ll-panel grid grid-cols-7 overflow-hidden">{CRM_STAGES.map((stage, position) => <li key={stage.key} className={cn("border-hairline border-r px-2 py-2 text-center text-[11px] last:border-r-0", position === index ? "text-ink font-semibold" : position < index && enquiry.stage !== "lost" ? "text-ink-muted" : "text-ink-faint")}>

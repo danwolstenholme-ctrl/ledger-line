@@ -39,4 +39,4 @@ export const getDemoUser = cache(async () => (await one<{ id: string; name: stri
 
 /** The month a company's books begin: the month of its first entry. Deadlines and returns before it are not the books' to keep. */
 export const getBooksStart = cache(async (orgId: string) =>
-  (await one<{ start: string | null }>("select to_char(date_trunc('month', min(entry_date)), 'YYYY-MM-DD') as start from journal_entries where organisation_id = $1", [orgId]))?.start ?? "2025-07-01");
+  (await one<{ start: string | null }>(`select to_char(coalesce(date_trunc('month', (select min(entry_date) from journal_entries where organisation_id = $1)), (select books_from from organisations where id = $1)), 'YYYY-MM-DD') as start`, [orgId]))?.start ?? "2025-07-01");

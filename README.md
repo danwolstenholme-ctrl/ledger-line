@@ -172,7 +172,34 @@ to reconcile.
   "Your firm's own books" in the company switcher), extra work included at
   each client's rate. Press again and nobody is billed twice.
 
-### 1i. VAT numbers (`/vat-numbers`), 2 minutes
+### 1i. Taking on a client (`/clients`), 4 minutes
+- **Client files**: every client's due diligence as ICPAC's AML Directive
+  asks for it: risk rating, next review, and screening against the EU
+  sanctions list. Mesogeios' review is a week overdue (it is on Deadlines
+  too); Kalamies' is due in three weeks.
+- **Kypros Ferry Lines**, won from the firm's own website form, is half way
+  through being taken on. **Send the engagement letter**: it is written from
+  the file (services, fee, the app) and fingerprinted. Copy the client's link
+  and open it in a private window, or on a phone: no login. Sign it, and
+  upload Alexander Petrov's proof of address (any PDF). Back on the file both
+  are ticked, and the signed PDF carries the signature record.
+- **Screen everyone**: the company and both owners are checked against the
+  real EU consolidated list (6,269 people and entities). Alexander Petrov
+  shares his name with two listed persons, born in 1958 and 1979: write why
+  he is not them and **Record the decision**.
+- **Risk assessment**: Ledgerline scores each factor from the file, as in
+  ICPAC's guidance. The 40% owner's nationality is on the EU high-risk list,
+  and an advocate introduced them: 9 of 20, normal risk, customer due
+  diligence, reviewed every two years. **Record the assessment**, then
+  **Approve as compliance officer**. A PEP, or an owner living in a
+  high-risk country, makes it high risk whatever the score, approved by a
+  partner.
+- **Take them on: open the books**: the company opens with the standard
+  chart, its VAT quarters and year end, its deadlines, its fee on the Fees
+  page, and a customer record in the firm's own books. Every step is on the
+  firm's audit trail, the signature as the client's.
+
+### 1j. VAT numbers (`/vat-numbers`), 2 minutes
 - A sale to a business in another EU state is zero-rated only if the
   customer's VAT number is valid in **VIES**, the European Commission's
   register; the tax office asks for the proof. This page checks any EU number
@@ -316,5 +343,13 @@ to reconcile.
   take the company's own VAT number. Every answer is a `vat_checks` row on the
   audit chain. `vies_demo_register` answers for the invented companies, and
   `LEDGERLINE_VIES_FIXTURES=1` (the tests) keeps everything off the network.
+- Client files (`src/app/clients`, `src/lib/domain/onboarding.ts`, `src/lib/data/clients.ts`,
+  `src/lib/actions/clients.ts`): the steps, the risk method (ICPAC's client
+  risk-based approach, 2024), the engagement letter's wording and fingerprint.
+  The client's page is plain HTML at `/o/{token}` (`src/lib/clients`), signed
+  and uploaded to with no script. Sanctions screening (`src/lib/domain/sanctions.ts`,
+  `src/lib/sanctions.ts`) reads the EU's consolidated list; the seed loads a
+  snapshot (`npx tsx scripts/make-sanctions-snapshot.mts` refreshes it), and
+  **Update the list** fetches the current one.
 - Not in this demo: sign-in (the production plan is Supabase auth and row-level
   security), currencies other than EUR, live bank feeds.

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "@/components/navigation/navigation-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeCheck, BarChart3, Bell, BookOpen, BriefcaseBusiness, CalendarClock, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
+  BadgeCheck, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
   LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, Truck, Users, X, type LucideIcon,
 } from "lucide-react";
 
@@ -153,6 +153,7 @@ function WorkspaceShell({ practice, clients, user, toReview, timer, children }: 
     { href: "/deadlines", label: "Deadlines", icon: CalendarClock, title: "Deadlines" },
     { href: "/time", label: "Time", icon: Timer, title: "Time" },
     { href: "/fees", label: "Fees", icon: Coins, title: "Fees" },
+    { href: "/clients", label: "Client files", icon: FolderCheck, title: "Client files" },
     { href: "/vat-numbers", label: "VAT numbers", icon: BadgeCheck, title: "VAT numbers" },
     { href: "/capture", label: "Capture", icon: ScanText, title: "Capture", badge: toReview },
     { href: "/settings", label: "Practice settings", icon: Settings, title: "Practice settings" },

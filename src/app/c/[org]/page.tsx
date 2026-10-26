@@ -23,8 +23,8 @@ type Attention = { key: string; href: string; icon: LucideIcon; tone: "critical"
  * large buttons, the three figures that matter, the few things that need
  * doing, and the to-dos. The accountant's views are under Reports and More.
  */
-export default async function CompanyHome() {
-  const home = await getCompanyHome();
+export default async function CompanyHome({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const [home, query] = await Promise.all([getCompanyHome(), searchParams]);
   const deadlines = (await getDeadlines({ client: home.org.slug })).rows.filter(row => row.kind !== "vat_return" && (row.state === "overdue" || (row.state === "due" && row.daysLeft <= 14)));
   const { org, today, cash, receivables, payables, vat } = home;
   const capture = `/c/${org.slug}/capture`;
@@ -44,7 +44,7 @@ export default async function CompanyHome() {
     title: `${receivables.overdueCount - receivables.late.length} more overdue invoice${receivables.overdueCount - receivables.late.length === 1 ? "" : "s"}`, detail: "Chase them from the invoice list" });
   for (const bill of payables.due) attention.push({ key: `b${bill.id}`, href: `/accounts/bills/${bill.id}`, icon: Receipt, tone: bill.days_overdue > 0 ? "critical" : "caution",
     title: `Pay ${bill.supplier_name} ${formatAmount(bill.balance)}`, detail: `${bill.number ? `Bill ${bill.number} · ` : ""}${bill.days_overdue > 0 ? `${bill.days_overdue} days overdue` : `due ${formatDate(bill.due_on)}`}` });
-  for (const row of deadlines) attention.push({ key: row.key, href: `/c/${org.slug}/deadlines`, icon: CalendarClock, tone: row.state === "overdue" ? "critical" : "caution",
+  for (const row of deadlines) attention.push({ key: row.key, href: row.review ? `/clients/${row.review.fileId}` : `/c/${org.slug}/deadlines`, icon: CalendarClock, tone: row.state === "overdue" ? "critical" : "caution",
     title: row.title, detail: row.state === "overdue" ? `${-row.daysLeft} days overdue: due ${formatDate(row.due)}` : `Due ${formatDate(row.due)}, in ${row.daysLeft} days` });
   if (home.waitingEnquiries.count) attention.push({ key: "enquiries", href: `/c/${org.slug}/crm/enquiries`, icon: Inbox, tone: "critical",
     title: `${home.waitingEnquiries.count} enquir${home.waitingEnquiries.count === 1 ? "y" : "ies"} waiting for a reply`, detail: `The oldest arrived ${formatAgo(home.waitingEnquiries.oldest)}: nobody has answered yet` });
@@ -69,6 +69,11 @@ export default async function CompanyHome() {
 
   return <PageBody width="6xl" className="space-y-5">
     <RecordHeader title={org.name} description={`${org.industry}${org.vat_registered ? ` · VAT ${org.vat_number}` : " · not registered for VAT"}`} />
+
+    {query.opened ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2.5 text-[12.5px]">
+      <CheckCircle2 className="size-4 shrink-0" /><span className="font-medium">{org.name} is taken on, and its books are open{org.books_from ? ` from ${formatDate(String(org.books_from).slice(0, 10))}` : ""}.</span>
+      <span className="text-ink-muted">Its deadlines and fee are set. Next: <Link href={`/c/${org.slug}/journals/new`} className="text-brand font-medium hover:underline">bring in the opening balances</Link>, or <Link href={`/c/${org.slug}/bank`} className="text-brand font-medium hover:underline">import the first bank statement</Link>.</span>
+    </p> : null}
 
     <nav aria-label="Everyday actions" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
       {actions.map((action, index) => <Link key={action.label} href={action.href}
