@@ -12,7 +12,7 @@ import { CREDIT_REASONS } from "@/lib/domain/credit-notes";
 import { addDays } from "@/lib/domain/invoice-math";
 import { firmToday, validRecordDate } from "@/lib/domain/invoices";
 import { normalisedLine } from "@/lib/domain/line-math";
-import { getDemoUser, requireOrg } from "@/lib/org";
+import { getCurrentUser, requireOrg } from "@/lib/org";
 import { INVOICE_PAYMENT_METHODS, VAT_RATES, VAT_TREATMENTS } from "@/types/database";
 
 /**
@@ -437,7 +437,7 @@ export async function saveCustomer(_previous: ActionState, form: FormData): Prom
 export async function logReminder(customerId: string, summary: string): Promise<void> {
   const org = await requireOrg();
   if (!/^[0-9a-f-]{36}$/i.test(customerId)) return;
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   await sql(`insert into crm_activities (organisation_id, customer_id, kind, body, actor)
              select $1, id, 'email', $3, $4 from customers where id = $2 and organisation_id = $1`, [org.id, customerId, `Payment reminder: ${summary}`.slice(0, 1000), user.name]);
   refresh();
@@ -613,7 +613,7 @@ export async function saveInvoiceDesign(_previous: ActionState, form: FormData):
 export async function markInvoiceSent(invoiceId: string, to: string): Promise<void> {
   const org = await requireOrg();
   if (!/^[0-9a-f-]{36}$/i.test(invoiceId)) return;
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   const recipient = to.trim().slice(0, 320) || null;
   const invoice = await one<{ customer_id: string; number: string }>(
     "update invoices set sent_at = now(), sent_to = $3 where id = $1 and organisation_id = $2 and status in ('issued', 'part_paid', 'paid') returning customer_id, number", [invoiceId, org.id, recipient]);

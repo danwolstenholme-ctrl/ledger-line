@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 
-import { sql } from "@/lib/db";
+import { asService, sql } from "@/lib/db";
 import { allowSubmission, companyForToken, recordEnquiry, type EnquiryInput } from "@/lib/crm/intake";
 import { enquiryPage } from "@/lib/crm/form-page";
 
@@ -67,7 +67,7 @@ function safeRedirect(value: string | undefined) {
   try { const url = new URL(value); return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null; } catch { return null; }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = await readBody(request);
   const wantsJson = body?.json ?? (request.headers.get("accept") ?? "").includes("application/json");
   const reply = (status: number, json: Record<string, unknown>, html: () => string) => wantsJson
@@ -95,4 +95,9 @@ export async function POST(request: Request) {
   if (next) return new Response(null, { status: 303, headers: { ...CORS, location: next } });
   return reply(201, { id: recorded.id, reference: recorded.reference, stage: "new", owner: recorded.owner, next_action: recorded.next_action, next_action_due: recorded.next_action_due },
     () => enquiryPage({ state: "sent", company }));
+}
+
+/** Runs for the enquiries API: a form key, not a person: with the database owner's rights, and so only after the token or key is checked. */
+export function POST(request: Request) {
+  return asService("the enquiries API: a form key, not a person", () => handlePOST(request));
 }

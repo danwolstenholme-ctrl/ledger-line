@@ -35,7 +35,8 @@ export async function orgPath(path: string) {
 
 export const getPractice = cache(async () => (await one<PracticeRow>("select * from practices order by created_at limit 1"))!);
 export const getOrganisations = cache(async () => sql<OrganisationRow>("select * from organisations order by name"));
-export const getDemoUser = cache(async () => (await one<{ id: string; name: string; email: string; initials: string }>("select * from app_users limit 1"))!);
+/** The person signed in: whoever request.jwt.claims names. Until sign-in arrives, the demo's own user. */
+export const getCurrentUser = cache(async () => (await one<{ id: string; name: string; email: string; initials: string }>("select id, name, email, initials from app_users where id = app_user_id()"))!);
 
 /** The month a company's books begin: the month of its first entry. Deadlines and returns before it are not the books' to keep. */
 export const getBooksStart = cache(async (orgId: string) =>

@@ -59,12 +59,21 @@ create table organisation_logos (
   updated_at      timestamptz not null default now()
 );
 
+-- The people who sign in. Live, each is a Supabase Auth user with the same id
+-- (supabase/migrations makes the row when the account is created).
 create table app_users (
-  id       uuid primary key default gen_random_uuid(),
-  name     text not null,
-  email    text not null,
-  initials text not null
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  email      text not null unique,
+  initials   text not null,
+  created_at timestamptz not null default now()
 );
+
+-- Who is asking: the signed-in person's id, from the claims Supabase sets on every request
+-- (the demo sets the same claims). Null when nobody is signed in.
+create function app_user_id() returns uuid language sql stable as $$
+  select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Chart of accounts
@@ -2048,8 +2057,10 @@ returns text language sql immutable as $$
                                             p_entity, coalesce(p_entity_id::text, ''), p_detail::text), 'UTF8')), 'hex');
 $$;
 
-create function audit_append(p_org uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb) returns void language plpgsql as $$
-declare v_prev text; v_at timestamptz := clock_timestamp(); v_actor text := coalesce(nullif(current_setting('ledgerline.actor', true), ''), 'system');
+-- Runs as the owner: nobody signed in can write to the audit log except through this.
+create function audit_append(p_org uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb) returns void language plpgsql security definer set search_path = public as $$
+declare v_prev text; v_at timestamptz := clock_timestamp();
+  v_actor text := coalesce(nullif(current_setting('ledgerline.actor', true), ''), (select name from app_users where id = app_user_id()), 'system');
 begin
   if coalesce(current_setting('ledgerline.seeding', true), '') = 'on' then return; end if;
   select hash into v_prev from audit_log order by seq desc limit 1;
@@ -2104,7 +2115,8 @@ end $$;
 create trigger vat_returns_audit after insert on vat_returns for each row execute function audit_vat_return();
 
 -- Recompute the chain: the first row whose hash or link does not hold, or none.
-create function audit_verify() returns table (checked bigint, broken_at bigint) language plpgsql stable as $$
+-- Runs as the owner: the chain is checked whole, though each person sees only their own companies' rows.
+create function audit_verify() returns table (checked bigint, broken_at bigint) language plpgsql stable security definer set search_path = public as $$
 declare r audit_log; v_prev text := repeat('0', 64); v_count bigint := 0;
 begin
   for r in select * from audit_log order by seq loop
@@ -2165,8 +2177,21 @@ create table practice_staff (
   weekly_hours numeric(4, 1) not null default 35 check (weekly_hours between 1 and 80),
   -- The money laundering compliance officer: approves the risk rating of low and normal risk clients.
   mlco         boolean not null default false,
-  unique (practice_id, name)
+  -- Their sign-in. Someone on the staff list without one (a part-time bookkeeper) is planned for but sees nothing.
+  user_id      uuid references app_users (id) on delete set null,
+  unique (practice_id, name),
+  unique (practice_id, user_id)
 );
+
+-- People at a client company who use its books: its owner, its own staff. They see that company and nothing else.
+create table company_members (
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  user_id         uuid not null references app_users (id) on delete cascade,
+  role            text not null default 'owner' check (role in ('owner', 'staff', 'viewer')),
+  created_at      timestamptz not null default now(),
+  primary key (organisation_id, user_id)
+);
+create index company_members_user on company_members (user_id);
 
 -- What a client company pays the practice: a monthly fee, and a rate for extra work billed on top of it.
 -- customer_id is that client as a customer in the practice's own books.
@@ -2559,3 +2584,191 @@ begin
 end $$;
 create trigger client_documents_audit after update on client_documents for each row execute function audit_client_document();
 create trigger risk_assessments_audit after insert or update on risk_assessments for each row execute function audit_client_check();
+
+-- ---------------------------------------------------------------------------
+-- Who may see what. Every request from a signed-in person runs as the role
+-- `authenticated`, with their id in request.jwt.claims, as Supabase sets it;
+-- row-level security then decides each row. A practice's people see every
+-- company the practice keeps; a client company's own people see that company
+-- and nothing else, and none of the practice's records about it: its AML
+-- file, its fee, the time spent on it. Work no person does (a client signing
+-- through their link, the website form, the seed, a nightly job) runs as the
+-- database's owner, and the code says so where it does.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+end $$;
+
+-- The practices the person works at.
+create function my_practices() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(practice_id), '{}') from practice_staff where user_id = app_user_id()
+$$;
+-- Every company those practices keep the books for, and the practice's own books.
+create function practice_companies() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(o.id), '{}') from organisations o join practice_staff s on s.practice_id = o.practice_id where s.user_id = app_user_id()
+$$;
+-- What the person may see: their practices' companies, and any company they are a member of.
+create function visible_companies() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct id), '{}') from (
+    select o.id from organisations o join practice_staff s on s.practice_id = o.practice_id where s.user_id = app_user_id()
+    union all select organisation_id from company_members where user_id = app_user_id()) visible
+$$;
+-- The people the person may see: themselves, their colleagues, and the members of their practices' companies.
+create function visible_users() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct id), '{}') from (
+    select app_user_id() as id
+    union all select s.user_id from practice_staff s where s.practice_id = any (my_practices()) and s.user_id is not null
+    union all select m.user_id from company_members m where m.organisation_id = any (practice_companies())) visible where id is not null
+$$;
+
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+-- Written only by the database itself (the audit chain) or by Ledgerline's own jobs (the sanctions list, the demo VIES register).
+revoke insert, update, delete on audit_log, sanctions_lists, sanctions_entries, vies_demo_register from authenticated;
+
+alter table app_users enable row level security;
+alter table audit_log enable row level security;
+alter table bank_line_matches enable row level security;
+alter table bank_statement_imports enable row level security;
+alter table bank_statement_lines enable row level security;
+alter table bank_transaction_lines enable row level security;
+alter table bank_transactions enable row level security;
+alter table bill_lines enable row level security;
+alter table bill_payment_runs enable row level security;
+alter table bill_payments enable row level security;
+alter table bills enable row level security;
+alter table capture_files enable row level security;
+alter table capture_items enable row level security;
+alter table client_documents enable row level security;
+alter table client_fees enable row level security;
+alter table client_files enable row level security;
+alter table client_people enable row level security;
+alter table company_members enable row level security;
+alter table credit_allocations enable row level security;
+alter table credit_note_lines enable row level security;
+alter table credit_notes enable row level security;
+alter table crm_activities enable row level security;
+alter table crm_contacts enable row level security;
+alter table crm_enquiries enable row level security;
+alter table crm_matters enable row level security;
+alter table crm_tasks enable row level security;
+alter table customers enable row level security;
+alter table deadline_marks enable row level security;
+alter table enquiry_form_keys enable row level security;
+alter table fee_invoices enable row level security;
+alter table invoice_lines enable row level security;
+alter table invoice_payments enable row level security;
+alter table invoices enable row level security;
+alter table items enable row level security;
+alter table journal_entries enable row level security;
+alter table journal_lines enable row level security;
+alter table ledger_accounts enable row level security;
+alter table organisation_logos enable row level security;
+alter table organisations enable row level security;
+alter table practice_staff enable row level security;
+alter table practices enable row level security;
+alter table quote_lines enable row level security;
+alter table quotes enable row level security;
+alter table repeating_invoices enable row level security;
+alter table risk_assessments enable row level security;
+alter table sanctions_entries enable row level security;
+alter table sanctions_lists enable row level security;
+alter table sanctions_screenings enable row level security;
+alter table supplier_credit_allocations enable row level security;
+alter table supplier_credit_lines enable row level security;
+alter table supplier_credits enable row level security;
+alter table suppliers enable row level security;
+alter table time_entries enable row level security;
+alter table vat_checks enable row level security;
+alter table vat_returns enable row level security;
+alter table vies_demo_register enable row level security;
+
+-- A company's books: everyone who may see the company.
+create policy bank_line_matches_access on bank_line_matches for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_statement_imports_access on bank_statement_imports for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_statement_lines_access on bank_statement_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_transaction_lines_access on bank_transaction_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_transactions_access on bank_transactions for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bill_lines_access on bill_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bill_payment_runs_access on bill_payment_runs for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bill_payments_access on bill_payments for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bills_access on bills for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy credit_allocations_access on credit_allocations for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy credit_note_lines_access on credit_note_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy credit_notes_access on credit_notes for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_activities_access on crm_activities for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_contacts_access on crm_contacts for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_enquiries_access on crm_enquiries for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_matters_access on crm_matters for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_tasks_access on crm_tasks for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy customers_access on customers for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy deadline_marks_access on deadline_marks for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy enquiry_form_keys_access on enquiry_form_keys for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy invoice_lines_access on invoice_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy invoice_payments_access on invoice_payments for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy invoices_access on invoices for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy items_access on items for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy journal_entries_access on journal_entries for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy journal_lines_access on journal_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy ledger_accounts_access on ledger_accounts for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy organisation_logos_access on organisation_logos for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy quote_lines_access on quote_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy quotes_access on quotes for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy repeating_invoices_access on repeating_invoices for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy supplier_credit_allocations_access on supplier_credit_allocations for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy supplier_credit_lines_access on supplier_credit_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy supplier_credits_access on supplier_credits for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy suppliers_access on suppliers for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy vat_checks_access on vat_checks for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+create policy vat_returns_access on vat_returns for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+-- The practice's own records about a company: its people only.
+create policy client_fees_access on client_fees for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
+create policy time_entries_access on time_entries for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
+create policy fee_invoices_access on fee_invoices for all to authenticated using (client_organisation_id = any ((select practice_companies())::uuid[])) with check (client_organisation_id = any ((select practice_companies())::uuid[]));
+
+-- The audit trail: read by everyone who may see the company; written only by audit_append.
+create policy audit_log_read on audit_log for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+
+-- Companies: seen by whoever may see them; created by the practice (opening the books), never deleted from here.
+create policy organisations_read on organisations for select to authenticated using (id = any ((select visible_companies())::uuid[]));
+create policy organisations_update on organisations for update to authenticated using (id = any ((select visible_companies())::uuid[])) with check (id = any ((select visible_companies())::uuid[]));
+create policy organisations_insert on organisations for insert to authenticated with check (practice_id = any ((select my_practices())::uuid[]));
+
+-- The practice: its people manage it; a client company's people see whose practice it is (its name and colours).
+create policy practices_read on practices for select to authenticated
+  using (id = any ((select my_practices())::uuid[]) or id in (select practice_id from organisations where id = any ((select visible_companies())::uuid[])));
+create policy practices_update on practices for update to authenticated using (id = any ((select my_practices())::uuid[])) with check (id = any ((select my_practices())::uuid[]));
+create policy practice_staff_access on practice_staff for all to authenticated using (practice_id = any ((select my_practices())::uuid[])) with check (practice_id = any ((select my_practices())::uuid[]));
+create policy company_members_access on company_members for all to authenticated
+  using (organisation_id = any ((select practice_companies())::uuid[]) or user_id = app_user_id()) with check (organisation_id = any ((select practice_companies())::uuid[]));
+create policy app_users_read on app_users for select to authenticated using (id = any ((select visible_users())::uuid[]));
+create policy app_users_update on app_users for update to authenticated using (id = app_user_id()) with check (id = app_user_id());
+
+-- Client files, and everything in them: the practice's people only. A client never sees its own AML file.
+create policy client_files_access on client_files for all to authenticated using (practice_id = any ((select my_practices())::uuid[])) with check (practice_id = any ((select my_practices())::uuid[]));
+create policy client_people_access on client_people for all to authenticated using (exists (select 1 from client_files f where f.id = file_id)) with check (exists (select 1 from client_files f where f.id = file_id));
+create policy client_documents_access on client_documents for all to authenticated using (exists (select 1 from client_files f where f.id = file_id)) with check (exists (select 1 from client_files f where f.id = file_id));
+create policy risk_assessments_access on risk_assessments for all to authenticated using (exists (select 1 from client_files f where f.id = file_id)) with check (exists (select 1 from client_files f where f.id = file_id));
+create policy sanctions_screenings_access on sanctions_screenings for all to authenticated using (exists (select 1 from client_files f where f.id = file_id)) with check (exists (select 1 from client_files f where f.id = file_id));
+
+-- Captured documents: the practice's inbox, and a company's own uploads.
+create policy capture_files_access on capture_files for all to authenticated
+  using (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select visible_companies())::uuid[]))
+  with check (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select visible_companies())::uuid[]));
+create policy capture_items_access on capture_items for all to authenticated using (exists (select 1 from capture_files f where f.id = file_id)) with check (exists (select 1 from capture_files f where f.id = file_id));
+
+-- Reference data everyone signed in may read.
+create policy sanctions_lists_read on sanctions_lists for select to authenticated using (true);
+create policy sanctions_entries_read on sanctions_entries for select to authenticated using (true);
+create policy vies_demo_register_read on vies_demo_register for select to authenticated using (true);
+
+-- Views read with the rights of the person asking, so the rules above hold through them too.
+alter view v_bank_statement_lines set (security_invoker = true);
+alter view v_bank_transaction_directory set (security_invoker = true);
+alter view v_bill_directory set (security_invoker = true);
+alter view v_credit_note_directory set (security_invoker = true);
+alter view v_invoice_directory set (security_invoker = true);
+alter view v_journal_lines set (security_invoker = true);
+alter view v_quote_directory set (security_invoker = true);
+alter view v_supplier_credit_directory set (security_invoker = true);

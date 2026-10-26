@@ -4,7 +4,7 @@ import { sql } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
 import { daysUntil, obligations, type DeadlineKind } from "@/lib/domain/deadlines";
 import { RISK_LEVELS, type RiskLevel } from "@/lib/domain/onboarding";
-import { getDemoUser, getOrganisations } from "@/lib/org";
+import { getCurrentUser, getOrganisations } from "@/lib/org";
 
 /**
  * Every client's deadlines in date order: what is overdue, what is coming in
@@ -33,7 +33,7 @@ export async function getDeadlines(filters: { view?: DeadlineView; client?: stri
   const until = new Date(Date.parse(`${today}T12:00:00Z`) + AHEAD_DAYS * 86_400_000).toISOString().slice(0, 10);
   const [organisations, user, filed, marks, euMonths, lines, reviews, starts, amlReviews] = await Promise.all([
     getOrganisations(),
-    getDemoUser(),
+    getCurrentUser(),
     sql<{ organisation_id: string; period_to: string; filed_on: string }>("select organisation_id, period_to, filed_on from vat_returns"),
     sql<{ organisation_id: string; kind: DeadlineKind; period_end: string; done_on: string; done_by: string }>("select organisation_id, kind, period_end, done_on, done_by from deadline_marks"),
     sql<{ organisation_id: string; month: string; net: number }>(`

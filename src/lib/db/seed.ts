@@ -922,7 +922,16 @@ async function seedVies(pg: PGlite) {
 async function seedPractice(pg: PGlite) {
   const today = new Date().toISOString().slice(0, 10);
   const practiceId = (await pg.query<{ id: string }>("select id from practices limit 1")).rows[0].id;
-  for (const person of STAFF) await pg.query("insert into practice_staff (practice_id, name, role, weekly_hours, mlco) values ($1, $2, $3, $4, $5)", [practiceId, person.name, person.role, person.weekly_hours, person.name === "Maria Antoniou"]);
+  // Each of the firm's people has a sign-in, and sees every company the firm keeps.
+  for (const person of STAFF) {
+    const email = `${person.name.split(" ")[0].toLowerCase()}@saltlake.example`;
+    await pg.query("insert into app_users (name, email, initials) values ($1, $2, $3) on conflict (email) do nothing", [person.name, email, person.name.split(" ").map(part => part[0]).join("")]);
+    await pg.query(`insert into practice_staff (practice_id, name, role, weekly_hours, mlco, user_id) select $1, $2, $3, $4, $5, id from app_users where email = $6`,
+      [practiceId, person.name, person.role, person.weekly_hours, person.name === "Maria Antoniou", email]);
+  }
+  // A client's own owner, who uses Pixelforge's books and sees nothing else: not the other clients, not the firm's file on Pixelforge.
+  const owner = (await pg.query<{ id: string }>("insert into app_users (name, email, initials) values ('Nikos Savva', 'nikos@pixelforge.example', 'NS') returning id")).rows[0].id;
+  await pg.query("insert into company_members (organisation_id, user_id, role) select id, $1, 'owner' from organisations where slug = 'pixelforge'", [owner]);
   const clients = (await pg.query<{ id: string; slug: string; name: string; vat_number: string | null; vat_registered: boolean; contact_email: string | null; address: string | null; manager: string }>(
     "select id, slug, name, vat_number, vat_registered, contact_email, address, manager from organisations order by name")).rows;
 

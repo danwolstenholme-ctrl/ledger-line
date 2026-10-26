@@ -6,7 +6,7 @@ import { daysUntil } from "@/lib/domain/deadlines";
 import {
   assessRisk, engagementLetter, fileSteps, latestScreenings, sortDocuments, suggestFactors, type DocumentKind, type Letter, type Person, type RiskFactor, type RiskLevel, type Service,
 } from "@/lib/domain/onboarding";
-import { getDemoUser, getPractice } from "@/lib/org";
+import { getCurrentUser, getPractice } from "@/lib/org";
 import { currentList, refreshState, type ScreeningRow } from "@/lib/sanctions";
 
 /**
@@ -105,7 +105,7 @@ export async function getClientFile(id: string) {
     getPractice(),
     one<{ name: string; address: string | null }>("select name, address from organisations where is_practice limit 1"),
     getStaff(),
-    getDemoUser(),
+    getCurrentUser(),
   ]);
   const today = firmToday();
   const ordered = sortDocuments(documents, people.map(person => person.id));

@@ -15,7 +15,7 @@ import {
   BENEFICIAL_OWNER_THRESHOLD, documentRequests, letterText, nextReview, assessRisk, PEP, RISK_AREA_KEYS, ROLES, SERVICE_KEYS,
   type PepStatus, type RiskArea, type RiskFactor, type RiskLevel, type Role,
 } from "@/lib/domain/onboarding";
-import { getDemoUser, getPractice } from "@/lib/org";
+import { getCurrentUser, getPractice } from "@/lib/org";
 import { keepDocument } from "@/lib/client-documents";
 import { screen, startRefresh } from "@/lib/sanctions";
 
@@ -71,7 +71,7 @@ export async function startClientFile(_previous: ActionState, form: FormData): P
   const business = p.text("business", { max: 300, label: "What the company does" }) ?? "";
   const enquiry = p.uuid("enquiry_id");
   if (p.failed || !name) return p.fail();
-  const [practice, user] = await Promise.all([getPractice(), getDemoUser()]);
+  const [practice, user] = await Promise.all([getPractice(), getCurrentUser()]);
   let id: string;
   try {
     id = (await one<{ id: string }>(`insert into client_files (practice_id, enquiry_id, company_name, contact_name, contact_email, contact_phone, business, manager, created_by)
@@ -91,7 +91,7 @@ export async function takeOnFromEnquiry(form: FormData) {
   const enquiry = await one<{ organisation_id: string; stage: string; full_name: string; company: string | null; email: string | null; phone: string | null; service: string | null }>(
     "select e.organisation_id, e.stage, e.full_name, e.company, e.email, e.phone, e.service from crm_enquiries e join organisations o on o.id = e.organisation_id and o.is_practice where e.id = $1", [id]);
   if (!enquiry || enquiry.stage === "lost") return;
-  const [practice, user] = await Promise.all([getPractice(), getDemoUser()]);
+  const [practice, user] = await Promise.all([getPractice(), getCurrentUser()]);
   if (enquiry.stage !== "won") {
     await sql("update crm_enquiries set stage = 'won', stage_changed_at = now(), next_action = null, next_action_due = null where id = $1", [id]);
     await sql("insert into crm_activities (organisation_id, enquiry_id, kind, body, actor) values ($1, $2, 'won', 'Won: taking them on as a client.', $3)", [enquiry.organisation_id, id, user.name]);
@@ -206,7 +206,7 @@ export async function uploadDocument(_previous: ActionState, form: FormData): Pr
   const upload = form.get("file");
   if (!file || !UUID.test(documentId)) return { ok: false, error: "That request is no longer on the file." };
   if (!(upload instanceof File) || !upload.size) return { ok: false, error: "Choose the file first." };
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   const problem = await keepDocument(documentId, file.id, upload, user.name);
   if (problem) return { ok: false, error: problem };
   refresh();
@@ -266,7 +266,7 @@ async function screenFileNow(fileId: string, actor: string) {
 export async function screenFile(_previous: ActionState, form: FormData): Promise<ActionState> {
   const file = await fileFor(String(form.get("id") ?? ""));
   if (!file || file.status === "declined") return { ok: false, error: "This client file is closed." };
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   let count: number;
   try { count = await screenFileNow(file.id, user.name); }
   catch (error) { return { ok: false, error: error instanceof Error ? error.message : "The screening could not be done." }; }
@@ -276,7 +276,7 @@ export async function screenFile(_previous: ActionState, form: FormData): Promis
 
 /** Every client and everyone behind them, against the current list: after the list changes, or as the regular check. */
 export async function screenEveryone() {
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   const files = await sql<{ id: string }>("select id from client_files where status <> 'declined'");
   let count = 0;
   for (const file of files) count += await screenFileNow(file.id, user.name);
@@ -291,7 +291,7 @@ export async function resolveScreening(_previous: ActionState, form: FormData): 
   const resolution = p.enum("resolution", ["not_the_same", "confirmed"] as const, { required: true, label: "The decision" });
   const note = p.text("note", { required: true, max: 1000, label: "The reason" });
   if (p.failed || !id || !resolution || !note) return p.fail("Say why: the reason is what an inspector reads.");
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   const row = await one<{ id: string }>("update sanctions_screenings set resolution = $2, resolved_note = $3, resolved_by = $4, resolved_at = now() where id = $1 and result = 'possible' and resolution is null returning id",
     [id, resolution, note, user.name]);
   if (!row) return { ok: false, error: "That match was already dealt with." };
@@ -326,7 +326,7 @@ export async function saveAssessment(_previous: ActionState, form: FormData): Pr
   if (override && override !== result.scored && !result.forced && !overrideReason) p.errors.override_reason = "A rating different from the score needs the reason written down.";
   if (result.forced && override && override !== "high") p.errors.override_level = "This client is high risk whatever the score.";
   if (p.failed) return p.fail();
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   try {
     await sql(`insert into risk_assessments (file_id, factors, client_score, service_score, geography_score, channel_score, scored_level, forced_reason, level, override_reason, notes, assessed_by)
       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
@@ -343,7 +343,7 @@ export async function approveAssessment(_previous: ActionState, form: FormData):
   const assessment = UUID.test(id) ? await one<{ id: string; level: RiskLevel; approved_at: string | null; file_id: string }>("select id, level, approved_at, file_id from risk_assessments where id = $1", [id]) : null;
   if (!assessment) return { ok: false, error: "That assessment no longer exists." };
   if (assessment.approved_at) return { ok: false, error: "Already approved." };
-  const [user, staff] = await Promise.all([getDemoUser(), getStaff()]);
+  const [user, staff] = await Promise.all([getCurrentUser(), getStaff()]);
   const as = approverFor(assessment.level, staff, user.name);
   if (!as) return { ok: false, error: assessment.level === "high" ? "A high risk client is approved by a partner." : "Low and normal risk clients are approved by the compliance officer." };
   const review = nextReview(firmToday(), assessment.level);
@@ -366,7 +366,7 @@ export async function openBooks(_previous: ActionState, form: FormData): Promise
   const { file } = data;
   if (file.organisation_id) redirect(`/c/${file.slug}`);
   if (!data.ready) return { ok: false, error: data.blocked ?? "Finish the steps above first: the books open once due diligence is done and the letter is signed." };
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   let slug = slugFor(file.company_name);
   for (let n = 2; await one("select 1 from organisations where slug = $1", [slug]); n++) slug = `${slugFor(file.company_name)}-${n}`;
   const booksFrom = file.books_from ?? `${firmToday().slice(0, 7)}-01`;

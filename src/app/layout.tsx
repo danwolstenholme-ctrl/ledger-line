@@ -3,7 +3,7 @@ import { Roboto, Roboto_Mono } from "next/font/google";
 import type { CSSProperties } from "react";
 
 import { sql } from "@/lib/db";
-import { getDemoUser, getOrganisations, getPractice } from "@/lib/org";
+import { getCurrentUser, getOrganisations, getPractice } from "@/lib/org";
 import { AppShell } from "@/components/shell/app-shell";
 import { getRunningTimer } from "@/lib/data/work";
 import "./globals.css";
@@ -28,7 +28,7 @@ export const viewport: Viewport = { colorScheme: "light" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [practice, organisations, user, reviews] = await Promise.all([
-    getPractice(), getOrganisations(), getDemoUser(),
+    getPractice(), getOrganisations(), getCurrentUser(),
     sql<{ organisation_id: string | null; count: number }>("select organisation_id, count(*) as count from capture_items where status = 'review' group by organisation_id"),
   ]);
   const toReview = reviews.reduce((sum, row) => sum + Number(row.count), 0);

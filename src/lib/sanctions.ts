@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { one, sql, transaction } from "@/lib/db";
+import { asService, one, sql, transaction } from "@/lib/db";
 import { prepareEntries, readEuSanctionsCsv, SANCTIONS_INSERT, screenName, type PreparedEntry, type SanctionsEntry, type SanctionsMatch } from "@/lib/domain/sanctions";
 
 /**
@@ -61,7 +61,8 @@ export function startRefresh() {
       if (expected && Buffer.byteLength(text, "utf8") + 3 < expected) throw new Error("The download was cut short. Try again.");
       const { generatedOn, entries } = readEuSanctionsCsv(text);
       if (!generatedOn || entries.length < 1000) throw new Error("The file that came back is not a complete list.");
-      await storeList(generatedOn, entries);
+      // The list is the same for everyone and written by Ledgerline itself, not by a person.
+      await asService("refreshing the EU sanctions list", () => storeList(generatedOn, entries));
       state.done = generatedOn;
     } catch (error) {
       state.error = error instanceof Error && error.name === "TimeoutError" ? "The EU's server took too long. Try again later." : error instanceof Error ? error.message : "The list could not be fetched.";

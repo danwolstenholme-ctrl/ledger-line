@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { transaction } from "@/lib/db";
+import { asService, transaction } from "@/lib/db";
 import { fileForToken, seeOther } from "@/lib/clients/client-link";
 import { letterText } from "@/lib/domain/onboarding";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * fingerprint taken when it was sent, and kept with who signed, when, and
  * from where: a simple electronic signature, with its evidence.
  */
-export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const found = await fileForToken(token);
   const back = (problem?: string) => seeOther(`/o/${token}${problem ? `?problem=${encodeURIComponent(problem)}` : "?signed=1"}`);
@@ -37,4 +37,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       where id = $1 and signed_at is null and letter_hash = $6`, [file.id, name, position, ip, agent, hash]);
   });
   return back();
+}
+
+/** Runs for a client signing through their private link: with the database owner's rights, and so only after the token or key is checked. */
+export function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
+  return asService("a client signing through their private link", () => handlePOST(request, { params }));
 }

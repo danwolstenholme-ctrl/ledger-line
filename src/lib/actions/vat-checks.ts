@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { one, sql } from "@/lib/db";
 import { checkVatNumber, sameCompany, splitVatNumber, VIES_COUNTRIES } from "@/lib/domain/eu-vat";
-import { getDemoUser } from "@/lib/org";
+import { getCurrentUser } from "@/lib/org";
 import { askVies } from "@/lib/vies";
 import type { VatCheckResult, VatCheckState } from "@/lib/actions/state";
 
@@ -43,7 +43,7 @@ export async function checkVat(_previous: VatCheckState, form: FormData): Promis
   if (!shape.ok) return { ok: false, error: shape.problem };
   const company = /^[0-9a-f-]{36}$/i.test(organisation) ? await one<Company>("select id, name, vat_number, 'CY' as country from organisations where id = $1", [organisation]) : null;
   if (!company) return { ok: false, error: "Choose the company asking: VIES records which company checked the number." };
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   const result = await record(company, shape.country, shape.number, expectName, user.name);
   revalidatePath("/", "layout");
   return { ok: !result.error, error: null, result };
@@ -51,7 +51,7 @@ export async function checkVat(_previous: VatCheckState, form: FormData): Promis
 
 /** Every EU business customer and EU supplier of every company, checked again in one go, one at a time so VIES is not crowded. */
 export async function checkEveryVatNumber(): Promise<void> {
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   const parties = await sql<{ vat_number: string; country: string; name: string; organisation_id: string; org_name: string; org_vat: string | null; org_country: string }>(`
     select c.vat_number, c.country, c.name, o.id as organisation_id, o.name as org_name, o.vat_number as org_vat, 'CY' as org_country
       from customers c join organisations o on o.id = c.organisation_id where c.is_active and c.eu_business and c.vat_number is not null

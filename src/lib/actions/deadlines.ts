@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { one, sql } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
-import { getDemoUser } from "@/lib/org";
+import { getCurrentUser } from "@/lib/org";
 
 /** A deadline other than a VAT return, marked done or opened again. A VAT return closes itself when it is filed. */
 
@@ -20,7 +20,7 @@ function read(form: FormData) {
 export async function markDeadlineDone(form: FormData): Promise<void> {
   const input = read(form);
   if (!input || !(await one("select 1 from organisations where id = $1", [input.organisation]))) return;
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   await sql(`insert into deadline_marks (organisation_id, kind, period_end, done_on, done_by) values ($1, $2, $3, $4, $5)
     on conflict (organisation_id, kind, period_end) do nothing`, [input.organisation, input.kind, input.periodEnd, firmToday(), user.name]);
   revalidatePath("/", "layout");

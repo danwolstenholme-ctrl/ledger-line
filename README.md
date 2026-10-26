@@ -2,8 +2,9 @@
 
 Double-entry books, invoicing, AI document capture, a CRM and a practice
 dashboard for Cyprus accountants and the companies they keep books for. It
-runs on this laptop only: Next.js 16 with an embedded Postgres (PGlite) in
-`.data/ledgerline`, and no sign-in (one fixed demo user). Every company,
+runs on this laptop: Next.js 16 with an embedded Postgres (PGlite) in
+`.data/ledgerline`, and no sign-in yet (one fixed demo user). The same code
+runs on Supabase: see Going live on Supabase. Every company,
 person and figure in it is fictional.
 
 ## Start it
@@ -285,6 +286,51 @@ to reconcile.
 - One page against Balabook, from its public site (checked 20 Oct 2026).
   "Not stated" means its pages don't say, not that it lacks it.
 
+## Going live on Supabase
+
+Live, Ledgerline runs on Supabase's Postgres in the EU (Frankfurt), with the
+same schema and the same access rules as the laptop demo. The laptop demo
+enforces those rules too: what it shows Maria is what the database lets her see.
+
+**Who sees what** (row-level security, at the end of `src/lib/db/schema.sql`):
+- A practice's people (`practice_staff.user_id`) see every company it keeps.
+- A client company's own people (`company_members`) see that company and
+  nothing else, and none of the practice's records about it: its AML file,
+  its fee, the time spent on it. Pixelforge's owner, Nikos Savva, is seeded to
+  show it.
+- Nobody signed in sees nothing. Only the database writes the audit trail.
+- Every request from a person runs as the role `authenticated`, with their
+  id in `request.jwt.claims`, as Supabase runs it (`src/lib/db/index.ts`).
+  Work done for nobody in particular (a client's private link, the website
+  form, the sanctions list refresh) runs inside `asService()`, which names why.
+- `npm run check:tenancy` proves it: 27 checks, asked as a partner, as
+  someone at another practice, as a client's owner and as nobody. Against a
+  real Postgres: `DATABASE_URL=… CHECK_TENANCY_WIPE=1 npm run check:tenancy`
+  (it empties that database first: a throwaway one only).
+
+**Setting it up**
+1. Create a Supabase project in the Frankfurt region (eu-central-1).
+2. `supabase link --project-ref …`, then `supabase db push`: it applies
+   `supabase/migrations`, the baseline (generated from `schema.sql` by
+   `npm run supabase:migration`) and the link to Supabase Auth.
+3. Give the host (Vercel, EU region) `DATABASE_URL`, the project's
+   transaction pooler connection string (port 6543), and `ANTHROPIC_API_KEY`.
+4. The Data API can stay on or be switched off: anonymous requests get
+   nothing, and a signed-in one sees only what the rules allow.
+
+The whole test suite runs against any Postgres too:
+`DATABASE_URL=… npx playwright test` (an empty, throwaway database; it is
+rebuilt with the demo data). On 26 Oct it passed on Postgres 16.
+
+**Still to do before the first practice signs up**
+- Sign-in (Supabase Auth) and invitations: a practice inviting its people,
+  a company its owner. `getCurrentUser()` is where the session plugs in.
+- The admin console for Wolsten Studios: every practice, its subscription
+  (Stripe), suspending one, logged support access.
+- Files into Supabase Storage: documents, logos and captures are kept in
+  Postgres today.
+- Next.js 16.4 or later: 16.3.3 has published security advisories.
+
 ## If something goes wrong
 - **Reset demo data** at http://localhost:3000/settings?demo=1 rebuilds
   everything in about two seconds (or `npm run demo:reset`). The button is
@@ -314,6 +360,8 @@ to reconcile.
   refund is a bank payment against receivables. The PDFs (invoice, quote,
   credit note, statement) are `src/lib/documents/pdf.tsx` (react-pdf, Roboto
   embedded).
+- `src/lib/db/index.ts`: the embedded Postgres on the laptop, or `DATABASE_URL`
+  for a real one; every query runs as the person asking (see Going live).
 - The database rebuilds the demo data whenever `schema.sql` changes
   (`src/lib/db/index.ts` keeps the schema's hash), so a pull never leaves an
   old database behind.
@@ -349,7 +397,7 @@ to reconcile.
   The client's page is plain HTML at `/o/{token}` (`src/lib/clients`), signed
   and uploaded to with no script. Sanctions screening (`src/lib/domain/sanctions.ts`,
   `src/lib/sanctions.ts`) reads the EU's consolidated list; the seed loads a
-  snapshot (`npx tsx scripts/make-sanctions-snapshot.mts` refreshes it), and
+  snapshot (`npm run sanctions:snapshot` refreshes it), and
   **Update the list** fetches the current one.
-- Not in this demo: sign-in (the production plan is Supabase auth and row-level
-  security), currencies other than EUR, live bank feeds.
+- Not in this demo: sign-in (Supabase Auth, next; row-level security is in
+  place), currencies other than EUR, live bank feeds.

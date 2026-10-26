@@ -282,7 +282,7 @@ export async function getReminder(customerId: string) {
     one<{ name: string; email: string | null }>("select name, email from crm_contacts where customer_id = $1 and email is not null order by name limit 1", [customerId]),
     sql<{ id: string; number: string; issued_on: string; due_on: string; balance: number; days_overdue: number }>("select id, number, issued_on, due_on, balance, days_overdue from v_invoice_directory where customer_id = $1 and status in ('issued', 'part_paid') and days_overdue > 0 order by due_on", [customerId]),
     one<{ name: string; bank_details: string | null }>("select name, bank_details from ledger_accounts where id = $1", [org.default_bank_account_id]),
-    one<{ name: string }>("select name from app_users limit 1"),
+    one<{ name: string }>("select name from app_users where id = app_user_id()"),
   ]);
   if (!customer) return null;
   const last = await one<{ occurred_at: string }>("select occurred_at from crm_activities where customer_id = $1 and kind = 'email' and body like 'Payment reminder:%' order by occurred_at desc limit 1", [customerId]);

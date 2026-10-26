@@ -7,7 +7,7 @@ import { asDbError, one, sql, transaction } from "@/lib/db";
 import { newFormToken, recordEnquiry } from "@/lib/crm/intake";
 import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
 import { CRM_STAGES, PRIORITIES, stageOf } from "@/lib/domain/crm";
-import { getDemoUser, requireOrg } from "@/lib/org";
+import { getCurrentUser, requireOrg } from "@/lib/org";
 
 /** Writes for the CRM inside one client company. The org comes from the URL, never the form. */
 
@@ -21,7 +21,7 @@ export async function addTask(_previous: ActionState, form: FormData): Promise<A
   if (!title) return { ok: false, error: "Write the to-do first." };
   const due = p.text("due_on", { max: 10 }) || new Date().toISOString().slice(0, 10);
   const priority = p.enum("priority", PRIORITIES, { fallback: "normal" }) ?? "normal";
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   try {
     await sql("insert into crm_tasks (organisation_id, title, due_on, priority, owner, enquiry_id, matter_id, customer_id) values ($1, $2, $3, $4, $5, $6, $7, $8)",
       [org.id, title, due, priority, p.text("owner", { max: 120 }) ?? user.name, p.uuid("enquiry_id"), p.uuid("matter_id"), p.uuid("customer_id")]);
@@ -46,7 +46,7 @@ export async function setEnquiryStage(_previous: ActionState, form: FormData): P
   const reason = p.text("lost_reason", { max: 300, label: "Reason" });
   if (!id || !stage) return { ok: false, error: "Choose a stage." };
   if (stage === "lost" && !reason) return { ok: false, error: "Say why it was lost: an enquiry cannot be lost without a reason.", fieldErrors: { lost_reason: "Required" } };
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   try {
     await sql("update crm_enquiries set stage = $3, lost_reason = $4, stage_changed_at = now() where id = $1 and organisation_id = $2", [id, org.id, stage, stage === "lost" ? reason : null]);
     await sql("insert into crm_activities (organisation_id, enquiry_id, kind, body, actor) values ($1, $2, 'stage', $3, $4)", [org.id, id, `Moved to ${stageOf(stage).label}${stage === "lost" ? `: ${reason}` : ""}.`, user.name]);
@@ -61,7 +61,7 @@ export async function addActivity(_previous: ActionState, form: FormData): Promi
   const body = p.text("body", { required: true, max: 2000, label: "Note" });
   const kind = p.enum("kind", ["note", "call", "email", "meeting"] as const, { fallback: "note" }) ?? "note";
   if (!body) return { ok: false, error: "Write the note first." };
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   try {
     await sql("insert into crm_activities (organisation_id, enquiry_id, matter_id, customer_id, kind, body, actor) values ($1, $2, $3, $4, $5, $6, $7)",
       [org.id, p.uuid("enquiry_id"), p.uuid("matter_id"), p.uuid("customer_id"), kind, body, user.name]);
@@ -91,7 +91,7 @@ export async function createEnquiry(_previous: ActionState, form: FormData): Pro
   const company = p.text("company", { max: 200 }), service = p.text("service", { max: 300 }), source = p.text("source", { max: 60 }) ?? "Website";
   const value = p.money("value", "Value");
   if (p.failed || !name) return p.fail();
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   let id: string;
   try {
     id = (await recordEnquiry(org, { name, company, email: p.email("email"), phone: p.text("phone", { max: 40 }), service, message: p.text("summary", { max: 2000 }), source, value }, "manual", user.name)).id;
@@ -129,7 +129,7 @@ export async function convertEnquiry(form: FormData): Promise<void> {
   const id = new FormParser(form).uuid("id");
   const enquiry = id ? await one<{ id: string; full_name: string; company: string | null; email: string | null; service: string | null; value: number | null; owner: string; customer_id: string | null }>("select * from crm_enquiries where id = $1 and organisation_id = $2", [id, org.id]) : null;
   if (!enquiry) return;
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   let customer = enquiry.customer_id;
   if (!customer) {
     const sales = await one<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [org.id]);

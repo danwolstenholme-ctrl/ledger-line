@@ -7,7 +7,7 @@ import { asDbError, one, sql, transaction } from "@/lib/db";
 import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
 import { getFees, getPracticeBooks, monthName } from "@/lib/data/work";
 import { firmToday, validRecordDate } from "@/lib/domain/invoices";
-import { getDemoUser, getPractice } from "@/lib/org";
+import { getCurrentUser, getPractice } from "@/lib/org";
 
 /** The practice's own work: timers, time, each client's fee, and the month's fee invoices. */
 
@@ -36,7 +36,7 @@ export async function startTimer(_previous: ActionState, form: FormData): Promis
   const work = p.text("work", { required: true, max: 200, label: "What you are working on" });
   if (!org) return { ok: false, error: "Choose the client the time is for." };
   if (!work) return { ok: false, error: "Say what you are working on." };
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   try {
     await transaction(async run => {
       await run(`update time_entries set ended_at = now(), minutes = greatest(1, least(1440, round(extract(epoch from now() - started_at) / 60)::int))
@@ -49,7 +49,7 @@ export async function startTimer(_previous: ActionState, form: FormData): Promis
 }
 
 export async function stopTimer(): Promise<void> {
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   await sql(`update time_entries set ended_at = now(), minutes = greatest(1, least(1440, round(extract(epoch from now() - started_at) / 60)::int))
     where person = $1 and ended_at is null`, [user.name]);
   refresh();
@@ -66,7 +66,7 @@ export async function addTime(_previous: ActionState, form: FormData): Promise<A
   if (!minutes) p.errors.duration = "Write it as 1:30, 1.5 or 90m.";
   if (!validRecordDate(on) || on > firmToday()) p.errors.on = "Choose a day, today or before.";
   if (p.failed || !org || !work || !minutes) return p.fail();
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   const person = p.text("person", { max: 120 }) ?? user.name;
   try {
     await sql(`insert into time_entries (organisation_id, person, work, started_at, ended_at, minutes, extra)

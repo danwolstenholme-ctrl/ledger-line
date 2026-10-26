@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "@/components/navigation/navigation-link";
 
 import { getMyWork, type CrmTask } from "@/lib/data/crm";
-import { getDemoUser } from "@/lib/org";
+import { getCurrentUser } from "@/lib/org";
 import { formatAmount, formatDate, greeting } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody, Panel, PanelHeader } from "@/components/common/primitives";
@@ -17,7 +17,7 @@ const short = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString
 
 /** My work, for this company: the to-dos, the enquiries and the matters, each with its next step. */
 export default async function MyWorkPage() {
-  const [{ org, today, tasks, enquiries, matters }, user] = await Promise.all([getMyWork(), getDemoUser()]);
+  const [{ org, today, tasks, enquiries, matters }, user] = await Promise.all([getMyWork(), getCurrentUser()]);
   const week = addDays(today, 7);
   const overdue = tasks.filter(task => task.due_on && task.due_on < today), dueToday = tasks.filter(task => task.due_on === today);
   const soon = tasks.filter(task => task.due_on && task.due_on > today && task.due_on <= week), later = tasks.filter(task => !task.due_on || task.due_on > week);

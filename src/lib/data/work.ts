@@ -2,7 +2,7 @@ import "server-only";
 
 import { one, sql } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
-import { getDemoUser, getPractice } from "@/lib/org";
+import { getCurrentUser, getPractice } from "@/lib/org";
 
 /**
  * The practice's own work: who is doing what this week against the hours
@@ -43,7 +43,7 @@ export async function getTimeWeek(week?: string) {
   const today = firmToday();
   const from = mondayOf(week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : today), to = addDays(from, 6);
   const [user, staff, entries, companies] = await Promise.all([
-    getDemoUser(),
+    getCurrentUser(),
     sql<{ name: string; role: string | null; weekly_hours: number }>("select name, role, weekly_hours from practice_staff order by name"),
     sql<TimeEntry>(`${ENTRY_SELECT} where (t.started_at at time zone 'Asia/Nicosia')::date between $1 and $2 order by t.started_at desc`, [from, to]),
     sql<{ id: string; name: string; is_practice: boolean }>("select id, name, is_practice from organisations order by is_practice desc, name"),
