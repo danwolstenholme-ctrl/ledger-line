@@ -46,7 +46,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       <div><p className="ll-eyebrow">Billed this year</p><p className="text-ink text-[20px] leading-tight font-semibold tabular-nums">{formatAmount(billedThisYear)}</p></div>
       {unusedCredit > 0 ? <div><p className="ll-eyebrow">Credit to use</p><p className="text-ink text-[20px] leading-tight font-semibold tabular-nums">{formatAmount(unusedCredit)}</p><p className="text-ink-muted text-[12px]">Against an invoice, or to refund</p></div> : null}
       {reminder ? <div className="ml-auto self-center"><ReminderPanel data={{ customerId: client.id, customerName: client.name, to: reminder.to, greeting: reminder.greeting, company: org.name, sender: reminder.sender,
-        overdue: reminder.overdue.map(item => ({ ...item, balance: Number(item.balance) })), bank: reminder.bank, statementHref: statement, lastSent: reminder.lastSent }} /></div> : null}
+        overdue: reminder.overdue.map(item => ({ ...item, balance: Number(item.balance) })), bank: reminder.bank, statementHref: statement, lastSent: reminder.lastSent, language: reminder.language }} /></div> : null}
     </section>
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ActionState } from "@/lib/actions/state";
+import { plainDecimal } from "@/lib/domain/line-math";
 
 /**
  * Minimal form parsing and validation.
@@ -72,7 +73,7 @@ export class FormParser {
 
   /** Money as a plain number. Rejects negatives; the database does too. */
   money(name: string, label = "Amount"): number | null {
-    const value = this.raw(name).replace(/[,\s]/g, "");
+    const value = plainDecimal(this.raw(name));
     if (!value) return null;
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {

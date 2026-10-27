@@ -1355,3 +1355,50 @@ test("documents go in Greek, or in Greek and English, to the customers who read 
   expect(both.headers()["content-type"]).toBe("application/pdf");
   for (const words of ["ΤΙΜΟΛΟΓΙΟ / INVOICE", "ΑΡΙΘΜΟΣ / NUMBER", "Σύνολο / Total", "ΤΡΟΠΟΣ ΠΛΗΡΩΜΗΣ / HOW TO PAY"]) expect(pdfText(await both.body())).toContain(words);
 });
+
+test("an owner reads Ledgerline in Greek: the menu, Home, invoices and receipts in Greek figures, amounts typed with a decimal comma, and English a tap away", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto("/sign-in");
+  await page.getByRole("button", { name: /Sign in as Dr Sofia Hadjioannou/ }).click();
+  await expect(page).toHaveURL(/\/c\/kalamies-dental$/);
+  await expect(page.locator("html")).toHaveAttribute("lang", "el");
+  const menu = page.getByRole("complementary", { name: "Κύριο μενού" });
+  // The clinic's own word for its customers, in Greek too.
+  await expect(menu.getByRole("link", { name: "Ασθενείς και ασφαλιστικές" })).toBeVisible();
+  const figures = page.getByRole("region", { name: "Βασικά μεγέθη" });
+  await expect(figures).toContainText("Στην τράπεζα");
+  await expect(figures).toContainText(/\d{1,3}\.\d{3},\d{2}\s€/);
+  await expect(page.getByRole("button", { name: "Dr Sofia Hadjioannou: λογαριασμός" })).toContainText("Κάτοχος, Kalamies Dental Clinic");
+
+  // A new invoice, its price typed with a comma; a problem said in Greek first.
+  await menu.getByRole("link", { name: "Τιμολόγια" }).click();
+  await expect(page.getByRole("heading", { name: "Τιμολόγια", level: 1 })).toBeVisible();
+  await page.getByRole("link", { name: "Νέο τιμολόγιο" }).click();
+  await page.getByLabel("Πελάτης").selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Αποθήκευση και έκδοση" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Προσθέστε τουλάχιστον μία γραμμή." })).toBeVisible();
+  await page.getByLabel("Γραμμή 1: περιγραφή").fill("Λεύκανση δοντιών");
+  await page.getByLabel("Γραμμή 1: τιμή μονάδας").fill("180,50");
+  await expect(page.getByLabel("Γραμμή 1: ποσό", { exact: true })).toHaveText(/^180,50\s€$/);
+  await page.getByRole("button", { name: "Αποθήκευση και έκδοση" }).click();
+  await expect(page.getByText("Εκδόθηκε και καταχωρίστηκε στα βιβλία.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Τιμολόγιο KDC-2026-\d{4}$/ })).toBeVisible();
+
+  // What goes to the customer is in the clinic's language for its documents, Greek.
+  await page.getByRole("button", { name: "Αποστολή", exact: true }).first().click();
+  await expect(page.getByLabel("Μήνυμα")).toHaveValue(/^Αγαπητέ\/ή [^\n]+,\n\nΣας επισυνάπτουμε το τιμολόγιο KDC-2026-\d{4} ποσού 180,50\s€/);
+
+  // English is the owner's to choose, for their own screens only.
+  await page.getByRole("button", { name: "Dr Sofia Hadjioannou: λογαριασμός" }).click();
+  await page.getByRole("menuitemradio", { name: "English" }).click();
+  await expect(page.getByRole("heading", { name: /^Invoice KDC-2026-\d{4}$/ })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-GB");
+  await expect(page.getByText("€180.50").first()).toBeVisible();
+  await page.goto("/c/kalamies-dental/capture");
+  await expect(page.getByRole("heading", { name: "Upload receipts" })).toBeVisible();
+  await page.getByRole("button", { name: "Dr Sofia Hadjioannou: account" }).click();
+  await page.getByRole("menuitemradio", { name: "Ελληνικά" }).click();
+  await expect(page.getByRole("heading", { name: "Ανέβασμα αποδείξεων" })).toBeVisible();
+  await context.close();
+});

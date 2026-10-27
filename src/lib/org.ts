@@ -7,6 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import { one, sql } from "@/lib/db";
 import { booksHref } from "@/lib/domain/paths";
 import { setRequestCurrency } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
 import type { OrganisationRow, PracticeRow } from "@/types/database";
 
 /** proxy.ts names the company in the URL on every request under /c/{slug}. */
@@ -44,10 +45,11 @@ export const getPractice = cache(async () => {
 });
 export const getOrganisations = cache(async () => sql<OrganisationRow>("select * from organisations order by name"));
 
-export type CurrentUser = { id: string; name: string; email: string; initials: string };
+/** `locale`: the language they read Ledgerline in (lib/i18n). */
+export type CurrentUser = { id: string; name: string; email: string; initials: string; locale: Locale };
 /** The person signed in, whoever request.jwt.claims names. Anyone who isn't is sent to sign in. */
 export const getCurrentUser = cache(async (): Promise<CurrentUser> => {
-  const user = await one<CurrentUser>("select id, name, email, initials from app_users where id = app_user_id()");
+  const user = await one<CurrentUser>("select id, name, email, initials, locale from app_users where id = app_user_id()");
   if (!user) redirect("/sign-in");
   return user;
 });

@@ -109,6 +109,10 @@ expect("Nikos does not see the firm's AML file on Pixelforge", await count(nikos
 expect("Nikos does not see the firm's fee, time or staff", await count(nikos, "select (select count(*) from client_fees) + (select count(*) from time_entries) + (select count(*) from practice_staff) as n"), is(0));
 expect("Nikos sees whose practice it is, for its name and colours", await count(nikos, "select count(*) as n from practices"), is(1));
 expect("Nikos can raise Pixelforge's own records", await count(nikos, "insert into customers (organisation_id, name) values ($1, 'New Client GmbH') returning id", [pixelforge]), is(1));
+// The language someone reads Ledgerline in is theirs to choose, and nobody else's.
+expect("A person sets their own language (Nikos)", await count(nikos, "update app_users set locale = 'el' where id = app_user_id() returning id"), is(1));
+expect("But not Sofia's at Kalamies", await count(nikos, "update app_users set locale = 'en' where email = 'sofia@kalamiesdental.example' returning id"), is(0));
+expect("Nor Maria's at the practice", await count(nikos, "update app_users set locale = 'el' where email = 'maria@saltlake.example' returning id"), is(0));
 
 // Invitations: the practice that sent them, and nobody else.
 await conn.query("insert into invitations (practice_id, email, name, role, token_hash) select practice_id, 'new.person@example.test', 'New Person', 'Accountant', repeat('a', 64) from organisations where slug = 'pixelforge'");

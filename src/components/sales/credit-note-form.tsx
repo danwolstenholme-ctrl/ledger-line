@@ -9,7 +9,7 @@ import { CREDIT_REASONS } from "@/lib/domain/credit-notes";
 import { formatAmount } from "@/lib/format";
 import { Field, FormError, NativeSelect, TextArea, TextInput } from "@/components/common/form-fields";
 import Link from "@/components/navigation/navigation-link";
-import { CustomerChoice, IntentButton, NEW_CUSTOMER, treatmentFor, treatmentsFor, type DocumentFormCustomer } from "@/components/sales/document-form";
+import { CustomerChoice, IntentButton, NEW_CUSTOMER, treatmentFor, treatmentsFor, useKeptForm, type DocumentFormCustomer } from "@/components/sales/document-form";
 import { SalesLineEditor, type SaleItemOption, type SaleLineValue } from "@/components/sales/sales-line-editor";
 import type { VatTreatment } from "@/types/database";
 import { useCurrency, useRegime } from "@/components/common/regime";
@@ -29,6 +29,7 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
   const { country } = useRegime();
   const currency = useCurrency();
   const [state, action] = useActionState(saveCreditNote, idleState);
+  const { onSubmit, sending } = useKeptForm(action);
   const uid = useId();
   const [customerId, setCustomerId] = useState(document?.customer_id ?? invoice?.customer_id ?? (customers.length ? "" : NEW_CUSTOMER));
   const customer = customers.find(item => item.id === customerId);
@@ -36,7 +37,7 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
   const [editorKey, setEditorKey] = useState(0);
   const errors = state.fieldErrors ?? {};
   const left = invoice ? Math.max(0, invoice.total - invoice.credited_before) : null;
-  return <form action={action} className="space-y-5" noValidate>
+  return <form onSubmit={onSubmit} className="space-y-5" noValidate>
     {document ? <input type="hidden" name="id" value={document.id} /> : null}
     {invoice ? <input type="hidden" name="invoice_id" value={invoice.id} /> : null}
     {invoice ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">
@@ -75,8 +76,8 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
     </Field>
     <FormError message={state.error} />
     <div className="flex flex-wrap items-center gap-3">
-      <IntentButton intent="issue" primary>Save and issue</IntentButton>
-      <IntentButton intent="draft">Save as draft</IntentButton>
+      <IntentButton intent="issue" primary sending={sending}>Save and issue</IntentButton>
+      <IntentButton intent="draft" sending={sending}>Save as draft</IntentButton>
       <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[13px]">Cancel</Link>
     </div>
     <p className="text-ink-faint text-[12px]">Issuing posts the reverse of a sale: income and the VAT due fall, and the customer owes less. It comes off the VAT return for the period of its date.</p>

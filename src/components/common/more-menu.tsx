@@ -6,13 +6,16 @@ import Link from "@/components/navigation/navigation-link";
 
 import { recordOutlineButton } from "@/components/records/record-layout";
 import { MenuPanel } from "@/components/motion/motion";
+import { useI18n } from "@/components/common/locale";
 
 const ICONS = { copy: Copy, credit: FileMinus, repeat: Repeat, xml: FileCode } satisfies Record<string, LucideIcon>;
 /** `download`: a file to save, not a page to go to. */
 export type MoreMenuItem = { href: string; label: string; hint?: string; icon: keyof typeof ICONS; download?: boolean };
 
 /** The less frequent actions on a record, behind one button so the header keeps to what is done most. */
-export function MoreMenu({ items, label = "More" }: { items: MoreMenuItem[]; label?: string }) {
+export function MoreMenu({ items, label: given }: { items: MoreMenuItem[]; label?: string }) {
+  const { t } = useI18n();
+  const label = given ?? t("More");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -25,7 +28,7 @@ export function MoreMenu({ items, label = "More" }: { items: MoreMenuItem[]; lab
   }, [open]);
   if (!items.length) return null;
   return <div ref={ref} className="relative">
-    <button type="button" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-haspopup="menu" aria-label={`${label} actions`} className={recordOutlineButton}>{label}<ChevronDown className="size-3.5" /></button>
+    <button type="button" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-haspopup="menu" aria-label={t("{label} actions", { label })} className={recordOutlineButton}>{label}<ChevronDown className="size-3.5" /></button>
     <MenuPanel open={open} className="bg-surface border-hairline absolute top-full right-0 z-20 mt-1 w-64 overflow-hidden rounded-md border py-1 shadow-lg">
       {items.map(item => {
         const Icon = ICONS[item.icon];

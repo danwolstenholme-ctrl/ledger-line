@@ -10,20 +10,22 @@ import type { Board, Field, Stage } from "@/lib/domain/business-types";
 import { stageSwatch } from "@/lib/domain/crm";
 import { cn } from "@/lib/utils";
 import { ActionForm } from "@/components/common/action-form";
+import { useI18n } from "@/components/common/locale";
 import { Checkbox, Field as FieldRow, FormError, NativeSelect, SubmitButton, TextArea, TextInput } from "@/components/common/form-fields";
 import { useCurrencySymbol } from "@/components/common/regime";
 
 type Link = { enquiry_id?: string; job_id?: string; customer_id?: string };
 
 /** "Add a to-do…": type and press Enter. Linked to whatever page it is on. */
-export function AddTodo({ link = {}, placeholder = "Add a to-do…" }: { link?: Link; placeholder?: string }) {
+export function AddTodo({ link = {}, placeholder }: { link?: Link; placeholder?: string }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLFormElement>(null);
   const [state, action] = useActionState(async (previous: typeof idleState, form: FormData) => { const done = await addTask(previous, form); if (done.ok) ref.current?.reset(); return done; }, idleState);
   return <form ref={ref} action={action} className="space-y-1">
     {Object.entries(link).map(([name, value]) => value ? <input key={name} type="hidden" name={name} value={value} /> : null)}
     <div className="flex gap-2">
-      <TextInput name="title" placeholder={placeholder} aria-label="New to-do" className="h-10 text-[13.5px]" autoComplete="off" />
-      <TextInput name="due_on" type="date" aria-label="Due" className="h-10 w-40" />
+      <TextInput name="title" placeholder={placeholder ?? t("Add a to-do…")} aria-label={t("New to-do")} className="h-10 text-[13.5px]" autoComplete="off" />
+      <TextInput name="due_on" type="date" aria-label={t("Due")} className="h-10 w-40" />
     </div>
     <FormError message={state.error} />
   </form>;
@@ -31,9 +33,10 @@ export function AddTodo({ link = {}, placeholder = "Add a to-do…" }: { link?: 
 
 /** The round checkbox on every to-do. */
 export function TaskCheck({ id, done }: { id: string; done: boolean }) {
+  const { t } = useI18n();
   return <form action={toggleTask} className="shrink-0">
     <input type="hidden" name="id" value={id} />
-    <button aria-label={done ? "Mark as not done" : "Mark as done"} className={cn("grid size-[18px] place-items-center rounded-full border transition-colors", done ? "border-positive bg-positive text-white" : "border-hairline-strong hover:border-brand")}>
+    <button aria-label={done ? t("Mark as not done") : t("Mark as done")} className={cn("grid size-[18px] place-items-center rounded-full border transition-colors", done ? "border-positive bg-positive text-white" : "border-hairline-strong hover:border-brand")}>
       {done ? <Check className="size-3" /> : null}
     </button>
   </form>;

@@ -292,7 +292,9 @@ export async function getReminder(customerId: string) {
   ]);
   if (!customer) return null;
   const last = await one<{ occurred_at: string }>("select occurred_at from crm_activities where customer_id = $1 and kind = 'email' and body like 'Payment reminder:%' order by occurred_at desc limit 1", [customerId]);
-  return { org, customer, to: customer.email ?? contact?.email ?? "", greeting: contact?.name?.split(" ")[0] ?? null, overdue, bank, sender: org.contact_name ?? user?.name ?? org.name, lastSent: last?.occurred_at ?? null };
+  return { org, customer, to: customer.email ?? contact?.email ?? "", greeting: contact?.name?.split(" ")[0] ?? null, overdue, bank, sender: org.contact_name ?? user?.name ?? org.name, lastSent: last?.occurred_at ?? null,
+    // What the customer is sent is in their language, or the company's.
+    language: customer.document_language ?? org.document_language };
 }
 
 // ---------------------------------------------------------------------------

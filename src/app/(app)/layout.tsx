@@ -6,6 +6,8 @@ import { headers } from "next/headers";
 import { ORG_HEADER, getCurrentUser, getMembership, getPractice } from "@/lib/org";
 import { companyRoleLabel, getShellCompany } from "@/lib/data/shell";
 import { AppShell } from "@/components/shell/app-shell";
+import { LocaleProvider } from "@/components/common/locale";
+import { getI18n } from "@/lib/i18n/server";
 import { getRunningTimer } from "@/lib/data/work";
 
 export const dynamic = "force-dynamic";
@@ -25,22 +27,23 @@ export async function generateViewport(): Promise<Viewport> {
   return { themeColor: /^#[0-9a-fA-F]{6}$/.test(practice.brand_color) ? practice.brand_color : "#0d6e6e" };
 }
 
-/** Everything behind sign-in: the menu, the top bar and the page, in the practice's colours. */
+/** Everything behind sign-in: the menu, the top bar and the page, in the practice's colours and the language of the person reading. */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const slug = (await headers()).get(ORG_HEADER);
-  const [user, practice, membership, reviews, count, initialCompany] = await Promise.all([
+  const [user, practice, membership, reviews, count, initialCompany, { t }] = await Promise.all([
     getCurrentUser(), getPractice(), getMembership(),
     sql<{ count: number }>("select count(*) as count from capture_items where status = 'review'"),
     one<{ count: number }>("select count(*) as count from organisations where not is_practice"),
     // The company being looked at, for the first page's menu; its own layout keeps it current after that (CompanyShellSync).
     slug ? getShellCompany(slug) : null,
+    getI18n(),
   ]);
   const toReview = Number(reviews[0]?.count ?? 0);
   const running = membership.practice ? await getRunningTimer(user.name) : null;
-  const role = membership.practice ? membership.role ?? "Practice" : membership.companies[0] ? companyRoleLabel(membership.companies[0].role, membership.companies[0].name) : "";
+  const role = membership.practice ? t(membership.role ?? "Practice") : membership.companies[0] ? companyRoleLabel(membership.companies[0].role, membership.companies[0].name, t) : "";
   // The practice's colour at the root, where the whole brand ramp is mixed from it. The database only holds #rrggbb.
   const brand = /^#[0-9a-fA-F]{6}$/.test(practice.brand_color) ? practice.brand_color : "#0d6e6e";
-  return <>
+  return <LocaleProvider locale={user.locale}>
     <style>{`:root{--brand:${brand}}`}</style>
     <AppShell practice={{ name: practice.name, initials: practice.initials, brand_color: practice.brand_color, tagline: practice.tagline }}
       user={{ name: user.name, initials: user.initials, email: user.email, role, demo: AUTH_MODE === "demo" }} member={membership.practice} toReview={toReview}
@@ -48,5 +51,5 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       initialCompany={initialCompany} companyCount={Number(count?.count ?? 0)}>
       {children}
     </AppShell>
-  </>;
+  </LocaleProvider>;
 }

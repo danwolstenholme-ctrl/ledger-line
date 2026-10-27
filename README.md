@@ -88,6 +88,27 @@ to reconcile.
   opened, a form saved) waits and goes as soon as it is back
   (`experimental.useOffline`).
 
+### 1b¾. In Greek, 2 minutes
+- **Sign in as someone else** → **Dr Sofia Hadjioannou**, who owns Kalamies
+  Dental and reads Ledgerline in Greek. The menu, Home, invoices, receipts,
+  the command palette (type τιμολ), the phone's bar and **+**, and the
+  messages at the foot of the screen are in Greek; so are the figures and
+  dates (66.082,73 €, 28 Οκτ 2026, πριν από 3 ημέρες) and the deadlines
+  (Προσωρινή φορολογία 2026, πρώτη δόση). The clinic's own words come
+  through too: Ασθενείς και ασφαλιστικές.
+- Each person chooses: the account menu, top right → **Γλώσσα**: **English**
+  or **Ελληνικά**. It is theirs alone, wherever they sign in; the practice
+  can read the same company in English.
+- An amount is typed either way: 180,50 is a hundred and eighty and a half,
+  as are 180.50 and 1.234,50 / 1,234.50 for the thousands.
+- What goes to a customer follows the customer's language, not the screen's:
+  the invoice by email, a payment reminder and the words before a shared
+  link are in Greek for a customer whose documents are (Kalamies' are), in
+  English for one whose are in English, in both for both.
+- The accountant's pages (reports, journals, the chart, the practice's own)
+  stay in English for now. `npm run check:greek` lists any phrase on a
+  translated screen that is missing its Greek.
+
 ### 1c. Everyday work, 6 minutes
 - **Raise an invoice**: choose a customer (or **+ New customer…** and type a
   name). The number follows on (`LRC-2026-0129`), the due date comes from the
@@ -615,8 +636,9 @@ enforces those rules too: what it shows Maria is what the database lets her see.
   id in `request.jwt.claims`, as Supabase runs it (`src/lib/db/index.ts`).
   Work done for nobody in particular (a client's private link, the website
   form, the sanctions list refresh) runs inside `asService()`, which names why.
-- `npm run check:tenancy` proves it: 27 checks, asked as a partner, as
-  someone at another practice, as a client's owner and as nobody. Against a
+- `npm run check:tenancy` proves it: 78 checks, asked as a partner, as
+  someone at another practice, as a client's owner, as an auditor and as
+  nobody. Against a
   real Postgres: `DATABASE_URL=… CHECK_TENANCY_WIPE=1 npm run check:tenancy`
   (it empties that database first: a throwaway one only).
 
@@ -718,6 +740,17 @@ search: 250 KB and 140 KB with 700 clients, down from 1 MB and 865 KB.
   loaded font between documents, and one with much Greek in it otherwise
   garbles the next (letters drop out). `tests/support/pdf-text.ts` reads a
   PDF's text back as a viewer shows it, so the tests catch that.
+- Languages (`src/lib/i18n`): a screen's words are its English, looked up in
+  the Greek dictionary (`el.ts`) for someone who reads Ledgerline in Greek
+  (`app_users.locale`): `await getI18n()` in a server component,
+  `useI18n()` in a client one, each with the formatters of that language
+  (`src/lib/format.ts`). Problems the server words in English are read
+  against the dictionary's phrases (`t.message`); a deadline's title is
+  turned into Greek in `i18n/deadlines.ts`; what a customer is sent is
+  written in their language in `src/lib/documents/messages.ts`. Typed figures
+  are read either language's way by `plainDecimal` (`line-math.ts`).
+  `npm run check:greek` checks the dictionary against every translated
+  screen.
 - Next.js 16.4 (App Router, Turbopack) on React 19.3 with the React Compiler,
   run by its Rust port inside Turbopack (`next.config.ts`), so components are
   memoised without hand-written `useMemo`. TypeScript 6.0, the newest the

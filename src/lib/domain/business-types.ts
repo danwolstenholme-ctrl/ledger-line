@@ -11,6 +11,8 @@
  * afterwards.
  */
 
+import { plainDecimal } from "./line-math";
+
 export const BOARDS = ["deal", "job"] as const;
 export type Board = (typeof BOARDS)[number];
 /** Where a stage leaves the record: still open, or closed one way or the other (won or done; lost or cancelled). */
@@ -182,7 +184,7 @@ export function readFieldValue(kind: FieldKind, raw: string, options: string[] =
   if (text.length > 500) return { error: "is too long: 500 characters at most" };
   switch (kind) {
     case "number": case "money": {
-      const value = Number(text.replace(/[,\s]/g, ""));
+      const value = Number(plainDecimal(text));
       if (!Number.isFinite(value)) return { error: "must be a number" };
       return { value: kind === "money" ? Math.round(value * 100) / 100 : value };
     }

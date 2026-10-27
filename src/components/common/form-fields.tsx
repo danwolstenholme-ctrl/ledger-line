@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { AlertCircle, ChevronDown, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/common/locale";
 
 /**
  * Form primitives.
@@ -39,6 +40,8 @@ export function Field({
   className?: string;
   children: ReactNode;
 }) {
+  // A problem from the server is in English; read in Greek when the dictionary has it.
+  const { t } = useI18n();
   return (
     <div className={cn("space-y-1", className)}>
       <label
@@ -60,7 +63,7 @@ export function Field({
       {children}
       {error ? (
         <p className="text-critical text-[12px]" role="alert">
-          {error}
+          {t.message(error)}
         </p>
       ) : null}
     </div>
@@ -142,6 +145,7 @@ export function Checkbox({
 
 /** Top-of-form error. Field-level problems appear beside their field instead. */
 export function FormError({ message }: { message?: string | null }) {
+  const { t } = useI18n();
   if (!message) return null;
   return (
     <p
@@ -149,7 +153,7 @@ export function FormError({ message }: { message?: string | null }) {
       className="border-critical-line bg-critical-soft text-critical flex items-start gap-2 rounded-md border px-3 py-2 text-[13px]"
     >
       <AlertCircle className="mt-px size-4 shrink-0" />
-      {message}
+      {t.message(message)}
     </p>
   );
 }
@@ -170,6 +174,7 @@ export function SubmitButton({
   disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
+  const { t } = useI18n();
   return (
     <button
       type="submit"
@@ -184,7 +189,7 @@ export function SubmitButton({
       )}
     >
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-      {pending ? (pendingLabel ?? "Saving") : children}
+      {pending ? (pendingLabel ?? t("Saving")) : children}
     </button>
   );
 }

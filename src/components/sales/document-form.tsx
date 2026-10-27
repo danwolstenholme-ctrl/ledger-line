@@ -1,7 +1,6 @@
 "use client";
 
-import { useActionState, useId, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { useActionState, useId, useState, useTransition, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
 import { saveInvoice, saveQuote } from "@/lib/actions/sales";
@@ -15,6 +14,7 @@ import Link from "@/components/navigation/navigation-link";
 import { SalesLineEditor, type SaleItemOption, type SaleLineValue } from "@/components/sales/sales-line-editor";
 import { INVOICE_PAYMENT_METHODS, type VatTreatment } from "@/types/database";
 import { useRegime } from "@/components/common/regime";
+import { useI18n } from "@/components/common/locale";
 
 export type DocumentFormCustomer = { id: string; name: string; vat_number: string | null; country: string; eu_business: boolean; default_account_id: string | null; payment_terms_days?: number | null };
 export type DocumentFormValues = { id: string; status: string; customer_id: string; number: string; issued_on: string; due_on: string | null; vat_treatment: VatTreatment; notes: string | null; lines: SaleLineValue[]; reference?: string | null };
@@ -51,13 +51,30 @@ export function treatmentFor(customer: DocumentFormCustomer | undefined, registe
   return "standard";
 }
 
-export function IntentButton({ intent, primary, children }: { intent: string; primary?: boolean; children: React.ReactNode }) {
-  const { pending, data } = useFormStatus();
-  const mine = pending && data?.get("intent") === intent;
-  return <button type="submit" name="intent" value={intent} disabled={pending}
+/**
+ * A document form sent without React's reset after an action, so that a
+ * problem leaves everything as it was typed and chosen: the reset used to
+ * clear the chosen customer, and the next press failed for want of one.
+ * `sending`: the intent of the button pressed, while it is being saved.
+ */
+export function useKeptForm(action: (form: FormData) => void) {
+  const [pending, start] = useTransition();
+  const [intent, setIntent] = useState<string | null>(null);
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const pressed = (event.nativeEvent as SubmitEvent).submitter;
+    const data = new FormData(event.currentTarget, pressed);
+    setIntent(pressed instanceof HTMLButtonElement ? pressed.value : null);
+    start(() => action(data));
+  };
+  return { onSubmit, pending, sending: pending ? intent : null };
+}
+
+export function IntentButton({ intent, primary, sending, children }: { intent: string; primary?: boolean; sending: string | null; children: React.ReactNode }) {
+  return <button type="submit" name="intent" value={intent} disabled={sending !== null}
     className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors disabled:opacity-60",
       primary ? "bg-brand hover:bg-brand-dark text-white" : "border-hairline-strong text-ink hover:bg-muted border")}>
-    {mine ? <Loader2 className="size-3.5 animate-spin" /> : null}{children}
+    {sending === intent ? <Loader2 className="size-3.5 animate-spin" /> : null}{children}
   </button>;
 }
 
@@ -65,18 +82,19 @@ export function IntentButton({ intent, primary, children }: { intent: string; pr
 export function CustomerChoice({ uid, customers, value, onChange, error, locked = false }: {
   uid: string; customers: DocumentFormCustomer[]; value: string; onChange: (id: string) => void; error?: string; locked?: boolean;
 }) {
+  const { t } = useI18n();
   return <>
-    <Field label="Customer" htmlFor={`${uid}-customer`} required error={error} className="sm:col-span-2">
+    <Field label={t("Customer")} htmlFor={`${uid}-customer`} required error={error} className="sm:col-span-2">
       {/* "New customer" is not an id: the select sends nothing and the name beside it is used instead. */}
       <NativeSelect id={`${uid}-customer`} name={value === NEW_CUSTOMER ? undefined : "customer_id"} value={value} disabled={locked} onChange={event => onChange(event.target.value)}>
-        <option value="">Choose a customer</option>
+        <option value="">{t("Choose a customer")}</option>
         {customers.map(item => <option key={item.id} value={item.id}>{item.name}{item.vat_number ? ` · ${item.vat_number}` : ""}</option>)}
-        {!locked ? <option value={NEW_CUSTOMER}>+ New customer…</option> : null}
+        {!locked ? <option value={NEW_CUSTOMER}>{t("+ New customer…")}</option> : null}
       </NativeSelect>
       {locked ? <input type="hidden" name="customer_id" value={value} /> : null}
     </Field>
-    {value === NEW_CUSTOMER ? <Field label="New customer's name" htmlFor={`${uid}-new`} hint="added to Customers with this document" className="sm:col-span-2">
-      <TextInput id={`${uid}-new`} name="new_customer" maxLength={200} placeholder="e.g. Seaview Café Ltd" autoComplete="off" autoFocus />
+    {value === NEW_CUSTOMER ? <Field label={t("New customer's name")} htmlFor={`${uid}-new`} hint={t("added to Customers with this document")} className="sm:col-span-2">
+      <TextInput id={`${uid}-new`} name="new_customer" maxLength={200} placeholder={t("e.g. Seaview Café Ltd")} autoComplete="off" autoFocus />
     </Field> : <div className="hidden sm:col-span-2 sm:block" />}
   </>;
 }
@@ -93,7 +111,9 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
   terms: number; registered: boolean; presetCustomer?: string | null; cancelHref: string;
 }) {
   const { country } = useRegime();
+  const { t } = useI18n();
   const [state, action] = useActionState(kind === "invoice" ? saveInvoice : saveQuote, idleState);
+  const { onSubmit, sending } = useKeptForm(action);
   const uid = useId();
   const start = document ?? prefill;
   const [customerId, setCustomerId] = useState(start?.customer_id ?? (customers.some(item => item.id === presetCustomer) ? presetCustomer! : customers.length ? "" : NEW_CUSTOMER));
@@ -110,7 +130,7 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
   const errors = state.fieldErrors ?? {};
   const note = treatmentsFor(country).find(item => item.key === treatment)?.note;
   const canTakePayment = kind === "invoice" && (!document || document.status === "draft") && banks.length > 0;
-  return <form action={action} className="space-y-5" noValidate>
+  return <form onSubmit={onSubmit} className="space-y-5" noValidate>
     {document ? <input type="hidden" name="id" value={document.id} /> : null}
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <CustomerChoice uid={uid} customers={customers} value={customerId} error={errors.customer_id} onChange={id => {
@@ -120,51 +140,51 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
         // A new customer's VAT position decides the treatment, unless lines are already written for this document.
         if (!start) { setTreatment(treatmentFor(next, registered, country)); setEditorKey(value => value + 1); }
       }} />
-      <Field label={kind === "invoice" ? "Invoice number" : "Quote number"} htmlFor={`${uid}-number`} required error={errors.number}>
+      <Field label={kind === "invoice" ? t("Invoice number") : t("Quote number")} htmlFor={`${uid}-number`} required error={errors.number}>
         <TextInput id={`${uid}-number`} name="number" defaultValue={document?.number ?? number} maxLength={60} className="font-mono" />
       </Field>
-      <Field label={kind === "invoice" ? "Invoice date" : "Quote date"} htmlFor={`${uid}-issued`} required error={errors.issued_on}>
+      <Field label={kind === "invoice" ? t("Invoice date") : t("Quote date")} htmlFor={`${uid}-issued`} required error={errors.issued_on}>
         <TextInput id={`${uid}-issued`} name="issued_on" type="date" value={issuedOn} onChange={event => { setIssuedOn(event.target.value); follow(event.target.value, customer); }} />
       </Field>
-      <Field label={kind === "invoice" ? "Due date" : "Valid until"} htmlFor={`${uid}-due`} error={errors.due_on} hint={customerTerms !== null && !dueTouched ? `${customerTerms} days` : undefined}>
+      <Field label={kind === "invoice" ? t("Due date") : t("Valid until")} htmlFor={`${uid}-due`} error={errors.due_on} hint={customerTerms !== null && !dueTouched ? t.n(customerTerms, "{count} day", "{count} days") : undefined}>
         <TextInput id={`${uid}-due`} name="due_on" type="date" value={dueOn ?? ""} onChange={event => { setDueOn(event.target.value); setDueTouched(true); }} />
       </Field>
-      {registered ? <Field label="VAT" htmlFor={`${uid}-vat`}>
+      {registered ? <Field label={t("VAT")} htmlFor={`${uid}-vat`}>
         <NativeSelect id={`${uid}-vat`} name="vat_treatment" value={treatment} onChange={event => setTreatment(event.target.value as VatTreatment)}>
-          {treatmentsFor(country).map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+          {treatmentsFor(country).map(item => <option key={item.key} value={item.key}>{t(item.label)}</option>)}
         </NativeSelect>
       </Field> : <input type="hidden" name="vat_treatment" value="exempt" />}
     </div>
-    {kind === "invoice" ? <Field label="Their reference" htmlFor={`${uid}-reference`} hint="optional: their purchase order number, printed on the invoice" className="max-w-md">
-      <TextInput id={`${uid}-reference`} name="reference" defaultValue={document?.reference ?? ""} maxLength={80} autoComplete="off" placeholder="e.g. PO-4471" />
+    {kind === "invoice" ? <Field label={t("Their reference")} htmlFor={`${uid}-reference`} hint={t("optional: their purchase order number, printed on the invoice")} className="max-w-md">
+      <TextInput id={`${uid}-reference`} name="reference" defaultValue={document?.reference ?? ""} maxLength={80} autoComplete="off" placeholder={t("e.g. PO-4471")} />
     </Field> : null}
-    {registered ? note ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">{note}</p> : null
-      : <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">Not registered for VAT: no VAT is charged, and the invoice says so.</p>}
+    {registered ? note ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">{t(note)}</p> : null
+      : <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">{t("Not registered for VAT: no VAT is charged, and the invoice says so.")}</p>}
     <SalesLineEditor key={`${editorKey}-${customerId}`} accounts={accounts} items={items} initial={start?.lines} noVat={treatment !== "standard"}
       defaultAccount={customer?.default_account_id ?? salesAccount} error={errors.lines} />
-    <Field label="Notes" htmlFor={`${uid}-notes`} hint="printed on the document">
-      <TextArea id={`${uid}-notes`} name="notes" rows={2} defaultValue={start?.notes ?? ""} maxLength={2000} placeholder={kind === "invoice" ? "e.g. Thank you for your business." : "e.g. Prices held for 30 days."} />
+    <Field label={t("Notes")} htmlFor={`${uid}-notes`} hint={t("printed on the document")}>
+      <TextArea id={`${uid}-notes`} name="notes" rows={2} defaultValue={start?.notes ?? ""} maxLength={2000} placeholder={kind === "invoice" ? t("e.g. Thank you for your business.") : t("e.g. Prices held for 30 days.")} />
     </Field>
     {canTakePayment ? <div className="border-hairline space-y-3 rounded-md border px-3 py-2.5">
-      <Checkbox name="paid_now" checked={paidNow} onChange={event => setPaidNow(event.target.checked)} label="Paid already: a card, cash or on-the-spot sale" />
+      <Checkbox name="paid_now" checked={paidNow} onChange={event => setPaidNow(event.target.checked)} label={t("Paid already: a card, cash or on-the-spot sale")} />
       {paidNow ? <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Paid into" htmlFor={`${uid}-paid-bank`} error={errors.paid_bank_account_id}>
+        <Field label={t("Paid into")} htmlFor={`${uid}-paid-bank`} error={errors.paid_bank_account_id}>
           <NativeSelect id={`${uid}-paid-bank`} name="paid_bank_account_id" defaultValue={defaultBank ?? banks[0]?.id}>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</NativeSelect>
         </Field>
-        <Field label="Paid by" htmlFor={`${uid}-paid-method`}>
-          <NativeSelect id={`${uid}-paid-method`} name="paid_method" defaultValue="card">{INVOICE_PAYMENT_METHODS.map(method => <option key={method} value={method}>{METHODS[method]}</option>)}</NativeSelect>
+        <Field label={t("Paid by")} htmlFor={`${uid}-paid-method`}>
+          <NativeSelect id={`${uid}-paid-method`} name="paid_method" defaultValue="card">{INVOICE_PAYMENT_METHODS.map(method => <option key={method} value={method}>{t(METHODS[method])}</option>)}</NativeSelect>
         </Field>
-        <p className="text-ink-faint text-[12px] sm:col-span-2">Issued and paid in one step, on the invoice date. The payment waits in the bank to be matched to the statement.</p>
+        <p className="text-ink-faint text-[12px] sm:col-span-2">{t("Issued and paid in one step, on the invoice date. The payment waits in the bank to be matched to the statement.")}</p>
       </div> : null}
     </div> : null}
     <FormError message={state.error} />
     <div className="flex flex-wrap items-center gap-3">
-      {document && document.status !== "draft" ? <IntentButton intent={kind === "invoice" ? "issue" : "send"} primary>Save changes</IntentButton> : <>
-        <IntentButton intent={kind === "invoice" ? "issue" : "send"} primary>{kind === "invoice" ? paidNow ? "Save, issue and mark paid" : "Save and issue" : "Save and mark as sent"}</IntentButton>
-        {!paidNow ? <IntentButton intent="draft">Save as draft</IntentButton> : null}
+      {document && document.status !== "draft" ? <IntentButton intent={kind === "invoice" ? "issue" : "send"} primary sending={sending}>{t("Save changes")}</IntentButton> : <>
+        <IntentButton intent={kind === "invoice" ? "issue" : "send"} primary sending={sending}>{kind === "invoice" ? paidNow ? t("Save, issue and mark paid") : t("Save and issue") : t("Save and mark as sent")}</IntentButton>
+        {!paidNow ? <IntentButton intent="draft" sending={sending}>{t("Save as draft")}</IntentButton> : null}
       </>}
-      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[13px]">Cancel</Link>
+      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[13px]">{t("Cancel")}</Link>
     </div>
-    {kind === "invoice" ? <p className="text-ink-faint text-[12px]">Issuing posts it to the books: the customer owes the total, each line&apos;s account earns its net, and the VAT is owed. A draft posts nothing.</p> : null}
+    {kind === "invoice" ? <p className="text-ink-faint text-[12px]">{t("Issuing posts it to the books: the customer owes the total, each line's account earns its net, and the VAT is owed. A draft posts nothing.")}</p> : null}
   </form>;
 }

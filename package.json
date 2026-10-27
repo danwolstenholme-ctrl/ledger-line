@@ -17,7 +17,8 @@
     "supabase:migration": "node scripts/make-supabase-migration.mjs",
     "sanctions:snapshot": "tsx scripts/make-sanctions-snapshot.mts",
     "supabase:demo-users": "node scripts/supabase-demo-users.mjs",
-    "check:rules": "tsx scripts/check-rules.mts"
+    "check:rules": "tsx scripts/check-rules.mts",
+    "check:greek": "tsx scripts/check-greek.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

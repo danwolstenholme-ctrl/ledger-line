@@ -21,6 +21,8 @@ import { CommandPalette, type PaletteEntry } from "@/components/shell/command-pa
 import { MobileBar, type MobileTab } from "@/components/shell/mobile-bar";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { Toaster } from "@/components/common/toaster";
+import { useI18n } from "@/components/common/locale";
+import { i18nFor, type Translate } from "@/lib/i18n";
 import type { ShellCompany } from "@/lib/data/shell";
 import { motion } from "motion/react";
 
@@ -61,43 +63,44 @@ export function PracticeMark({ practice, size = "md" }: { practice: Pick<ShellPr
 
 const shortName = (name: string) => name.replace(/ (Ltd|Limited)$/, "");
 
-function companyNav(base: string, client: ShellClient): NavGroup[] {
+/** `t`: the menu's words in the language of the person reading it; a company's own names for things are looked up as they are. */
+function companyNav(base: string, client: ShellClient, t: Translate): NavGroup[] {
   const has = (module: string) => client.nav.modules.includes(module);
   return [
-    { label: null, items: [{ href: base, label: "Home", icon: Home, title: "Home" }] },
+    { label: null, items: [{ href: base, label: t("Home"), icon: Home, title: t("Home") }] },
     // Customers first: who they are, what was quoted and invoiced, what is to do, and when.
     // In the company's own words, and only the parts it uses.
-    { label: "CRM", items: [
-      ...(has("pipeline") ? [{ href: `${base}/crm/pipeline`, label: client.nav.deals, icon: Inbox, title: client.nav.deals }] : []),
-      { href: `${base}/customers`, label: client.nav.customers, icon: Users, title: client.nav.customers },
-      ...(has("quotes") ? [{ href: `${base}/quotes`, label: "Quotes", icon: FilePen, title: "Quotes" }] : []),
-      { href: `${base}/sales`, label: "Invoices", icon: FileText, title: "Invoices", also: [`${base}/credit-notes`, `${base}/repeating`] },
-      ...(has("products") ? [{ href: `${base}/items`, label: "Products", icon: Package, title: "Products and services" }] : []),
-      ...(has("jobs") ? [{ href: `${base}/crm/jobs`, label: client.nav.jobs, icon: BriefcaseBusiness, title: client.nav.jobs }] : []),
-      ...(has("tasks") ? [{ href: `${base}/crm/tasks`, label: "Tasks", icon: ListChecks, title: "Tasks" }] : []),
-      { href: `${base}/calendar`, label: "Calendar", icon: CalendarDays, title: "Calendar" },
+    { label: t("CRM"), items: [
+      ...(has("pipeline") ? [{ href: `${base}/crm/pipeline`, label: t(client.nav.deals), icon: Inbox, title: t(client.nav.deals) }] : []),
+      { href: `${base}/customers`, label: t(client.nav.customers), icon: Users, title: t(client.nav.customers) },
+      ...(has("quotes") ? [{ href: `${base}/quotes`, label: t("Quotes"), icon: FilePen, title: t("Quotes") }] : []),
+      { href: `${base}/sales`, label: t("Invoices"), icon: FileText, title: t("Invoices"), also: [`${base}/credit-notes`, `${base}/repeating`] },
+      ...(has("products") ? [{ href: `${base}/items`, label: t("Products"), icon: Package, title: t("Products and services") }] : []),
+      ...(has("jobs") ? [{ href: `${base}/crm/jobs`, label: t(client.nav.jobs), icon: BriefcaseBusiness, title: t(client.nav.jobs) }] : []),
+      ...(has("tasks") ? [{ href: `${base}/crm/tasks`, label: t("Tasks"), icon: ListChecks, title: t("Tasks") }] : []),
+      { href: `${base}/calendar`, label: t("Calendar"), icon: CalendarDays, title: t("Calendar") },
     ] },
-    { label: "Money", items: [
-      { href: `${base}/bank`, label: "Bank", icon: Landmark, title: "Bank" },
-      { href: `${base}/capture`, label: "Upload receipts", icon: ScanText, title: "Upload receipts", badge: client.toReview },
-      { href: `${base}/bills`, label: "Bills", icon: Receipt, title: "Bills", also: [`${base}/supplier-credits`] },
-      { href: `${base}/suppliers`, label: "Suppliers", icon: Truck, title: "Suppliers" },
+    { label: t("Money"), items: [
+      { href: `${base}/bank`, label: t("Bank"), icon: Landmark, title: t("Bank") },
+      { href: `${base}/capture`, label: t("Upload receipts"), icon: ScanText, title: t("Upload receipts"), badge: client.toReview },
+      { href: `${base}/bills`, label: t("Bills"), icon: Receipt, title: t("Bills"), also: [`${base}/supplier-credits`] },
+      { href: `${base}/suppliers`, label: t("Suppliers"), icon: Truck, title: t("Suppliers") },
       // Cyprus payroll: a UK company's wages are coded from the bank until UK payroll is built.
-      ...(client.country === "CY" && has("payroll") && client.payroll ? [{ href: `${base}/payroll`, label: "Payroll", icon: Banknote, title: "Payroll" }] : []),
+      ...(client.country === "CY" && has("payroll") && client.payroll ? [{ href: `${base}/payroll`, label: t("Payroll"), icon: Banknote, title: t("Payroll") }] : []),
     ] },
-    { label: "Reports & tax", items: [
-      { href: `${base}/reports`, label: "Reports", icon: BarChart3, title: "Reports" },
-      { href: `${base}/reports/vat`, label: "VAT returns", icon: Percent, title: "VAT returns" },
-      { href: `${base}/deadlines`, label: "Deadlines", icon: CalendarClock, title: "Deadlines" },
-      { href: `${base}/year-end`, label: "Year end", icon: ClipboardCheck, title: "Year end and audit" },
+    { label: t("Reports & tax"), items: [
+      { href: `${base}/reports`, label: t("Reports"), icon: BarChart3, title: t("Reports") },
+      { href: `${base}/reports/vat`, label: t("VAT returns"), icon: Percent, title: t("VAT returns") },
+      { href: `${base}/deadlines`, label: t("Deadlines"), icon: CalendarClock, title: t("Deadlines") },
+      { href: `${base}/year-end`, label: t("Year end"), icon: ClipboardCheck, title: t("Year end and audit") },
     ] },
-    { label: "More", more: true, items: [
-      { href: `${base}/chart`, label: "Chart of accounts", icon: BookOpen, title: "Chart of accounts" },
-      { href: `${base}/journals`, label: "Journals", icon: NotebookPen, title: "Journals" },
-      { href: `${base}/audit`, label: "Audit trail", icon: ShieldCheck, title: "Audit trail" },
-      { href: `${base}/settings`, label: "Company settings", icon: Settings, title: "Company settings" },
-      { href: `${base}/settings/workspace`, label: "Customise", icon: SlidersHorizontal, title: "How the company works" },
-      { href: `${base}/settings/people`, label: "People", icon: Users, title: "People" },
+    { label: t("More"), more: true, items: [
+      { href: `${base}/chart`, label: t("Chart of accounts"), icon: BookOpen, title: t("Chart of accounts") },
+      { href: `${base}/journals`, label: t("Journals"), icon: NotebookPen, title: t("Journals") },
+      { href: `${base}/audit`, label: t("Audit trail"), icon: ShieldCheck, title: t("Audit trail") },
+      { href: `${base}/settings`, label: t("Company settings"), icon: Settings, title: t("Company settings") },
+      { href: `${base}/settings/workspace`, label: t("Customise"), icon: SlidersHorizontal, title: t("How the company works") },
+      { href: `${base}/settings/people`, label: t("People"), icon: Users, title: t("People") },
     ] },
   ];
 }
@@ -112,6 +115,7 @@ const subscribeNothing = () => () => undefined;
  */
 function CompanySwitcher({ current, count, pathname, onNavigate, member }: { current: ShellClient | null; count: number; pathname: string; onNavigate: () => void; member: boolean }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const clients = useCompanies(open) ?? [];
   // Fetched once the page is idle, so the first open is instant however many clients there are.
@@ -163,7 +167,7 @@ function CompanySwitcher({ current, count, pathname, onNavigate, member }: { cur
     <Link href={sameSection(pathname, entry.slug)} onClick={done} data-index={index} onMouseEnter={() => setActive(index)}
       className={cn("flex items-center gap-2 px-2.5 py-1.5 text-[13px] touch:py-3", index === active ? "bg-muted" : "", entry.slug === current?.slug ? "text-brand font-medium" : "text-ink")}>
       <span className="min-w-0 flex-1 truncate">{entry.name}{via ? <span className="text-ink-faint ml-1.5 text-[12px]">{via}</span> : null}</span>
-      {entry.toReview ? <span className="bg-brand rounded px-1.5 text-[11px] leading-[18px] font-semibold text-white tabular-nums" title="Documents to review">{entry.toReview}</span> : null}
+      {entry.toReview ? <span className="bg-brand rounded px-1.5 text-[11px] leading-[18px] font-semibold text-white tabular-nums" title={t("Documents to review")}>{entry.toReview}</span> : null}
       {entry.slug === current?.slug ? <Check className="size-3.5" /> : null}
     </Link>
   </li>;
@@ -176,8 +180,8 @@ function CompanySwitcher({ current, count, pathname, onNavigate, member }: { cur
         {current ? current.name.split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase() : <LayoutDashboard className="size-3.5" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="text-ink block truncate text-[13px] leading-tight font-semibold">{current ? shortName(current.name) : "All clients"}</span>
-        <span className="text-ink-faint block truncate text-[11.5px] leading-tight">{current ? current.industry : `${count} compan${count === 1 ? "y" : "ies"}`}</span>
+        <span className="text-ink block truncate text-[13px] leading-tight font-semibold">{current ? shortName(current.name) : t("All clients")}</span>
+        <span className="text-ink-faint block truncate text-[11.5px] leading-tight">{current ? current.industry : t.n(count, "{count} company", "{count} companies")}</span>
       </span>
       <ChevronsUpDown className="text-ink-faint size-3.5 shrink-0" />
     </button>
@@ -185,20 +189,20 @@ function CompanySwitcher({ current, count, pathname, onNavigate, member }: { cur
       <div className="border-hairline flex items-center gap-2 border-b px-2.5 py-2">
         <Search className="text-ink-faint size-3.5 shrink-0" />
         <input autoFocus value={filter} onChange={event => { setFilter(event.target.value); setActive(0); }} onKeyDown={onKeyDown}
-          placeholder="Name, HE or VAT number…" aria-label="Find a company" aria-describedby="switcher-hint"
+          placeholder={t("Name, HE or VAT number…")} aria-label={t("Find a company")} aria-describedby="switcher-hint"
           className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
       </div>
       <ul ref={listRef} className="max-h-[min(60vh,32rem)] overflow-y-auto py-1">
-        {!query && member ? <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[13px] touch:py-3"><LayoutDashboard className="size-3.5" />Practice dashboard</Link></li> : null}
+        {!query && member ? <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[13px] touch:py-3"><LayoutDashboard className="size-3.5" />{t("Practice dashboard")}</Link></li> : null}
         {!query && firm && member ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[13px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
-          <BookOpen className="size-3.5" /><span className="min-w-0 flex-1 truncate">Your firm’s own books</span>{firm.slug === current?.slug ? <Check className="size-3.5" /> : null}</Link></li> : null}
-        {recentEntries.length ? <>{heading("Recent")}{recentEntries.map((entry, index) => row(entry, index, null))}</> : null}
-        {!query && !clients.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12.5px]">Finding your companies…</li> : null}
-        {!query && clients.length ? <>{heading(`All ${companies.length}`)}{companies.map((entry, index) => row(entry, recentEntries.length + index, null))}</> : null}
+          <BookOpen className="size-3.5" /><span className="min-w-0 flex-1 truncate">{t("Your firm’s own books")}</span>{firm.slug === current?.slug ? <Check className="size-3.5" /> : null}</Link></li> : null}
+        {recentEntries.length ? <>{heading(t("Recent"))}{recentEntries.map((entry, index) => row(entry, index, null))}</> : null}
+        {!query && !clients.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12.5px]">{t("Finding your companies…")}</li> : null}
+        {!query && clients.length ? <>{heading(t("All {count}", { count: companies.length }))}{companies.map((entry, index) => row(entry, recentEntries.length + index, null))}</> : null}
         {query ? matches.map((match, index) => row(match.entry, index, match.via || null)) : null}
-        {query && !matches.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12.5px]">No company by that name or number.</li> : null}
+        {query && !matches.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12.5px]">{t("No company by that name or number.")}</li> : null}
       </ul>
-      <p id="switcher-hint" className="border-hairline text-ink-faint border-t px-2.5 py-1.5 text-[11.5px] touch:hidden">↑ ↓ to choose, Enter to open{shortcut ? ` · ${shortcut} finds anything` : ""}</p>
+      <p id="switcher-hint" className="border-hairline text-ink-faint border-t px-2.5 py-1.5 text-[11.5px] touch:hidden">{t("↑ ↓ to choose, Enter to open")}{shortcut ? ` · ${t("{shortcut} finds anything", { shortcut })}` : ""}</p>
     </MenuPanel>
   </div>;
 }
@@ -208,24 +212,25 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
   const slug = slugFromPath(pathname);
   const client = useCurrentCompany(initialCompany, slug);
   const base = client && slug ? `/c/${slug}` : "";
-  const practiceGroups: NavGroup[] = [{ label: null, items: [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard, title: "Practice dashboard" },
-    { href: "/deadlines", label: "Deadlines", icon: CalendarClock, title: "Deadlines" },
-    { href: "/calendar", label: "Calendar", icon: CalendarDays, title: "Calendar" },
-    { href: "/time", label: "Time", icon: Timer, title: "Time" },
-    { href: "/fees", label: "Fees", icon: Coins, title: "Fees" },
-    { href: "/clients", label: "Client files", icon: FolderCheck, title: "Client files" },
-    { href: "/vat-numbers", label: "VAT numbers", icon: BadgeCheck, title: "VAT numbers" },
-    { href: "/capture", label: "Capture", icon: ScanText, title: "Capture", badge: toReview },
-    { href: "/settings", label: "Practice settings", icon: Settings, title: "Practice settings" },
-  ] }];
-  const groups = client ? companyNav(base, client) : member ? practiceGroups : [];
+  const { t, locale } = useI18n();
+  const groupsIn = (t: Translate): NavGroup[] => client ? companyNav(base, client, t) : member ? [{ label: null, items: [
+    { href: "/", label: t("Dashboard"), icon: LayoutDashboard, title: t("Practice dashboard") },
+    { href: "/deadlines", label: t("Deadlines"), icon: CalendarClock, title: t("Deadlines") },
+    { href: "/calendar", label: t("Calendar"), icon: CalendarDays, title: t("Calendar") },
+    { href: "/time", label: t("Time"), icon: Timer, title: t("Time") },
+    { href: "/fees", label: t("Fees"), icon: Coins, title: t("Fees") },
+    { href: "/clients", label: t("Client files"), icon: FolderCheck, title: t("Client files") },
+    { href: "/vat-numbers", label: t("VAT numbers"), icon: BadgeCheck, title: t("VAT numbers") },
+    { href: "/capture", label: t("Capture"), icon: ScanText, title: t("Capture"), badge: toReview },
+    { href: "/settings", label: t("Practice settings"), icon: Settings, title: t("Practice settings") },
+  ] }] : [];
+  const groups = groupsIn(t);
   const items = groups.flatMap(group => group.items);
   // The longest matching href wins, so /c/x/reports/vat is VAT returns and /c/x/sales/new is Invoices.
   const under = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const current = [...items].sort((a, b) => b.href.length - a.href.length)
     .find(item => item.href === "/" ? pathname === "/" : pathname === item.href || (item.href !== base && under(item.href)) || (item.also ?? []).some(under))
-    ?? (pathname === "/compare" ? { href: "/compare", label: "Compared", icon: LayoutDashboard, title: "Ledgerline compared" } : undefined);
+    ?? (pathname === "/compare" ? { href: "/compare", label: t("Compared"), icon: LayoutDashboard, title: t("Ledgerline compared") } : undefined);
   const moreActive = groups.some(group => group.more && group.items.some(item => item.href === current?.href));
   // Where this page is: the practice, the company, the section. The page names itself below.
   const crumbs = [{ href: "/", label: practice.name },
@@ -239,36 +244,39 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
   const close = () => setOpen(false);
   // The command palette's offers: what is done next here, then every page of this menu.
   const has = (module: string) => Boolean(client?.nav.modules.includes(module));
+  // "New patient": in Greek, with the word's own gender ("Νέος ασθενής", "Νέα κράτηση"); a name the company made up, plainly.
+  const newOf = (noun: string) => { const phrase = `New ${noun.toLowerCase()}`; return t.has(phrase) ? t(phrase) : t("New: {name}", { name: noun }); };
   const actions: PaletteEntry[] = client ? [
-    { id: "invoice", label: "New invoice", href: `${base}/sales/new`, icon: FileText, keywords: "raise bill customer sale" },
-    { id: "bill", label: "Record a bill", href: `${base}/bills/new`, icon: Receipt, keywords: "supplier expense purchase cost" },
-    { id: "receipt", label: "Upload receipts", href: `${base}/capture`, icon: ScanText, keywords: "scan photo document capture read" },
-    ...(has("quotes") ? [{ id: "quote", label: "New quote", href: `${base}/quotes/new`, icon: FilePen, keywords: "estimate proposal offer" }] : []),
-    { id: "in", label: "Money in", href: `${base}/bank/new?kind=receive`, icon: ArrowDownLeft, keywords: "receive received deposit" },
-    { id: "out", label: "Money out", href: `${base}/bank/new?kind=spend`, icon: ArrowUpRight, keywords: "spend spent pay paid expense" },
-    { id: "customer", label: `New ${client.nav.customer.toLowerCase()}`, href: `${base}/customers/new`, icon: Users, keywords: "customer client contact add" },
-    ...(has("pipeline") ? [{ id: "deal", label: `New ${client.nav.deal.toLowerCase()}`, href: `${base}/crm/pipeline/new`, icon: Inbox, keywords: "lead enquiry deal opportunity" }] : []),
-    ...(has("jobs") ? [{ id: "job", label: `New ${client.nav.job.toLowerCase()}`, href: `${base}/crm/jobs/new`, icon: BriefcaseBusiness, keywords: "job project order work" }] : []),
-    { id: "supplier", label: "New supplier", href: `${base}/suppliers/new`, icon: Truck, keywords: "vendor add" },
-    ...(has("products") ? [{ id: "product", label: "New product", href: `${base}/items/new`, icon: Package, keywords: "item service price" }] : []),
-    ...(client.country === "CY" && has("payroll") && client.payroll ? [{ id: "payroll", label: "Run payroll", href: `${base}/payroll`, icon: Banknote, keywords: "salaries payslips social insurance gesy" }] : []),
-    { id: "vat", label: "VAT return", href: `${base}/reports/vat`, icon: Percent, keywords: "vat4 tax tfa return file" },
-    { id: "statement", label: "Import a bank statement", href: `${base}/bank`, icon: Landmark, keywords: "statement csv reconcile match bank" },
+    { id: "invoice", label: t("New invoice"), href: `${base}/sales/new`, icon: FileText, keywords: t.also("raise bill customer sale") },
+    { id: "bill", label: t("Record a bill"), href: `${base}/bills/new`, icon: Receipt, keywords: t.also("supplier expense purchase cost") },
+    { id: "receipt", label: t("Upload receipts"), href: `${base}/capture`, icon: ScanText, keywords: t.also("scan photo document capture read") },
+    ...(has("quotes") ? [{ id: "quote", label: t("New quote"), href: `${base}/quotes/new`, icon: FilePen, keywords: t.also("estimate proposal offer") }] : []),
+    { id: "in", label: t("Money in"), href: `${base}/bank/new?kind=receive`, icon: ArrowDownLeft, keywords: t.also("receive received deposit") },
+    { id: "out", label: t("Money out"), href: `${base}/bank/new?kind=spend`, icon: ArrowUpRight, keywords: t.also("spend spent pay paid expense") },
+    { id: "customer", label: newOf(client.nav.customer), href: `${base}/customers/new`, icon: Users, keywords: t.also("customer client contact add") },
+    ...(has("pipeline") ? [{ id: "deal", label: newOf(client.nav.deal), href: `${base}/crm/pipeline/new`, icon: Inbox, keywords: t.also("lead enquiry deal opportunity") }] : []),
+    ...(has("jobs") ? [{ id: "job", label: newOf(client.nav.job), href: `${base}/crm/jobs/new`, icon: BriefcaseBusiness, keywords: t.also("job project order work") }] : []),
+    { id: "supplier", label: t("New supplier"), href: `${base}/suppliers/new`, icon: Truck, keywords: t.also("vendor add") },
+    ...(has("products") ? [{ id: "product", label: t("New product"), href: `${base}/items/new`, icon: Package, keywords: t.also("item service price") }] : []),
+    ...(client.country === "CY" && has("payroll") && client.payroll ? [{ id: "payroll", label: t("Run payroll"), href: `${base}/payroll`, icon: Banknote, keywords: t.also("salaries payslips social insurance gesy") }] : []),
+    { id: "vat", label: t("VAT return"), href: `${base}/reports/vat`, icon: Percent, keywords: t.also("vat4 tax tfa return file") },
+    { id: "statement", label: t("Import a bank statement"), href: `${base}/bank`, icon: Landmark, keywords: t.also("statement csv reconcile match bank") },
   ] : member ? [
-    { id: "take-on", label: "Take on a client", href: "/clients/new", icon: UserPlus, keywords: "onboard new client engagement letter" },
-    { id: "import", label: "Bring clients over", href: "/clients/import", icon: Upload, keywords: "import spreadsheet csv list" },
-    { id: "owners", label: "Invite owners", href: "/clients/owners", icon: Users, keywords: "owners invitation join" },
-    { id: "capture", label: "Capture documents", href: "/capture", icon: ScanText, keywords: "upload receipts scan" },
-    { id: "vies", label: "Check a VAT number", href: "/vat-numbers", icon: BadgeCheck, keywords: "vies vat number" },
+    { id: "take-on", label: t("Take on a client"), href: "/clients/new", icon: UserPlus, keywords: t.also("onboard new client engagement letter") },
+    { id: "import", label: t("Bring clients over"), href: "/clients/import", icon: Upload, keywords: t.also("import spreadsheet csv list") },
+    { id: "owners", label: t("Invite owners"), href: "/clients/owners", icon: Users, keywords: t.also("owners invitation join") },
+    { id: "capture", label: t("Capture documents"), href: "/capture", icon: ScanText, keywords: t.also("upload receipts scan") },
+    { id: "vies", label: t("Check a VAT number"), href: "/vat-numbers", icon: BadgeCheck, keywords: t.also("vies vat number") },
   ] : [];
   // On a phone: four places at the thumb, and + for what is done on the move.
   const mobileTabs: [MobileTab, MobileTab, MobileTab] = client
-    ? [{ href: base, label: "Home", icon: Home }, { href: `${base}/sales`, label: "Invoices", icon: FileText, also: [`${base}/credit-notes`, `${base}/repeating`] }, { href: `${base}/bank`, label: "Bank", icon: Landmark }]
-    : [{ href: "/", label: "Dashboard", icon: LayoutDashboard }, { href: "/deadlines", label: "Deadlines", icon: CalendarClock }, { href: "/clients", label: "Clients", icon: FolderCheck }];
+    ? [{ href: base, label: t("Home"), icon: Home }, { href: `${base}/sales`, label: t("Invoices"), icon: FileText, also: [`${base}/credit-notes`, `${base}/repeating`] }, { href: `${base}/bank`, label: t("Bank"), icon: Landmark }]
+    : [{ href: "/", label: t("Dashboard"), icon: LayoutDashboard }, { href: "/deadlines", label: t("Deadlines"), icon: CalendarClock }, { href: "/clients", label: t("Clients"), icon: FolderCheck }];
   const quickAdd = actions.filter(entry => ["invoice", "quote", "bill", "in", "out", "customer", "take-on", "import", "owners", "vies"].includes(entry.id));
   const snap = client ? { companyId: client.id, reviewHref: `${base}/capture` } : member ? { reviewHref: "/capture" } : null;
-  const pages: PaletteEntry[] = [...groups.flatMap(group => group.items.map(entry => ({ id: entry.href, label: entry.title, detail: group.label ?? undefined, href: entry.href, icon: entry.icon }))),
-    ...(client && member ? [{ id: "practice", label: "Practice dashboard", detail: practice.name, href: "/", icon: LayoutDashboard }] : [])];
+  const english = locale === "el" ? new Map(groupsIn(i18nFor("en").t).flatMap(group => group.items.map(entry => [entry.href, entry.title]))) : null;
+  const pages: PaletteEntry[] = [...groups.flatMap(group => group.items.map(entry => ({ id: entry.href, label: entry.title, detail: group.label ?? undefined, href: entry.href, icon: entry.icon, keywords: english?.get(entry.href) }))),
+    ...(client && member ? [{ id: "practice", label: t("Practice dashboard"), detail: practice.name, href: "/", icon: LayoutDashboard }] : [])];
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
@@ -290,11 +298,11 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
   };
 
   return <div className="flex min-h-dvh">
-    <aside aria-label="Main navigation" className={cn("bg-sidebar border-hairline fixed inset-y-0 left-0 z-50 flex w-[224px] flex-col border-r print:hidden",
+    <aside aria-label={t("Main navigation")} className={cn("bg-sidebar border-hairline fixed inset-y-0 left-0 z-50 flex w-[224px] flex-col border-r print:hidden",
       "transition-transform duration-200 ease-out lg:translate-x-0", open ? "translate-x-0 shadow-xl" : "-translate-x-full lg:shadow-none")}>
       <div className="border-hairline flex h-14 shrink-0 items-center justify-between border-b pr-3 pl-4">
-        <Link href="/" onClick={close} className="min-w-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" aria-label={`${practice.name} dashboard`}><PracticeMark practice={practice} /></Link>
-        <button type="button" onClick={close} className="hover:bg-muted text-ink-muted grid size-7 shrink-0 place-items-center rounded-md lg:hidden touch:size-11" aria-label="Close navigation"><X className="size-4" /></button>
+        <Link href="/" onClick={close} className="min-w-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" aria-label={t("{name} dashboard", { name: practice.name })}><PracticeMark practice={practice} /></Link>
+        <button type="button" onClick={close} className="hover:bg-muted text-ink-muted grid size-7 shrink-0 place-items-center rounded-md lg:hidden touch:size-11" aria-label={t("Close navigation")}><X className="size-4" /></button>
       </div>
       <div className="px-2.5 pt-3"><CompanySwitcher current={client} count={companyCount} pathname={pathname} onNavigate={close} member={member} /></div>
       <nav ref={navRef} className="min-h-0 flex-1 overflow-y-auto px-2.5 pt-2 pb-3">
@@ -315,15 +323,15 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
         })}
       </nav>
       <div className="border-hairline border-t px-4 py-2.5">
-        <Link href="/compare" onClick={close} className="text-ink-faint hover:text-ink inline-flex items-center gap-1.5 text-[11.5px]">Powered by <LedgerlineMark className="size-3.5" title="" /><span className="text-ink-muted font-semibold">Ledgerline</span></Link>
+        <Link href="/compare" onClick={close} className="text-ink-faint hover:text-ink inline-flex items-center gap-1.5 text-[11.5px]">{t("Powered by")} <LedgerlineMark className="size-3.5" title="" /><span className="text-ink-muted font-semibold">Ledgerline</span></Link>
       </div>
     </aside>
-    {open ? <button type="button" aria-label="Close navigation" onClick={close} className="bg-brand-deep/25 fixed inset-0 z-40 lg:hidden" /> : null}
+    {open ? <button type="button" aria-label={t("Close navigation")} onClick={close} className="bg-brand-deep/25 fixed inset-0 z-40 lg:hidden" /> : null}
     <div className="flex min-w-0 flex-1 flex-col lg:pl-[224px] print:pl-0">
       <header className="bg-surface/90 border-hairline sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b px-3 backdrop-blur-md sm:px-5 print:hidden">
         {/* A phone opens the menu from the bar at the foot of the screen. */}
-        <button type="button" onClick={() => setOpen(true)} className={cn("hover:bg-muted text-ink-muted -ml-1 grid size-8 shrink-0 place-items-center rounded-md lg:hidden touch:size-11", (client || member) && "max-sm:hidden")} aria-label="Open navigation"><PanelLeft className="size-4" /></button>
-        <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
+        <button type="button" onClick={() => setOpen(true)} className={cn("hover:bg-muted text-ink-muted -ml-1 grid size-8 shrink-0 place-items-center rounded-md lg:hidden touch:size-11", (client || member) && "max-sm:hidden")} aria-label={t("Open navigation")}><PanelLeft className="size-4" /></button>
+        <nav aria-label={t("Breadcrumb")} className="min-w-0 flex-1">
           <ol className="flex min-w-0 items-center gap-1 text-[13px] leading-tight">
             {crumbs.map((crumb, index) => {
               const last = index === crumbs.length - 1;
@@ -337,16 +345,16 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
         </nav>
         {member ? <TimerControl running={timer} currentSlug={slug} /> : null}
         <CommandPalette actions={actions} pages={pages} pathname={pathname} scope={client && slug ? { slug, name: client.name } : null}
-          labels={{ customer: client?.nav.customers ?? "Customers", supplier: "Suppliers", invoice: "Invoices", bill: "Bills", quote: "Quotes", product: "Products",
-            deal: client?.nav.deals ?? "Enquiries", job: client?.nav.jobs ?? "Jobs", employee: "Employees" }} />
-        <Link href={client ? `${base}/capture` : "/capture"} aria-label={toReview ? `${toReview} document${toReview === 1 ? "" : "s"} to review` : "Documents"} className="text-ink-muted hover:bg-muted relative grid size-8 place-items-center rounded-md">
+          labels={{ customer: t(client?.nav.customers ?? "Customers"), supplier: t("Suppliers"), invoice: t("Invoices"), bill: t("Bills"), quote: t("Quotes"), product: t("Products"),
+            deal: t(client?.nav.deals ?? "Enquiries"), job: t(client?.nav.jobs ?? "Jobs"), employee: t("Employees") }} />
+        <Link href={client ? `${base}/capture` : "/capture"} aria-label={toReview ? t.n(toReview, "{count} document to review", "{count} documents to review") : t("Documents")} className="text-ink-muted hover:bg-muted relative grid size-8 place-items-center rounded-md">
           <Bell className="size-4" />{toReview ? <span className="bg-critical absolute top-1.5 right-1.5 size-1.5 rounded-full" /> : null}
         </Link>
         <span className="bg-hairline mx-0.5 hidden h-6 w-px sm:block" />
         <UserMenu user={client?.role ? { ...user, role: client.role } : user} />
       </header>
       <OfflineBanner />
-      <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0 print:pb-0"><NavigationContent scope="page" label="Loading…" variant="page">{children}</NavigationContent></main>
+      <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0 print:pb-0"><NavigationContent scope="page" label={t("Loading…")} variant="page">{children}</NavigationContent></main>
     </div>
     {client || member ? <MobileBar tabs={mobileTabs} actions={quickAdd} snap={snap} pathname={pathname} onMenu={() => setOpen(true)} /> : null}
     <Toaster />

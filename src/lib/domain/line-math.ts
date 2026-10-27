@@ -9,9 +9,23 @@ const SCALE = { quantity: 3, price: 4, discount: 2 } as const;
 // BigInt(…) rather than literals: the build targets ES2017.
 const ZERO = BigInt(0), TWO = BigInt(2), FIVE = BigInt(5), TEN = BigInt(10), HUNDRED = BigInt(100), WHOLE = BigInt(10000), CENTS = BigInt(1_000_000_000);
 
+/**
+ * A number as a person types it, either language's way, as digits and a
+ * point: "18,50" is 18.50 (a Greek decimal comma), "1.234,50" and "1,234.50"
+ * are both 1234.50, and "1,234" is a thousand and more, as English writes it.
+ * What is not a number is left as typed, for the caller to turn away.
+ */
+export function plainDecimal(value: string | number | null | undefined): string {
+  const text = String(value ?? "").replace(/[\s€£]/g, "");
+  if (/^-?[1-9]\d{0,2}(,\d{3})+(\.\d*)?$/.test(text)) return text.replace(/,/g, "");
+  if (/^-?[1-9]\d{0,2}(\.\d{3})+,\d*$/.test(text)) return text.replace(/\./g, "").replace(",", ".");
+  if (/^-?\d*,\d*$/.test(text)) return text.replace(",", ".");
+  return text;
+}
+
 /** A decimal written by a person, as an integer at `places` decimal places; null when it is not a number. */
 export function scaled(value: string | number | null | undefined, places: number): bigint | null {
-  const text = String(value ?? "").replace(/[,\s€]/g, "").trim();
+  const text = plainDecimal(value);
   if (!/^\d*(\.\d*)?$/.test(text) || text === "" || text === ".") return null;
   const [whole, fraction = ""] = text.split(".");
   const digits = (fraction + "0".repeat(places + 1)).slice(0, places + 1);
@@ -43,16 +57,16 @@ export function normalisedLine(line: LineInput) {
 }
 
 /** 20, 1.5, 0.25: a quantity without trailing zeros. */
-export function formatQuantity(value: number | string) {
+export function formatQuantity(value: number | string, locale: "en" | "el" = "en") {
   const number = Number(value);
-  return Number.isFinite(number) ? number.toLocaleString("en-GB", { maximumFractionDigits: 3 }) : String(value);
+  return Number.isFinite(number) ? number.toLocaleString(locale === "el" ? "el-GR" : "en-GB", { maximumFractionDigits: 3 }) : String(value);
 }
 
-/** A unit price to the cent, or to four places when it has them. */
-export function formatUnitPrice(value: number | string, currency = "EUR") {
+/** A unit price to the cent, or to four places when it has them. In Greek, 18,50 €. */
+export function formatUnitPrice(value: number | string, currency = "EUR", locale: "en" | "el" = "en") {
   const number = Number(value);
   const places = Math.round(number * 100) === number * 100 ? 2 : 4;
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: places }).format(number);
+  return new Intl.NumberFormat(locale === "el" ? "el-GR" : "en-GB", { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: places }).format(number);
 }
 
 /** A price as it goes in an input: 18.5 → "18.50", 0.0350 → "0.035". */

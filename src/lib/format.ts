@@ -4,6 +4,8 @@
  * Locale and time zone are pinned rather than taken from the runtime. The firm
  * operates from Nicosia, the whole team reads the same numbers, and a floating
  * locale would make the server and the browser disagree during hydration.
+ * Someone who reads Ledgerline in Greek gets Greek figures and dates, chosen
+ * by them, not by their browser (makeFormat below).
  */
 
 import { cache } from "react";
@@ -22,180 +24,206 @@ const requestMoney = cache(() => ({ currency: "EUR" }));
 export function setRequestCurrency(currency: string) { requestMoney().currency = currency; }
 export const requestCurrency = () => requestMoney().currency;
 
-const currencyFormatters = new Map<string, Intl.NumberFormat>();
-
-function currencyFormatter(currency: string, compact: boolean) {
-  const key = `${currency}:${compact}`;
-  let formatter = currencyFormatters.get(key);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(FIRM_LOCALE, {
-      style: "currency",
-      currency,
-      notation: compact ? "compact" : "standard",
-      maximumFractionDigits: compact ? 1 : 0,
-    });
-    currencyFormatters.set(key, formatter);
-  }
-  return formatter;
-}
-
-/** `€12,500`. Fees are quoted in whole units; the cents are noise on a KPI. */
-export function formatMoney(
-  amount: number | null | undefined,
-  currency = requestCurrency(),
-  options: { compact?: boolean; fallback?: string } = {},
-) {
-  const { compact = false, fallback = "—" } = options;
-  if (amount === null || amount === undefined || Number.isNaN(amount)) {
-    return fallback;
-  }
-  return currencyFormatter(currency, compact).format(Math.abs(amount) < 0.5 ? 0 : amount);
-}
-
-const exactFormatters = new Map<string, Intl.NumberFormat>();
-
-/**
- * `€1,323.40`. An invoice figure is the figure on the document, so the cents
- * stay. Accepts the numeric strings PostgREST returns for `numeric` columns.
- */
-export function formatAmount(amount: number | string | null | undefined, currency = requestCurrency(), fallback = "—") {
-  if (amount === null || amount === undefined || amount === "") return fallback;
-  const value = Number(amount);
-  if (!Number.isFinite(value)) return fallback;
-  // Less than half a cent either way is nothing: never "-€0.00".
-  const shown = Math.abs(value) < 0.005 ? 0 : value;
-  let formatter = exactFormatters.get(currency);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(FIRM_LOCALE, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    exactFormatters.set(currency, formatter);
-  }
-  return formatter.format(shown);
-}
-
-export function formatNumber(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return new Intl.NumberFormat(FIRM_LOCALE).format(value);
-}
-
-/** "Good morning", "Good afternoon" or "Good evening", by the hour in Cyprus. */
-export function greeting(now = new Date()) {
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: FIRM_TIME_ZONE }).format(now));
-  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-}
-
-/** `28 Aug 2026` */
-export function formatDate(value: string | Date | null | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat(FIRM_LOCALE, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: FIRM_TIME_ZONE,
-  }).format(new Date(value));
-}
-
-/** `28 Aug, 14:30` */
-export function formatDateTime(value: string | Date | null | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat(FIRM_LOCALE, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: FIRM_TIME_ZONE,
-  }).format(new Date(value));
-}
-
-/** `14:30` */
-export function formatTime(value: string | Date | null | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat(FIRM_LOCALE, {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: FIRM_TIME_ZONE,
-  }).format(new Date(value));
-}
+/** The languages Ledgerline's screens can be read in: their words (lib/i18n) and, here, their figures and dates. */
+export type FormatLocale = "en" | "el";
+const INTL: Record<FormatLocale, string> = { en: FIRM_LOCALE, el: "el-GR" };
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /**
- * Short, scannable relative time: `now`, `12m`, `4h`, `3d`, `2w`, then a date.
- * Past and future both read naturally in a feed or a due column.
+ * Every formatter, in one language: `€1,323.40` and `28 Aug 2026` in
+ * English, `1.323,40 €` and `28 Αυγ 2026` in Greek, with a 24-hour clock in
+ * both. The functions this module exports are the English ones; a screen
+ * read in Greek takes its own from lib/i18n (getI18n on the server, useI18n
+ * in the browser), so the same page reads alike on both sides.
  */
-export function formatRelative(
-  value: string | Date | null | undefined,
-  now: Date = new Date(),
-) {
-  if (!value) return "—";
-  const then = new Date(value).getTime();
-  const delta = now.getTime() - then;
-  const magnitude = Math.abs(delta);
-  const suffix = delta >= 0 ? "" : " ahead";
+function makeFormat(locale: FormatLocale) {
+  const intl = INTL[locale];
+  const el = locale === "el";
+  const currencyFormatters = new Map<string, Intl.NumberFormat>();
+  const exactFormatters = new Map<string, Intl.NumberFormat>();
 
-  if (magnitude < MINUTE) return "just now";
-  if (magnitude < HOUR) return `${Math.round(magnitude / MINUTE)}m${suffix}`;
-  if (magnitude < DAY) return `${Math.round(magnitude / HOUR)}h${suffix}`;
-  if (magnitude < 7 * DAY) return `${Math.round(magnitude / DAY)}d${suffix}`;
-  if (magnitude < 28 * DAY) {
-    return `${Math.round(magnitude / (7 * DAY))}w${suffix}`;
+  function currencyFormatter(currency: string, compact: boolean) {
+    const key = `${currency}:${compact}`;
+    let formatter = currencyFormatters.get(key);
+    if (!formatter) {
+      formatter = new Intl.NumberFormat(intl, {
+        style: "currency",
+        currency,
+        notation: compact ? "compact" : "standard",
+        maximumFractionDigits: compact ? 1 : 0,
+      });
+      currencyFormatters.set(key, formatter);
+    }
+    return formatter;
   }
-  return formatDate(value);
-}
 
-/** The same, for a sentence: "just now", "5 minutes ago", "yesterday", "2 weeks ago", then the date. */
-export function formatAgo(value: string | Date | null | undefined, now: Date = new Date()) {
-  if (!value) return "—";
-  const delta = now.getTime() - new Date(value).getTime();
-  if (delta < 0 || delta >= 28 * DAY) return `on ${formatDate(value)}`;
-  const count = (unit: number, name: string) => { const n = Math.max(1, Math.round(delta / unit)); return `${n === 1 ? (name === "hour" ? "an" : "a") : n} ${name}${n === 1 ? "" : "s"} ago`; };
-  if (delta < MINUTE) return "just now";
-  if (delta < HOUR) return count(MINUTE, "minute");
-  if (delta < DAY) return count(HOUR, "hour");
-  if (delta < 2 * DAY) return "yesterday";
-  if (delta < 7 * DAY) return count(DAY, "day");
-  return count(7 * DAY, "week");
-}
+  /** `€12,500`. Fees are quoted in whole units; the cents are noise on a KPI. */
+  function formatMoney(
+    amount: number | null | undefined,
+    currency = requestCurrency(),
+    options: { compact?: boolean; fallback?: string } = {},
+  ) {
+    const { compact = false, fallback = "—" } = options;
+    if (amount === null || amount === undefined || Number.isNaN(amount)) {
+      return fallback;
+    }
+    return currencyFormatter(currency, compact).format(Math.abs(amount) < 0.5 ? 0 : amount);
+  }
 
-/**
- * How overdue something is, phrased for a person chasing it.
- * Returns null when the moment has not passed yet.
- */
-export function overdueBy(
-  value: string | Date | null | undefined,
-  now: Date = new Date(),
-) {
-  if (!value) return null;
-  const delta = now.getTime() - new Date(value).getTime();
-  if (delta <= 0) return null;
-  if (delta < HOUR) return `${Math.max(1, Math.round(delta / MINUTE))} min overdue`;
-  if (delta < DAY) return `${Math.round(delta / HOUR)} hr overdue`;
-  const days = Math.round(delta / DAY);
-  return `${days} day${days === 1 ? "" : "s"} overdue`;
-}
+  /**
+   * `€1,323.40`. An invoice figure is the figure on the document, so the cents
+   * stay. Accepts the numeric strings PostgREST returns for `numeric` columns.
+   */
+  function formatAmount(amount: number | string | null | undefined, currency = requestCurrency(), fallback = "—") {
+    if (amount === null || amount === undefined || amount === "") return fallback;
+    const value = Number(amount);
+    if (!Number.isFinite(value)) return fallback;
+    // Less than half a cent either way is nothing: never "-€0.00".
+    const shown = Math.abs(value) < 0.005 ? 0 : value;
+    let formatter = exactFormatters.get(currency);
+    if (!formatter) {
+      formatter = new Intl.NumberFormat(intl, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      exactFormatters.set(currency, formatter);
+    }
+    return formatter.format(shown);
+  }
 
-/** Calendar-day label used to group a chronological feed. */
-export function dayLabel(value: string | Date, now: Date = new Date()) {
-  const date = new Date(value);
-  const dayKey = (d: Date) =>
-    new Intl.DateTimeFormat("en-CA", {
+  function formatNumber(value: number | null | undefined) {
+    if (value === null || value === undefined || Number.isNaN(value)) return "—";
+    return new Intl.NumberFormat(intl).format(value);
+  }
+
+  /** "Good morning", "Good afternoon" or "Good evening", by the hour in Cyprus. In Greek, Καλημέρα until noon and Καλησπέρα after. */
+  function greeting(now = new Date()) {
+    const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: FIRM_TIME_ZONE }).format(now));
+    if (el) return hour < 12 ? "Καλημέρα" : "Καλησπέρα";
+    return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  }
+
+  /** `28 Aug 2026` */
+  function formatDate(value: string | Date | null | undefined) {
+    if (!value) return "—";
+    return new Intl.DateTimeFormat(intl, {
+      day: "numeric",
+      month: "short",
       year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
       timeZone: FIRM_TIME_ZONE,
-    }).format(d);
+    }).format(new Date(value));
+  }
 
-  const yesterday = new Date(now.getTime() - DAY);
-  if (dayKey(date) === dayKey(now)) return "Today";
-  if (dayKey(date) === dayKey(yesterday)) return "Yesterday";
-  return new Intl.DateTimeFormat(FIRM_LOCALE, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: FIRM_TIME_ZONE,
-  }).format(date);
+  /** `28 Aug, 14:30` */
+  function formatDateTime(value: string | Date | null | undefined) {
+    if (!value) return "—";
+    return new Intl.DateTimeFormat(intl, {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: FIRM_TIME_ZONE,
+    }).format(new Date(value));
+  }
+
+  /** `14:30` */
+  function formatTime(value: string | Date | null | undefined) {
+    if (!value) return "—";
+    return new Intl.DateTimeFormat(intl, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: FIRM_TIME_ZONE,
+    }).format(new Date(value));
+  }
+
+  /**
+   * Short, scannable relative time: `now`, `12m`, `4h`, `3d`, `2w`, then a date.
+   * Past and future both read naturally in a feed or a due column.
+   */
+  function formatRelative(
+    value: string | Date | null | undefined,
+    now: Date = new Date(),
+  ) {
+    if (!value) return "—";
+    const then = new Date(value).getTime();
+    const delta = now.getTime() - then;
+    const magnitude = Math.abs(delta);
+    // In Greek: "12 λ.", "4 ώ.", "3 ημ.", "2 εβδ.", and "σε 3 ημ." ahead.
+    const say = (count: number, short: string, greek: string) => el ? `${delta >= 0 ? "" : "σε "}${count} ${greek}` : `${count}${short}${delta >= 0 ? "" : " ahead"}`;
+
+    if (magnitude < MINUTE) return el ? "μόλις τώρα" : "just now";
+    if (magnitude < HOUR) return say(Math.round(magnitude / MINUTE), "m", "λ.");
+    if (magnitude < DAY) return say(Math.round(magnitude / HOUR), "h", "ώ.");
+    if (magnitude < 7 * DAY) return say(Math.round(magnitude / DAY), "d", "ημ.");
+    if (magnitude < 28 * DAY) return say(Math.round(magnitude / (7 * DAY)), "w", "εβδ.");
+    return formatDate(value);
+  }
+
+  /** The same, for a sentence: "just now", "5 minutes ago", "yesterday", "2 weeks ago", then the date. */
+  function formatAgo(value: string | Date | null | undefined, now: Date = new Date()) {
+    if (!value) return "—";
+    const delta = now.getTime() - new Date(value).getTime();
+    if (delta < 0 || delta >= 28 * DAY) return el ? `στις ${formatDate(value)}` : `on ${formatDate(value)}`;
+    const count = (unit: number, name: string) => { const n = Math.max(1, Math.round(delta / unit)); return `${n === 1 ? (name === "hour" ? "an" : "a") : n} ${name}${n === 1 ? "" : "s"} ago`; };
+    // πριν από ένα λεπτό, πριν από 5 λεπτά; μία ώρα, μία εβδομάδα.
+    const greek = (unit: number, one: string, many: string) => { const n = Math.max(1, Math.round(delta / unit)); return `πριν από ${n === 1 ? one : `${n} ${many}`}`; };
+    if (delta < MINUTE) return el ? "μόλις τώρα" : "just now";
+    if (delta < HOUR) return el ? greek(MINUTE, "ένα λεπτό", "λεπτά") : count(MINUTE, "minute");
+    if (delta < DAY) return el ? greek(HOUR, "μία ώρα", "ώρες") : count(HOUR, "hour");
+    if (delta < 2 * DAY) return el ? "χθες" : "yesterday";
+    if (delta < 7 * DAY) return el ? greek(DAY, "μία ημέρα", "ημέρες") : count(DAY, "day");
+    return el ? greek(7 * DAY, "μία εβδομάδα", "εβδομάδες") : count(7 * DAY, "week");
+  }
+
+  /**
+   * How overdue something is, phrased for a person chasing it.
+   * Returns null when the moment has not passed yet.
+   */
+  function overdueBy(
+    value: string | Date | null | undefined,
+    now: Date = new Date(),
+  ) {
+    if (!value) return null;
+    const delta = now.getTime() - new Date(value).getTime();
+    if (delta <= 0) return null;
+    if (delta < HOUR) { const minutes = Math.max(1, Math.round(delta / MINUTE)); return el ? `${minutes} λεπτ${minutes === 1 ? "ό" : "ά"} καθυστέρηση` : `${minutes} min overdue`; }
+    if (delta < DAY) { const hours = Math.round(delta / HOUR); return el ? `${hours} ώρ${hours === 1 ? "α" : "ες"} καθυστέρηση` : `${hours} hr overdue`; }
+    const days = Math.round(delta / DAY);
+    return el ? `${days} ημέρ${days === 1 ? "α" : "ες"} καθυστέρηση` : `${days} day${days === 1 ? "" : "s"} overdue`;
+  }
+
+  /** Calendar-day label used to group a chronological feed. */
+  function dayLabel(value: string | Date, now: Date = new Date()) {
+    const date = new Date(value);
+    const dayKey = (d: Date) =>
+      new Intl.DateTimeFormat("en-CA", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        timeZone: FIRM_TIME_ZONE,
+      }).format(d);
+
+    const yesterday = new Date(now.getTime() - DAY);
+    if (dayKey(date) === dayKey(now)) return el ? "Σήμερα" : "Today";
+    if (dayKey(date) === dayKey(yesterday)) return el ? "Χθες" : "Yesterday";
+    return new Intl.DateTimeFormat(intl, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      timeZone: FIRM_TIME_ZONE,
+    }).format(date);
+  }
+
+  return { formatMoney, formatAmount, formatNumber, greeting, formatDate, formatDateTime, formatTime, formatRelative, formatAgo, overdueBy, dayLabel };
 }
+
+export type Format = ReturnType<typeof makeFormat>;
+const FORMATS: Record<FormatLocale, Format> = { en: makeFormat("en"), el: makeFormat("el") };
+/** The formatters of one language. */
+export const formatIn = (locale: FormatLocale) => FORMATS[locale];
+export const { formatMoney, formatAmount, formatNumber, greeting, formatDate, formatDateTime, formatTime, formatRelative, formatAgo, overdueBy, dayLabel } = FORMATS.en;
 
 export function initialsFromName(name: string | null | undefined) {
   if (!name) return "··";

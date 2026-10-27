@@ -97,6 +97,8 @@ create table app_users (
   name       text not null check (length(btrim(name)) between 1 and 200),
   email      text not null unique check (email = lower(email)),
   initials   text not null,
+  -- The language their screens are in, which they choose: English or Greek (lib/i18n).
+  locale     text not null default 'en' check (locale in ('en', 'el')),
   created_at timestamptz not null default now()
 );
 

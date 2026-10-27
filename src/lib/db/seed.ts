@@ -6,6 +6,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { gunzipSync } from "node:zlib";
 
 import { STANDARD_CHART, chartFor } from "@/lib/domain/chart";
+import { firmToday } from "@/lib/domain/invoices";
 import { annualReturnDates, ukObligations } from "@/lib/domain/deadlines";
 import { checkUkVatNumber, checkVatNumber } from "@/lib/domain/eu-vat";
 import { assessRisk, documentRequests, engagementLetter, letterText, nextReview, suggestFactors, type Person, type Role, type Service } from "@/lib/domain/onboarding";
@@ -731,7 +732,7 @@ async function seedPayroll(pg: PGlite) {
 // ---------------------------------------------------------------------------
 
 export async function seedSupplierCredits(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const bill = (await pg.query<{ id: string; organisation_id: string; supplier_id: string; reverse_charge: boolean }>(`
     select b.id, b.organisation_id, b.supplier_id, b.reverse_charge from bills b join suppliers s on s.id = b.supplier_id join organisations o on o.id = b.organisation_id
      where o.slug = 'larnaka-roast' and s.name = 'Highland Green Coffee Traders Ltd' and b.status in ('awaiting_payment', 'part_paid') order by b.issued_on desc limit 1`)).rows[0];
@@ -760,7 +761,7 @@ export async function seedDesign(pg: PGlite) {
 // ---------------------------------------------------------------------------
 
 export async function seedRepeating(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const plans = [
     { slug: "larnaka-roast", customer: "Finikoudes Beach Kiosk Ltd", name: "Espresso machine lease", item: "MCH-LEASE", days: 0 },
     { slug: "aegean-blue-marine", customer: "Akrotiri Yacht Charters Ltd", name: "Yacht management fee", item: "YM-MONTH", days: -3 },
@@ -841,7 +842,7 @@ export async function seedItems(pg: PGlite) {
 // ---------------------------------------------------------------------------
 
 export async function seedCredits(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const cases = [
     { slug: "larnaka-roast", status: "in ('issued', 'part_paid')", share: 0.1, reason: "Discount after sale", text: "Discount agreed on", days: -2 },
     { slug: "pixelforge", status: "= 'paid'", share: 0.1, reason: "Service not delivered", text: "Days not delivered:", days: -5 },
@@ -1033,7 +1034,7 @@ const workspaceQueries = (pg: PGlite) => ({
 });
 
 export async function seedCrm(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const orgs = (await pg.query<{ id: string; slug: string; country: string; business_type: string }>("select id, slug, country, business_type from organisations")).rows;
   const { query, rows: rowsOf } = workspaceQueries(pg);
   for (const org of orgs) {
@@ -1140,7 +1141,7 @@ export async function seedCrm(pg: PGlite) {
 // ---------------------------------------------------------------------------
 
 export async function seedQuotes(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const orgs = (await pg.query<{ id: string; slug: string; invoice_prefix: string; vat_registered: boolean }>("select id, slug, invoice_prefix, vat_registered from organisations order by slug")).rows;
   for (const org of orgs) {
     const spec = CRM[base(org.slug)];
@@ -1174,7 +1175,7 @@ export async function seedQuotes(pg: PGlite) {
 // ---------------------------------------------------------------------------
 
 async function seedDeadlines(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const orgs = (await pg.query<{ id: string; slug: string; manager: string; country: string }>("select id, slug, manager, country from organisations")).rows;
   const managerOf = new Map(orgs.map(org => [org.id, org.manager]));
   const marks: Row[] = [];
@@ -1336,8 +1337,8 @@ async function seedVies(pg: PGlite) {
      where vat ~ '^CY[0-9]{8}[A-Z]$'
     on conflict do nothing`);
   const pixelforge = (await pg.query<{ id: string }>("select id from organisations where slug = 'pixelforge'")).rows[0].id;
-  const today = new Date();
-  const ago = (days: number, time: string) => `${addDays(today.toISOString().slice(0, 10), -days)}T${time}.000Z`;
+  const today = firmToday();
+  const ago = (days: number, time: string) => `${addDays(today, -days)}T${time}.000Z`;
   for (const check of [
     { number: "DE298765435", name: null, address: null, at: ago(9, "08:41:12"), by: "Andreas Kyriakou" },
     { number: "NL859123455B01", name: VIES_EU[1].name, address: VIES_EU[1].address, at: ago(142, "11:05:47"), by: "Sofia Georgiou" },
@@ -1347,7 +1348,7 @@ async function seedVies(pg: PGlite) {
 }
 
 async function seedPractice(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const practiceId = (await pg.query<{ id: string }>("select id from practices limit 1")).rows[0].id;
   // Each of the firm's people has a sign-in, and sees every company the firm keeps.
   for (const person of STAFF) {
@@ -1359,6 +1360,9 @@ async function seedPractice(pg: PGlite) {
   // A client's own owner, who uses Pixelforge's books and sees nothing else: not the other clients, not the firm's file on Pixelforge.
   const owner = (await pg.query<{ id: string }>("insert into app_users (name, email, initials) values ('Nikos Savva', 'nikos@pixelforge.example', 'NS') returning id")).rows[0].id;
   await pg.query("insert into company_members (organisation_id, user_id, role) select id, $1, 'owner' from organisations where slug = 'pixelforge'", [owner]);
+  // Kalamies Dental's owner, who reads Ledgerline in Greek, as the clinic's invoices are.
+  const greek = (await pg.query<{ id: string }>("insert into app_users (name, email, initials, locale) values ('Dr Sofia Hadjioannou', 'sofia@kalamiesdental.example', 'SH', 'el') returning id")).rows[0].id;
+  await pg.query("insert into company_members (organisation_id, user_id, role) select id, $1, 'owner' from organisations where slug = 'kalamies-dental'", [greek]);
   // On the laptop, each seeded person's sign-in is a stand-in with their own id. On Supabase the sign-ins are made there
   // (npm run supabase:demo-users) and attach by email, so they are left for it.
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) await pg.query("update app_users set auth_id = id where auth_id is null");
@@ -1554,7 +1558,7 @@ async function seedClientFiles(pg: PGlite) {
 }
 
 async function writeClientFiles(pg: PGlite) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = firmToday();
   const listDate = await seedSanctionsSnapshot(pg);
   const practice = (await pg.query<{ id: string; org: string; name: string; address: string | null }>("select p.id, o.id as org, o.name, o.address from practices p join organisations o on o.practice_id = p.id and o.is_practice limit 1")).rows[0];
   const clients = (await pg.query<{ id: string; slug: string; name: string; he_number: string | null; industry: string; vat_number: string | null; vat_registered: boolean; vat_quarter_end_month: number;

@@ -6,6 +6,7 @@ import { CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
 import Link from "@/components/navigation/navigation-link";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/common/locale";
 
 /**
  * Short notes about something that happened away from where the person is
@@ -52,6 +53,7 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 const none: Toast[] = [];
 
 export function Toaster() {
+  const { t } = useI18n();
   const list = useSyncExternalStore(subscribe, () => toasts, () => none);
   return <div aria-live="polite" className="pointer-events-none fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[75] flex flex-col items-center gap-2 sm:inset-x-auto sm:right-5 sm:bottom-5 sm:items-end print:hidden">
     <AnimatePresence initial={false}>
@@ -64,9 +66,9 @@ export function Toaster() {
         <span className="min-w-0 flex-1">
           <span className={cn("text-ink block text-[13.5px] font-medium", item.busy && "ll-ai-sheen")}>{item.title}</span>
           {item.detail ? <span className="text-ink-muted block text-[12.5px] leading-snug">{item.detail}</span> : null}
-          {item.href ? <Link href={item.href} onClick={() => dismissToast(item.id)} className="text-brand mt-1 inline-block text-[13px] font-medium hover:underline">{item.hrefLabel ?? "Open"}</Link> : null}
+          {item.href ? <Link href={item.href} onClick={() => dismissToast(item.id)} className="text-brand mt-1 inline-block text-[13px] font-medium hover:underline">{item.hrefLabel ?? t("Open")}</Link> : null}
         </span>
-        <button type="button" onClick={() => dismissToast(item.id)} aria-label="Close" className="text-ink-faint hover:text-ink -mt-0.5 -mr-1 grid size-7 shrink-0 place-items-center rounded-md"><X className="size-3.5" /></button>
+        <button type="button" onClick={() => dismissToast(item.id)} aria-label={t("Close")} className="text-ink-faint hover:text-ink -mt-0.5 -mr-1 grid size-7 shrink-0 place-items-center rounded-md"><X className="size-3.5" /></button>
       </motion.div>)}
     </AnimatePresence>
   </div>;
