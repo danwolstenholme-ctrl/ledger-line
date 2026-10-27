@@ -18,7 +18,7 @@ const COMPANY_ROLE: Record<string, string> = { owner: "Owner", staff: "Team", vi
 export const companyRoleLabel = (role: string, company: string) => `${COMPANY_ROLE[role] ?? "Team"}, ${company.replace(/ (Ltd|Limited)$/, "")}`;
 
 export type ShellCompany = {
-  slug: string; name: string; industry: string; practice: boolean; country: string; toReview: number;
+  id: string; slug: string; name: string; industry: string; practice: boolean; country: string; toReview: number;
   /** The person may see its payroll: the practice, and the company's owner and auditor. */
   payroll: boolean;
   /** What the person is at this company, when they are one of its own people rather than the practice's. */
@@ -38,7 +38,7 @@ export const getShellCompany = cache(async (slug: string): Promise<ShellCompany 
   ]);
   const mine = membership.practice ? null : membership.companies.find(company => company.slug === slug);
   return {
-    slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, country: org.country, toReview: Number(review?.count ?? 0),
+    id: org.id, slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, country: org.country, toReview: Number(review?.count ?? 0),
     payroll: membership.practice || membership.companies.some(company => company.slug === slug && (company.role === "owner" || company.role === "auditor")),
     role: mine ? companyRoleLabel(mine.role, org.name) : null,
     nav: settings ? { customers: settings.customer_many, customer: settings.customer_one, deals: settings.deal_many, deal: settings.deal_one, jobs: settings.job_many, job: settings.job_one, modules: settings.modules }

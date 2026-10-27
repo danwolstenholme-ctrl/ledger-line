@@ -11,9 +11,12 @@ export const metadata: Metadata = {
   title: { default: "Ledgerline", template: "%s · Ledgerline" },
   description: "Books, AI capture and a practice dashboard for Cyprus accountants.",
   robots: { index: false, follow: false },
+  // Added to a phone's home screen, it opens in its own window like an app.
+  appleWebApp: { capable: true, title: "Ledgerline", statusBarStyle: "default" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
-export const viewport: Viewport = { colorScheme: "light" };
+export const viewport: Viewport = { colorScheme: "light", themeColor: "#0d6e6e", viewportFit: "cover" };
 
 /** The page itself. What is behind sign-in gets the app's menu and top bar from (app)/layout; signing in, its own. */
 export default function RootLayout({ children }: { children: React.ReactNode }) {

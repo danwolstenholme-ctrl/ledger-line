@@ -71,6 +71,23 @@ to reconcile.
   employees, with their dates and amounts. Enter opens the one highlighted.
   At the practice it searches every client's records.
 
+### 1b½. On a phone, 2 minutes
+- Open http://localhost:3000 on a phone (or a narrow window) and sign in as
+  Nikos Savva. A bar at the foot of the screen: **Home**, **Invoices**, **+**,
+  **Bank**, **Menu** (the practice gets Dashboard, Deadlines and Clients).
+- **+** opens what is done on the move: **Snap a receipt** opens the camera,
+  and the photo is stored and read by Claude while the owner carries on; a
+  note at the foot of the screen says when it is drafted as a bill, with
+  **Review**. Or a new invoice, a bill, money in or out, a quote, a customer.
+- The Home keeps to the two actions done most, the three figures and the
+  first five things that need attention (**Show all** for the rest).
+- **Add to Home Screen** (Safari's Share menu, or Chrome's Install) puts
+  Ledgerline on the phone as an app with its own icon and window
+  (`src/app/manifest.ts`, icons drawn in `src/app/icons`).
+- Losing the connection shows a notice, and what was done meanwhile (a page
+  opened, a form saved) waits and goes as soon as it is back
+  (`experimental.useOffline`).
+
 ### 1c. Everyday work, 6 minutes
 - **Raise an invoice**: choose a customer (or **+ New customer…** and type a
   name). The number follows on (`LRC-2026-0129`), the due date comes from the

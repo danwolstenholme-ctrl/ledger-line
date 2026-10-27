@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   experimental: {
     turbopackRustReactCompiler: true,
+    // A dropped connection holds navigations and saves, and sends them when it is back (and useOffline says so).
+    useOffline: true,
     // Statements and scanned invoices go to actions and route handlers in one request.
     serverActions: { bodySizeLimit: "25mb" },
   },

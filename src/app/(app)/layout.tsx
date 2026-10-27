@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import { AUTH_MODE } from "@/lib/auth/config";
 import { one, sql } from "@/lib/db";
@@ -15,8 +15,14 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: `${practice.name} · Ledgerline`, template: `%s · ${practice.name}` },
     // A new address whenever the brand changes, so the browser fetches the new icon at once.
-    icons: { icon: [{ url: `/api/icon?v=${encodeURIComponent(`${practice.initials}${practice.brand_color}`)}`, type: "image/svg+xml" }] },
+    icons: { icon: [{ url: `/api/icon?v=${encodeURIComponent(`${practice.initials}${practice.brand_color}`)}`, type: "image/svg+xml" }], apple: "/icons/apple-touch-icon.png" },
   };
+}
+
+/** The phone's own bar in the practice's colour, as the rest of its white label. */
+export async function generateViewport(): Promise<Viewport> {
+  const practice = await getPractice();
+  return { themeColor: /^#[0-9a-fA-F]{6}$/.test(practice.brand_color) ? practice.brand_color : "#0d6e6e" };
 }
 
 /** Everything behind sign-in: the menu, the top bar and the page, in the practice's colours. */

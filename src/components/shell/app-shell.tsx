@@ -18,6 +18,9 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { loadCompanies, useCompanies, useCurrentCompany, type CompanyEntry } from "@/components/shell/companies";
 import { matchOf, plain, readRecent, rememberCompany, sameSection } from "@/components/shell/finding";
 import { CommandPalette, type PaletteEntry } from "@/components/shell/command-palette";
+import { MobileBar, type MobileTab } from "@/components/shell/mobile-bar";
+import { OfflineBanner } from "@/components/shell/offline-banner";
+import { Toaster } from "@/components/common/toaster";
 import type { ShellCompany } from "@/lib/data/shell";
 import { motion } from "motion/react";
 
@@ -258,6 +261,12 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
     { id: "capture", label: "Capture documents", href: "/capture", icon: ScanText, keywords: "upload receipts scan" },
     { id: "vies", label: "Check a VAT number", href: "/vat-numbers", icon: BadgeCheck, keywords: "vies vat number" },
   ] : [];
+  // On a phone: four places at the thumb, and + for what is done on the move.
+  const mobileTabs: [MobileTab, MobileTab, MobileTab] = client
+    ? [{ href: base, label: "Home", icon: Home }, { href: `${base}/sales`, label: "Invoices", icon: FileText, also: [`${base}/credit-notes`, `${base}/repeating`] }, { href: `${base}/bank`, label: "Bank", icon: Landmark }]
+    : [{ href: "/", label: "Dashboard", icon: LayoutDashboard }, { href: "/deadlines", label: "Deadlines", icon: CalendarClock }, { href: "/clients", label: "Clients", icon: FolderCheck }];
+  const quickAdd = actions.filter(entry => ["invoice", "quote", "bill", "in", "out", "customer", "take-on", "import", "owners", "vies"].includes(entry.id));
+  const snap = client ? { companyId: client.id, reviewHref: `${base}/capture` } : member ? { reviewHref: "/capture" } : null;
   const pages: PaletteEntry[] = [...groups.flatMap(group => group.items.map(entry => ({ id: entry.href, label: entry.title, detail: group.label ?? undefined, href: entry.href, icon: entry.icon }))),
     ...(client && member ? [{ id: "practice", label: "Practice dashboard", detail: practice.name, href: "/", icon: LayoutDashboard }] : [])];
   useEffect(() => {
@@ -312,7 +321,8 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
     {open ? <button type="button" aria-label="Close navigation" onClick={close} className="bg-brand-deep/25 fixed inset-0 z-40 lg:hidden" /> : null}
     <div className="flex min-w-0 flex-1 flex-col lg:pl-[224px] print:pl-0">
       <header className="bg-surface/90 border-hairline sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b px-3 backdrop-blur-md sm:px-5 print:hidden">
-        <button type="button" onClick={() => setOpen(true)} className="hover:bg-muted text-ink-muted -ml-1 grid size-8 shrink-0 place-items-center rounded-md lg:hidden touch:size-11" aria-label="Open navigation"><PanelLeft className="size-4" /></button>
+        {/* A phone opens the menu from the bar at the foot of the screen. */}
+        <button type="button" onClick={() => setOpen(true)} className={cn("hover:bg-muted text-ink-muted -ml-1 grid size-8 shrink-0 place-items-center rounded-md lg:hidden touch:size-11", (client || member) && "max-sm:hidden")} aria-label="Open navigation"><PanelLeft className="size-4" /></button>
         <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
           <ol className="flex min-w-0 items-center gap-1 text-[13px] leading-tight">
             {crumbs.map((crumb, index) => {
@@ -329,13 +339,16 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
         <CommandPalette actions={actions} pages={pages} pathname={pathname} scope={client && slug ? { slug, name: client.name } : null}
           labels={{ customer: client?.nav.customers ?? "Customers", supplier: "Suppliers", invoice: "Invoices", bill: "Bills", quote: "Quotes", product: "Products",
             deal: client?.nav.deals ?? "Enquiries", job: client?.nav.jobs ?? "Jobs", employee: "Employees" }} />
-        <Link href={client ? `${base}/capture` : "/capture"} aria-label={toReview ? `${toReview} documents to review` : "Documents"} className="text-ink-muted hover:bg-muted relative grid size-8 place-items-center rounded-md">
+        <Link href={client ? `${base}/capture` : "/capture"} aria-label={toReview ? `${toReview} document${toReview === 1 ? "" : "s"} to review` : "Documents"} className="text-ink-muted hover:bg-muted relative grid size-8 place-items-center rounded-md">
           <Bell className="size-4" />{toReview ? <span className="bg-critical absolute top-1.5 right-1.5 size-1.5 rounded-full" /> : null}
         </Link>
         <span className="bg-hairline mx-0.5 hidden h-6 w-px sm:block" />
         <UserMenu user={client?.role ? { ...user, role: client.role } : user} />
       </header>
-      <main className="min-w-0 flex-1"><NavigationContent scope="page" label="Loading…" variant="page">{children}</NavigationContent></main>
+      <OfflineBanner />
+      <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0 print:pb-0"><NavigationContent scope="page" label="Loading…" variant="page">{children}</NavigationContent></main>
     </div>
+    {client || member ? <MobileBar tabs={mobileTabs} actions={quickAdd} snap={snap} pathname={pathname} onMenu={() => setOpen(true)} /> : null}
+    <Toaster />
   </div>;
 }

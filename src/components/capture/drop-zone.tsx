@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, FileText, ImageIcon, Loader2, TriangleAlert, UploadCloud } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { readFile, storeFiles } from "@/components/capture/send-files";
 
 type Job = { key: string; name: string; type: string; state: "uploading" | "reading" | "done" | "failed"; detail: string };
 
@@ -25,18 +26,15 @@ export function DropZone({ available, rehearsal, company }: { available: boolean
     if (!files.length) return;
     const batch = files.map((file, index) => ({ key: `${Date.now()}-${index}`, name: file.name, type: file.type, state: "uploading" as const, detail: "Uploading…" }));
     setJobs(current => [...batch, ...current]);
-    const form = new FormData();
-    files.forEach(file => form.append("files", file));
-    if (company) form.append("organisation_id", company.id);
-    const response = await fetch("/api/capture/upload", { method: "POST", body: form }).then(result => result.json()).catch(() => null) as { ok: boolean; files?: { id: string | null; name: string; error: string | null }[]; error?: string } | null;
-    if (!response?.ok || !response.files) { batch.forEach(job => update(job.key, { state: "failed", detail: response?.error ?? "The upload failed." })); return; }
-    await Promise.all(response.files.map(async (saved, index) => {
+    const stored = await storeFiles(files, company?.id);
+    if (!stored.ok) { batch.forEach(job => update(job.key, { state: "failed", detail: stored.error })); return; }
+    await Promise.all(stored.files.map(async (saved, index) => {
       const job = batch[index];
       if (!saved.id) { update(job.key, { state: "failed", detail: saved.error ?? "Not uploaded." }); return; }
       update(job.key, { state: "reading", detail: "Claude is reading it…" });
-      const result = await fetch(`/api/capture/files/${saved.id}/read`, { method: "POST" }).then(reply => reply.json()).catch(() => null) as { ok: boolean; count?: number; error?: string } | null;
-      if (result?.ok) update(job.key, { state: "done", detail: `${result.count} invoice${result.count === 1 ? "" : "s"} found, checked and routed` });
-      else update(job.key, { state: "failed", detail: result?.error ?? "Could not be read." });
+      const result = await readFile(saved.id);
+      if (result.ok) update(job.key, { state: "done", detail: `${result.count} invoice${result.count === 1 ? "" : "s"} found, checked and routed` });
+      else update(job.key, { state: "failed", detail: result.error ?? "Could not be read." });
       router.refresh();
     }));
   }

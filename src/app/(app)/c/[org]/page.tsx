@@ -20,6 +20,8 @@ import { GettingStartedSteps } from "@/components/home/getting-started";
 export const metadata: Metadata = { title: "Home" };
 
 type Action = { href: string; label: string; hint: string; icon: LucideIcon };
+/** How much of what needs attention a phone shows before "Show all". */
+const PHONE_ATTENTION = 5;
 type Attention = { key: string; href: string; icon: LucideIcon; tone: "critical" | "caution" | "neutral"; title: string; detail: string };
 
 /**
@@ -90,9 +92,11 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
     {start ? <GettingStartedSteps start={start} org={org} practice={Boolean(membership.practice)} customers={workspace.labels.customer[1]} /> : null}
 
     <nav aria-label="Everyday actions" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
+      {/* On a phone, the two done most; the rest are under + at the foot of the screen. */}
       {actions.map((action, index) => <Link key={action.label} href={action.href}
-        className={cn("group flex min-h-[92px] flex-col gap-2.5 rounded-lg border p-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-          index === 0 ? "bg-brand border-brand hover:bg-brand-dark text-white" : "bg-surface border-hairline hover:border-brand-200 hover:bg-brand-50")}>
+        className={cn("group flex min-h-[92px] flex-col gap-2.5 rounded-xl border p-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          index === 0 ? "bg-brand border-brand hover:bg-brand-dark text-white shadow-[0_6px_16px_-8px_var(--brand)]" : "bg-surface border-hairline hover:border-brand-200 hover:bg-brand-50",
+          index !== 0 && action.href !== capture && "max-sm:hidden")}>
         <action.icon className={cn("size-5", index === 0 ? "text-white" : "text-brand")} />
         <span><span className={cn("block text-[13.5px] leading-tight font-semibold", index === 0 ? "text-white" : "text-ink")}>{action.label}</span>
           <span className={cn("mt-0.5 block text-[12px] leading-snug", index === 0 ? "text-white/80" : "text-ink-muted")}>{action.hint}</span></span>
@@ -108,7 +112,7 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
       <Panel className="min-w-0 overflow-hidden">
         <PanelHeader title="Needs attention" count={attention.length || undefined} />
-        {attention.length ? <ul className="divide-hairline divide-y">{attention.map(item => <li key={item.key}>
+        {attention.length ? <ul className="group/attention divide-hairline divide-y">{attention.map((item, index) => <li key={item.key} className={cn(index >= PHONE_ATTENTION && "max-sm:hidden max-sm:group-has-[:checked]/attention:block")}>
           <Link href={item.href} className="hover:bg-surface-sunken group flex items-center gap-3 px-4 py-2.5 touch:min-h-12">
             <span className={cn("grid size-7 shrink-0 place-items-center rounded-md", item.tone === "critical" ? "bg-critical-soft text-critical" : item.tone === "caution" ? "bg-caution-soft text-caution" : "bg-surface-sunken text-ink-muted")}>
               {item.tone === "critical" ? <AlertTriangle className="size-3.5" /> : <item.icon className="size-3.5" />}
@@ -116,7 +120,10 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
             <span className="min-w-0 flex-1"><span className="text-ink block truncate text-[13.5px] font-medium">{item.title}</span><span className="text-ink-muted block truncate text-[12.5px]">{item.detail}</span></span>
             <ArrowRight className="text-ink-faint group-hover:text-brand size-3.5 shrink-0" />
           </Link>
-        </li>)}</ul> : <p className="text-ink-muted flex items-center gap-2 px-4 py-4 text-[13px]"><CheckCircle2 className="text-positive size-4" />Nothing needs attention. The books are up to date.</p>}
+        </li>)}
+          {attention.length > PHONE_ATTENTION ? <li className="sm:hidden"><label className="text-brand flex min-h-12 cursor-pointer items-center justify-center text-[14px] font-medium">
+            <input type="checkbox" className="peer sr-only" /><span className="peer-checked:hidden">Show all {attention.length}</span><span className="hidden peer-checked:inline">Show fewer</span>
+          </label></li> : null}</ul> : <p className="text-ink-muted flex items-center gap-2 px-4 py-4 text-[13px]"><CheckCircle2 className="text-positive size-4" />Nothing needs attention. The books are up to date.</p>}
       </Panel>
 
       <Panel className="min-w-0 overflow-hidden">

@@ -1193,3 +1193,28 @@ test("brought-over clients' owners are invited in one go: one link for someone w
   await expect(page.getByRole("row", { name: /Larnaca Bay Trading Ltd/ })).toContainText("On Ledgerline");
   await expect(page.getByRole("row", { name: /Larnaca Bay Holdings Ltd/ })).toContainText("Eleni Charalambous · since");
 });
+
+test("on a phone, the owner adds from the + at the foot of the screen: a receipt photographed is read while they carry on", async ({ browser }) => {
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await phone.newPage();
+  await page.goto("/sign-in");
+  await page.getByRole("button", { name: /Sign in as Nikos Savva/ }).click();
+  await expect(page).toHaveURL(/\/c\/pixelforge$/);
+  const bar = page.getByRole("navigation", { name: "On the move" });
+  await expect(bar.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+  // Six everyday actions on a desk; the two done most on a phone, the rest under +.
+  await expect(page.getByRole("navigation", { name: "Everyday actions" }).getByRole("link")).toHaveCount(2);
+  await bar.getByRole("button", { name: "Add" }).click();
+  const sheet = page.getByRole("dialog", { name: "Add" });
+  await expect(sheet.getByRole("link", { name: "New invoice" })).toBeVisible();
+  await sheet.locator('input[capture="environment"]').setInputFiles(files[2]);
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Read, and drafted as a bill" })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("status").getByRole("link", { name: "Review", exact: true }).click();
+  await expect(page).toHaveURL(/\/c\/pixelforge\/capture$/);
+  await expect(page.getByText("Lefkosia Print Shop").first()).toBeVisible();
+  await bar.getByRole("link", { name: "Invoices" }).click();
+  await expect(page).toHaveURL(/\/c\/pixelforge\/sales$/);
+  await expect(bar.getByRole("link", { name: "Invoices" })).toHaveAttribute("aria-current", "page");
+  await phone.close();
+});
