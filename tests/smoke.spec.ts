@@ -1074,3 +1074,34 @@ test("a big practice's dashboard puts the clients that need something first, you
   await expect(page).toHaveURL(/\/deadlines$/);
 });
 
+test("a practice brings its client list over from a spreadsheet: each company's books open shaped to its business, those already here left alone", async ({ page }) => {
+  const csv = [
+    "Company name,Country,Registration number,VAT number,Year end,What it does,Contact,Email,Monthly fee,Books from",
+    "Paralimni Hardware Ltd,Cyprus,HE 455321,,December,Hardware shop,Andreas Pittas,andreas@paralimnihardware.example,180,November 2026",
+    "Kyrenia Street Dental Ltd,Cyprus,455322,,June,Dental clinic,Dr Maria Kyriacou,maria@kyreniadental.example,220,October 2026",
+    "Ouse Valley Builders Ltd,United Kingdom,13579246,,31/03,Builders and roofers,Sam Hughes,sam@ousevalley.example,300,November 2026",
+    "Aegean Blue Marine Services Ltd,Cyprus,HE 412907,,December,Port agency,,,,",
+    "Broken Row Ltd,Cyprus,HE 12AB,,December,Consulting,,,,",
+  ].join("\n");
+  await page.goto("/clients");
+  await page.getByRole("link", { name: "Bring clients over" }).click();
+  await page.getByLabel("Client list file").setInputFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.getByText("3 to bring over")).toBeVisible();
+  await expect(page.getByText("1 already clients")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Broken Row Ltd/ })).toContainText("a Cyprus company's is HE and up to seven digits");
+  await expect(page.getByRole("row", { name: /Ouse Valley Builders Ltd/ })).toContainText("Trades and construction");
+  await expect(page.getByRole("row", { name: /Kyrenia Street Dental Ltd/ })).toContainText("Clinic or health practice");
+  await page.getByRole("button", { name: "Bring over 3 clients" }).click();
+  await expect(page.getByText(/3 clients brought over: their books are open\. 1 already here, left alone\. 1 row not imported\./)).toBeVisible({ timeout: 60_000 });
+
+  await page.getByRole("link", { name: "Ouse Valley Builders Ltd" }).click();
+  const menu = page.getByRole("complementary", { name: "Main navigation" });
+  await expect(menu.getByRole("link", { name: "Jobs" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Payroll" })).toHaveCount(0);
+  await page.goto("/clients?q=Kyrenia");
+  await page.getByRole("link", { name: "Kyrenia Street Dental Ltd" }).click();
+  await expect(page.getByText(/Brought over with the practice’s client list on/)).toBeVisible();
+  await page.getByRole("link", { name: /Open the books/ }).click();
+  await expect(menu.getByRole("link", { name: "Treatment plans" })).toBeVisible();
+});
+

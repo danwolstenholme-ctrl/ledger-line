@@ -24,7 +24,7 @@ export type ClientFileRow = {
   monthly_fee: number; hourly_rate: number; app_fee: number; vat_registered: boolean; vat_number: string | null; vat_quarter_end_month: number; year_end_month: number;
   books_from: string | null; manager: string | null; face_to_face: boolean; introduced_by: string | null; client_token: string | null;
   letter_sent_at: string | null; letter_text: string | null; letter_hash: string | null; signed_at: string | null; signed_name: string | null; signed_position: string | null;
-  signed_ip: string | null; signed_agent: string | null; signed_hash: string | null; opened_at: string | null; opened_by: string | null; declined_reason: string | null;
+  signed_ip: string | null; signed_agent: string | null; signed_hash: string | null; opened_at: string | null; opened_by: string | null; imported_at: string | null; declined_reason: string | null;
   created_by: string; created_at: string;
 };
 export type DocumentRow = { id: string; file_id: string; person_id: string | null; kind: DocumentKind; label: string; requested_at: string; file_name: string | null; media_type: string | null; size_bytes: number | null; received_at: string | null; received_from: string | null };

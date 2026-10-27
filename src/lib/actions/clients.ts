@@ -1,14 +1,12 @@
 "use server";
 
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { asDbError, one, sql, transaction } from "@/lib/db";
 import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
 import { approverFor, getClientFile, getStaff } from "@/lib/data/clients";
-import { OPENING_ACCOUNTS, chartFor } from "@/lib/domain/chart";
-import { regimeOf } from "@/lib/domain/regimes";
 import { PERSON_COUNTRIES } from "@/lib/domain/countries";
 import { euVatNumber } from "@/lib/domain/eu-vat";
 import { firmToday } from "@/lib/domain/invoices";
@@ -20,7 +18,7 @@ import { getCurrentUser, getPractice } from "@/lib/org";
 import { keepDocument } from "@/lib/client-documents";
 import { screen, startRefresh } from "@/lib/sanctions";
 import { BUSINESS_TYPE_KEYS, suggestBusinessType } from "@/lib/domain/business-types";
-import { setUpWorkspace } from "@/lib/db/workspace-setup";
+import { freeSlug, openCompany } from "@/lib/clients/open-company";
 
 /**
  * Taking a client on, step by step, and keeping its file current. Each
@@ -364,8 +362,6 @@ export async function approveAssessment(_previous: ActionState, form: FormData):
 // Opening the books, or declining
 // ---------------------------------------------------------------------------
 
-const slugFor = (name: string) => name.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/\b(ltd|limited|plc|llc)\b\.?/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "client";
-const prefixFor = (name: string) => `${name.replace(/\b(Ltd|Limited|Co|PLC)\b\.?/gi, "").trim().split(/\s+/).slice(0, 3).map(word => word[0]).join("").toUpperCase() || "INV"}-`;
 
 /** The client is taken on: its company is created with the standard chart, its fee set, and it becomes a customer in the practice's books. */
 export async function openBooks(_previous: ActionState, form: FormData): Promise<ActionState> {
@@ -375,32 +371,17 @@ export async function openBooks(_previous: ActionState, form: FormData): Promise
   if (file.organisation_id) redirect(`/c/${file.slug}`);
   if (!data.ready) return { ok: false, error: data.blocked ?? "Finish the steps above first: the books open once due diligence is done and the letter is signed." };
   const user = await getCurrentUser();
-  let slug = slugFor(file.company_name);
-  for (let n = 2; await one("select 1 from organisations where slug = $1", [slug]); n++) slug = `${slugFor(file.company_name)}-${n}`;
-  const booksFrom = file.books_from ?? `${firmToday().slice(0, 7)}-01`;
+  let slug = "";
   try {
     await transaction(async run => {
-      const org = randomUUID(), bank = randomUUID();
-      const practiceOrg = (await run<{ id: string }>("select id from organisations where is_practice limit 1"))[0];
-      // In its own country's terms: currency, chart of accounts, VAT and deadlines.
-      await run(`insert into organisations (id, practice_id, slug, name, industry, he_number, vat_number, vat_registered, vat_quarter_end_month, year_end_month, contact_name, contact_email, address,
-          invoice_prefix, manager, books_from, incorporated_on, country, currency) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
-        [org, file.practice_id, slug, file.company_name, file.business || "Client company", file.he_number, file.vat_registered ? file.vat_number : null, file.vat_registered,
-         file.vat_quarter_end_month, file.year_end_month, file.contact_name, file.contact_email, file.registered_address, prefixFor(file.company_name), file.manager ?? user.name, booksFrom,
-         file.incorporated_on, file.country, regimeOf(file.country).currency]);
-      const accounts = [...OPENING_ACCOUNTS, ...chartFor(file.country)].map(account => ({ id: account.code === "090" ? bank : randomUUID(), organisation_id: org, code: account.code, name: account.name,
-        type: account.type, system_role: account.role ?? null, description: account.description ?? null, bank_details: null, outside_vat: Boolean(account.outsideVat) }));
-      await run(`insert into ledger_accounts (id, organisation_id, code, name, type, system_role, description, bank_details, outside_vat)
-        select id, organisation_id, code, name, type, system_role, description, bank_details, outside_vat from jsonb_populate_recordset(null::ledger_accounts, $1::jsonb)`, [JSON.stringify(accounts)]);
-      await run("update organisations set default_bank_account_id = $2 where id = $1", [org, bank]);
-      // Shaped to its kind of business: what it calls things, its stages and fields, and the parts it uses.
-      await setUpWorkspace(run, run, org, file.business_type ?? suggestBusinessType(file.business), file.country);
-      if (practiceOrg) {
-        const fees = (await run<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [practiceOrg.id]))[0];
-        const customer = (await run<{ id: string }>(`insert into customers (organisation_id, name, email, vat_number, country, address, default_account_id) values ($1, $2, $3, $4, 'CY', $5, $6) returning id`,
-          [practiceOrg.id, file.company_name, file.contact_email, file.vat_registered ? file.vat_number : null, file.registered_address, fees?.id ?? null]))[0];
-        await run("insert into client_fees (organisation_id, customer_id, monthly_fee, hourly_rate, app_fee) values ($1, $2, $3, $4, $5)", [org, customer.id, file.monthly_fee, file.hourly_rate, file.app_fee]);
-      }
+      slug = await freeSlug(run, file.company_name);
+      const org = await openCompany(run, {
+        practiceId: file.practice_id, name: file.company_name, business: file.business, businessType: file.business_type ?? suggestBusinessType(file.business), country: file.country,
+        heNumber: file.he_number, vatNumber: file.vat_number, vatRegistered: file.vat_registered, quarterEndMonth: file.vat_quarter_end_month, yearEndMonth: file.year_end_month,
+        contactName: file.contact_name, contactEmail: file.contact_email, address: file.registered_address, manager: file.manager ?? user.name,
+        booksFrom: file.books_from ?? `${firmToday().slice(0, 7)}-01`, incorporatedOn: file.incorporated_on,
+        fee: { monthly: Number(file.monthly_fee), hourly: Number(file.hourly_rate), app: Number(file.app_fee) },
+      }, slug);
       await run("update client_files set organisation_id = $2, status = 'active', opened_at = now(), opened_by = $3 where id = $1", [file.id, org, user.name]);
     });
   } catch (error) { return fail(error, "The books could not be opened."); }

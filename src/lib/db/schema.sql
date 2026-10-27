@@ -2697,6 +2697,9 @@ create table client_files (
   signed_hash           text check (signed_hash ~ '^[0-9a-f]{64}$'),
   opened_at             timestamptz,
   opened_by             text,
+  -- A client the practice already had, brought over with its list: its engagement letter and due diligence were kept
+  -- outside Ledgerline, and are added here as each comes up for review.
+  imported_at           timestamptz,
   declined_reason       text,
   created_by            text not null,
   created_at            timestamptz not null default now(),

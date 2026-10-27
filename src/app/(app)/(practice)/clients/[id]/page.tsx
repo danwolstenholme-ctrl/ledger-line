@@ -75,6 +75,9 @@ export default async function ClientFilePage({ params }: { params: Promise<{ id:
       action={file.slug ? <Link href={`/c/${file.slug}`} className={recordOutlineButton}>Open the books<ExternalLink className="size-3.5" /></Link> : undefined} />
 
     {closed ? <p role="status" className="border-critical-line bg-critical-soft text-critical rounded-lg border px-4 py-2.5 text-[12.5px]">Declined: {file.declined_reason}</p> : null}
+    {file.imported_at ? <p role="note" className="border-hairline bg-surface-sunken text-ink-muted rounded-lg border px-4 py-2.5 text-[12.5px] leading-relaxed">
+      Brought over with the practice’s client list on {formatDate(file.imported_at)}. Its engagement letter and due diligence were kept outside Ledgerline: record them here as each comes up for review, and the steps below fill in.
+    </p> : null}
     {data.blocked ? <p role="alert" className="border-critical-line bg-critical-soft text-critical flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[12.5px]"><ShieldAlert className="size-4" />{data.blocked}</p> : null}
 
     <nav aria-label="Steps" className="ll-panel overflow-hidden">

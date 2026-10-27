@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CheckCircle2, Loader2, RefreshCw, ScanSearch, UserPlus } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, ScanSearch, Upload, UserPlus } from "lucide-react";
 import Link from "@/components/navigation/navigation-link";
 
 import { screenEveryone, updateSanctionsList } from "@/lib/actions/clients";
@@ -9,7 +9,7 @@ import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { SubmitButton } from "@/components/common/form-fields";
-import { RecordBadge, RecordDisclosure, RecordEmpty, RecordHeader, RecordPagination, RecordSection, recordButton } from "@/components/records/record-layout";
+import { RecordBadge, RecordDisclosure, RecordEmpty, RecordHeader, RecordPagination, RecordSection, recordButton, recordOutlineButton } from "@/components/records/record-layout";
 import { ListSearch, clientMatches } from "@/components/common/list-search";
 
 export const metadata: Metadata = { title: "Client files" };
@@ -33,7 +33,7 @@ export default async function ClientFilesPage({ searchParams }: { searchParams: 
   const clients = matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title="Client files" description="Taking clients on, and keeping their due diligence current, as ICPAC’s AML Directive asks: the engagement letter, the people behind each company, sanctions screening and a risk rating."
-      action={<Link href="/clients/new" className={recordButton}><UserPlus className="size-3.5" />Take on a client</Link>} />
+      action={<><Link href="/clients/import" className={recordOutlineButton}><Upload className="size-3.5" />Bring clients over</Link><Link href="/clients/new" className={recordButton}><UserPlus className="size-3.5" />Take on a client</Link></>} />
 
     {query.screened ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[12.5px]"><CheckCircle2 className="size-4 shrink-0" />
       {query.screened} names screened against the EU list of {data.list ? formatDate(data.list.generated_on) : "today"}{data.counts.openMatches ? `: ${data.counts.openMatches} possible match${data.counts.openMatches === 1 ? "" : "es"} to look at.` : ". Everyone is clear."}</p> : null}

@@ -240,6 +240,23 @@ to reconcile.
   page, and a customer record in the firm's own books. Every step is on the
   firm's audit trail, the signature as the client's.
 
+### 1i½. Bringing a practice's clients over (`/clients/import`), 2 minutes
+- **Client files → Bring clients over**: the practice's client list from its
+  own spreadsheet (CSV): company name, country, registration and VAT
+  numbers, TIC, incorporation date, year end, VAT quarter, what it does, who
+  looks after it, its fee and the month its books start in Ledgerline. The
+  columns are recognised from their headings, in English or Greek.
+- Every row is checked before anything is saved: a bad HE number or VAT
+  check digit is caught, a company already a client is left alone, and each
+  shows the kind of business its Ledgerline will be shaped to (from the
+  column, or from what it does).
+- **Bring over**: every company's books open at once, in its country's terms
+  and shaped to its kind of business, with its fee in the practice's books.
+  Deadlines start from the month its books start, so nothing earlier shows as
+  overdue. Each client file says it was brought over: the engagement letter
+  and due diligence are recorded as they come up for review. 300 clients
+  import in about 7 seconds.
+
 ### 1j. VAT numbers (`/vat-numbers`), 2 minutes
 - A sale to a business in another EU state is zero-rated only if the
   customer's VAT number is valid in **VIES**, the European Commission's
