@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -12,6 +12,7 @@ import { asDbError, asService, one, sql } from "@/lib/db";
 import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
 import type { InviteState } from "@/lib/actions/state";
 import { findInvitation, grantInvitation, newInvitationToken, tokenHash } from "@/lib/invitations";
+import { siteOrigin } from "@/lib/site";
 import { getCurrentUser, getMembership, getPractice } from "@/lib/org";
 
 /**
@@ -25,12 +26,6 @@ const PRACTICE_ROLES = ["Partner", "Manager", "Accountant", "Assistant"] as cons
 const COMPANY_ROLES = ["owner", "staff", "viewer", "auditor"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function origin() {
-  const fromEnv = process.env.LEDGERLINE_SITE_URL;
-  if (fromEnv) return fromEnv.replace(/\/$/, "");
-  const host = (await headers()).get("host") ?? "localhost:3000";
-  return `${host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https"}://${host}`;
-}
 
 export async function invitePerson(_previous: InviteState, form: FormData): Promise<InviteState> {
   const p = new FormParser(form);
@@ -62,7 +57,7 @@ export async function invitePerson(_previous: InviteState, form: FormData): Prom
     return { ok: false, error: describeDbError(failure, "The invitation could not be made.") };
   }
   revalidatePath("/", "layout");
-  return { ok: true, error: null, link: `${await origin()}/join/${token}`, email, name, scope: company?.name ?? practice.name };
+  return { ok: true, error: null, link: `${await siteOrigin()}/join/${token}`, email, name, scope: company?.name ?? practice.name };
 }
 
 export async function revokeInvitation(form: FormData) {

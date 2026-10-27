@@ -30,9 +30,10 @@ export type DeadlineView = (typeof DEADLINE_VIEWS)[number]["key"];
 const BOOKS_FROM = "2025-07-01";
 const AHEAD_DAYS = 90;
 
-export async function getDeadlines(filters: { view?: DeadlineView; client?: string } = {}) {
+/** `until` and `keepDone` are the calendar's: any month ahead, and what was done long ago kept on the day it was done for. */
+export async function getDeadlines(filters: { view?: DeadlineView; client?: string; until?: string; keepDone?: boolean } = {}) {
   const today = firmToday();
-  const until = new Date(Date.parse(`${today}T12:00:00Z`) + AHEAD_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const until = filters.until ?? new Date(Date.parse(`${today}T12:00:00Z`) + AHEAD_DAYS * 86_400_000).toISOString().slice(0, 10);
   const [organisations, user, filed, marks, euMonths, lines, reviews, starts, amlReviews, payrollClients, yearEnds] = await Promise.all([
     getOrganisations(),
     getCurrentUser(),
@@ -77,7 +78,7 @@ export async function getDeadlines(filters: { view?: DeadlineView; client?: stri
       const running = item.kind !== "provisional_tax" && item.periodEnd >= today;
       const state: DeadlineState = doneOn ? "done" : running ? "running" : daysLeft < 0 ? "overdue" : "due";
       // Work done more than a month ago is history, not a deadline: what is open, or was dealt with in the last month, is listed.
-      if (state === "done" && doneOn && daysUntil(doneOn, today) > 30) continue;
+      if (state === "done" && doneOn && daysUntil(doneOn, today) > 30 && !filters.keepDone) continue;
       const ready = item.kind === "vat_return" && state !== "done"
         ? { bankLines: lines.filter(line => line.organisation_id === org.id && line.txn_date >= (item.periodStart ?? "") && line.txn_date <= item.periodEnd).length,
             documents: Number(reviews.find(row => row.organisation_id === org.id)?.count ?? 0) }

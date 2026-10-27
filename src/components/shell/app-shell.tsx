@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "@/components/navigation/navigation-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeCheck, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
+  BadgeCheck, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, CalendarDays, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
   LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, Truck, Users, X, type LucideIcon,
 } from "lucide-react";
 
@@ -29,8 +29,9 @@ type NavGroup = { label: string | null; items: NavItem[]; more?: boolean };
 /**
  * The application shell: fixed left navigation, a sticky top bar, scrolling
  * content. One company at a time: the switcher at the top of the menu changes
- * it, and the menu below is that company's, grouped by what the owner does
- * (sell, buy, bank, keep in touch) with the accountant's pages under More.
+ * it, and the menu below is that company's: its customers and their work
+ * first (CRM), then money, then reports and tax, with the accountant's pages
+ * under More.
  */
 /** `member`: one of the practice's people. A client company's own people get their company's menu only: none of the practice's pages. */
 type ShellProps = { practice: ShellPractice; clients: ShellClient[]; user: ShellUser; member: boolean; toReview: number; timer: TimerRunning | null; children: ReactNode };
@@ -55,26 +56,24 @@ const shortName = (name: string) => name.replace(/ (Ltd|Limited)$/, "");
 function companyNav(base: string, client: ShellClient): NavGroup[] {
   return [
     { label: null, items: [{ href: base, label: "Home", icon: Home, title: "Home" }] },
-    { label: "Sales", items: [
-      { href: `${base}/sales`, label: "Invoices", icon: FileText, title: "Invoices", also: [`${base}/credit-notes`, `${base}/repeating`] },
-      { href: `${base}/quotes`, label: "Quotes", icon: FilePen, title: "Quotes" },
+    // Customers first: who they are, what was quoted and invoiced, what is to do, and when.
+    { label: "CRM", items: [
+      { href: `${base}/crm/enquiries`, label: "Enquiries", icon: Inbox, title: "Enquiries" },
       { href: `${base}/customers`, label: "Customers", icon: Users, title: "Customers" },
+      { href: `${base}/quotes`, label: "Quotes", icon: FilePen, title: "Quotes" },
+      { href: `${base}/sales`, label: "Invoices", icon: FileText, title: "Invoices", also: [`${base}/credit-notes`, `${base}/repeating`] },
       { href: `${base}/items`, label: "Products", icon: Package, title: "Products and services" },
-    ] },
-    { label: "Purchases", items: [
-      { href: `${base}/bills`, label: "Bills", icon: Receipt, title: "Bills", also: [`${base}/supplier-credits`] },
-      { href: `${base}/suppliers`, label: "Suppliers", icon: Truck, title: "Suppliers" },
+      { href: `${base}/crm/matters`, label: "Matters", icon: BriefcaseBusiness, title: "Matters" },
+      { href: `${base}/crm/tasks`, label: "Tasks", icon: ListChecks, title: "Tasks" },
+      { href: `${base}/calendar`, label: "Calendar", icon: CalendarDays, title: "Calendar" },
     ] },
     { label: "Money", items: [
       { href: `${base}/bank`, label: "Bank", icon: Landmark, title: "Bank" },
       { href: `${base}/capture`, label: "Upload receipts", icon: ScanText, title: "Upload receipts", badge: client.toReview },
+      { href: `${base}/bills`, label: "Bills", icon: Receipt, title: "Bills", also: [`${base}/supplier-credits`] },
+      { href: `${base}/suppliers`, label: "Suppliers", icon: Truck, title: "Suppliers" },
     ] },
-    { label: "CRM", items: [
-      { href: `${base}/crm/enquiries`, label: "Enquiries", icon: Inbox, title: "Enquiries" },
-      { href: `${base}/crm/matters`, label: "Matters", icon: BriefcaseBusiness, title: "Matters" },
-      { href: `${base}/crm/tasks`, label: "Tasks", icon: ListChecks, title: "Tasks" },
-    ] },
-    { label: "Reports", items: [
+    { label: "Reports & tax", items: [
       { href: `${base}/reports`, label: "Reports", icon: BarChart3, title: "Reports" },
       { href: `${base}/reports/vat`, label: "VAT returns", icon: Percent, title: "VAT returns" },
       { href: `${base}/deadlines`, label: "Deadlines", icon: CalendarClock, title: "Deadlines" },
@@ -156,6 +155,7 @@ function WorkspaceShell({ practice, clients, user, member, toReview, timer, chil
   const practiceGroups: NavGroup[] = [{ label: null, items: [
     { href: "/", label: "Dashboard", icon: LayoutDashboard, title: "Practice dashboard" },
     { href: "/deadlines", label: "Deadlines", icon: CalendarClock, title: "Deadlines" },
+    { href: "/calendar", label: "Calendar", icon: CalendarDays, title: "Calendar" },
     { href: "/time", label: "Time", icon: Timer, title: "Time" },
     { href: "/fees", label: "Fees", icon: Coins, title: "Fees" },
     { href: "/clients", label: "Client files", icon: FolderCheck, title: "Client files" },

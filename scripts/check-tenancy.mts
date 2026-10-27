@@ -132,6 +132,15 @@ expect("Nikos, the owner, cannot record the year end's steps either: the practic
 expect("Maria records them", await count(maria, "update year_ends set sent_to_auditor_on = '2026-03-01' where organisation_id = $1 returning id", [pixelforge]), is(1));
 expect("Eva, at another practice, sees none of Saltlake's year ends", await count(eva, "select count(*) as n from year_ends"), is(0));
 
+// Calendar links: each person's own, and only for what they can see.
+const mariaId = (await conn.query("select id from app_users where email = 'maria@saltlake.example'")).rows[0].id as string;
+expect("Maria makes a calendar link for every client", await count(maria, "insert into calendar_feeds (user_id, token_hash) values (app_user_id(), $1) returning id", ["a".repeat(64)]), is(1));
+expect("Nikos makes one for Pixelforge", await count(nikos, "insert into calendar_feeds (user_id, organisation_id, token_hash) values (app_user_id(), $1, $2) returning id", [pixelforge, "b".repeat(64)]), is(1));
+expect("But not for Aegean Blue, which he can't see", await count(nikos, "insert into calendar_feeds (user_id, organisation_id, token_hash) values (app_user_id(), $1, $2) returning id", [aegean, "c".repeat(64)]), refused);
+expect("Nor in Maria's name", await count(nikos, "insert into calendar_feeds (user_id, token_hash) values ($1, $2) returning id", [mariaId, "d".repeat(64)]), refused);
+expect("Nikos sees his own link, not Maria's", await count(nikos, "select count(*) as n from calendar_feeds"), is(1));
+expect("Nobody signed in sees no calendar link", await count(null, "select count(*) as n from calendar_feeds"), is(0));
+
 // Nobody signed in: nothing.
 expect("Nobody signed in sees no company", await count(null, "select count(*) as n from organisations"), is(0));
 expect("Nobody signed in sees no invoice", await count(null, "select count(*) as n from invoices"), is(0));

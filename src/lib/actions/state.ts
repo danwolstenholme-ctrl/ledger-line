@@ -27,3 +27,7 @@ export const idleVatCheck: VatCheckState = { ok: false, error: null };
 /** What inviting someone hands back: the link, shown once, to copy or email. */
 export interface InviteState extends ActionState { link?: string; email?: string; name?: string; scope?: string }
 export const idleInvite: InviteState = { ok: false, error: null };
+
+/** What making a calendar link hands back: the link, shown once. */
+export interface FeedState extends ActionState { link?: string }
+export const idleFeed: FeedState = { ok: false, error: null };

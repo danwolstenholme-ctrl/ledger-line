@@ -806,3 +806,56 @@ test("the auditor is invited to read a company's books: they see its year end an
   expect((await auditor.goto("/c/larnaka-roast"))?.status()).toBe(404);
   await fresh.close();
 });
+
+test("the sidebar runs customers first, then money, then reports and tax", async ({ page }) => {
+  await page.goto("/c/kalamies-dental");
+  const menu = page.getByRole("complementary", { name: "Main navigation" });
+  await expect(menu.locator("p.ll-eyebrow")).toHaveText(["CRM", "Money", "Reports & tax"]);
+  await expect(menu.getByRole("link")).toContainText(["Home", "Enquiries", "Customers", "Quotes", "Invoices", "Products", "Matters", "Tasks", "Calendar", "Bank", "Upload receipts", "Bills", "Suppliers", "Reports", "VAT returns", "Deadlines", "Year end"]);
+});
+
+test("the calendar puts every client's deadlines on their days, and one client's everything", async ({ page }) => {
+  await page.goto("/calendar?date=2026-11-01");
+  await expect(page.getByRole("heading", { name: "November 2026" })).toBeVisible();
+  // Across all clients it opens on the filing deadlines: the VAT returns for the quarter to September fall on 10 November.
+  await expect(page.getByRole("navigation", { name: "Show" }).getByRole("link", { name: "Deadlines" })).toHaveAttribute("aria-current", "page");
+  await page.getByRole("navigation", { name: "View" }).getByRole("link", { name: "Agenda" }).click();
+  await expect(page.getByRole("heading", { name: "Overdue" })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "AML review" }).filter({ hasText: "Mesogeios Holdings" })).toContainText("7 days overdue");
+  await page.goto("/calendar?view=agenda&date=2026-11-09");
+  await expect(page.getByRole("listitem").filter({ hasText: "VAT return, Jul–Sept 2026" }).filter({ hasText: "Aegean Blue Marine" })).toBeVisible();
+
+  // One client: everything, invoices one by one.
+  await page.goto("/calendar?client=kalamies-dental&view=agenda");
+  await expect(page.getByRole("navigation", { name: "Show" }).getByRole("link", { name: "Everything" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("listitem").filter({ hasText: "Aegean Blue Marine" })).toHaveCount(0);
+  await expect(page.getByRole("listitem").filter({ hasText: /Invoice KDC-\S+ (due|overdue)/ }).first()).toBeVisible();
+  await page.goto("/c/kalamies-dental/calendar?view=week&date=2026-10-26");
+  await expect(page.getByRole("heading", { name: /26 Oct – 1 Nov 2026/ })).toBeVisible();
+});
+
+test("a calendar link subscribes Google, Outlook or Apple to the deadlines, readable without signing in, and a new link stops the old", async ({ page, playwright }) => {
+  await page.goto("/calendar");
+  await page.getByRole("button", { name: "Make a subscribe link" }).click();
+  const first = (await page.locator("pre").first().innerText()).trim();
+  expect(first).toMatch(/\/ics\/[A-Za-z0-9_-]{43}\.ics$/);
+  const outside = await playwright.request.newContext();
+  const feed = await outside.get(first);
+  expect(feed.status()).toBe(200);
+  expect(feed.headers()["content-type"]).toContain("text/calendar");
+  const body = await feed.text();
+  expect(body).toContain("BEGIN:VCALENDAR");
+  expect(body).toContain("X-WR-CALNAME:Ledgerline · All clients · Deadlines");
+  // Still open: what is done (an earlier test files Aegean's VAT return) stays out of the feed.
+  expect(body).toMatch(/SUMMARY:Employer’s return \(TD7\)\\, 2025 · Kalamies Dental Clinic/);
+  expect(body).not.toContain("Chase ");
+
+  await page.reload();
+  await expect(page.getByText(/You have a link showing deadlines/)).toBeVisible();
+  await page.getByRole("button", { name: "Make a new link" }).click();
+  const second = (await page.locator("pre").first().innerText()).trim();
+  expect(second).not.toBe(first);
+  expect((await outside.get(first)).status()).toBe(404);
+  expect((await outside.get(second)).status()).toBe(200);
+  await outside.dispose();
+});

@@ -11,8 +11,8 @@ export const AUTH_MODE: "supabase" | "demo" = SUPABASE_URL && SUPABASE_PUBLISHAB
 /** The demo's sign-in: whose stand-in sign-in this browser uses, or "out". */
 export const DEMO_COOKIE = "ll_demo_session";
 
-/** What anyone may open without signing in: signing in itself, an invitation, a client's private link, the website form and its API. */
-const PUBLIC = [/^\/sign-in$/, /^\/join\/[^/]+$/, /^\/auth\/callback$/, /^\/account\/password$/, /^\/o\//, /^\/f\//, /^\/api\/v1\//, /^\/api\/health$/, /^\/api\/icon$/];
+/** What anyone may open without signing in: signing in itself, an invitation, a client's private link, a subscribed calendar, the website form and its API. */
+const PUBLIC = [/^\/sign-in$/, /^\/join\/[^/]+$/, /^\/auth\/callback$/, /^\/account\/password$/, /^\/o\//, /^\/f\//, /^\/ics\/[^/]+$/, /^\/api\/v1\//, /^\/api\/health$/, /^\/api\/icon$/];
 export const isPublicPath = (path: string) => PUBLIC.some(pattern => pattern.test(path));
 
 /** Where to go after signing in: a path inside Ledgerline, never another site. */

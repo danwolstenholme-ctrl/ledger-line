@@ -2668,6 +2668,21 @@ create table year_ends (
   constraint year_ends_opinion check ((opinion is null) = (report_signed_on is null))
 );
 
+-- A calendar someone subscribes to from Google, Outlook or Apple: a secret link, kept only as its hash.
+-- It shows what its person may see (every client, or one company), and stops when they make a new one.
+create table calendar_feeds (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references app_users (id) on delete cascade,
+  organisation_id uuid references organisations (id) on delete cascade,
+  -- What it shows: one kind (deadlines, tasks, invoices due, quotes expiring), or everything.
+  kind            text check (kind in ('deadline', 'task', 'invoice', 'quote')),
+  token_hash      text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  created_at      timestamptz not null default now(),
+  last_used_at    timestamptz,
+  revoked_at      timestamptz
+);
+create unique index calendar_feeds_one_live on calendar_feeds (user_id, coalesce(organisation_id, '00000000-0000-0000-0000-000000000000'::uuid)) where revoked_at is null;
+
 -- ---------------------------------------------------------------------------
 -- Who may see what. Every request from a signed-in person runs as the role
 -- `authenticated`, with their id in request.jwt.claims, as Supabase sets it;
@@ -2753,6 +2768,7 @@ alter table deadline_marks enable row level security;
 alter table enquiry_form_keys enable row level security;
 alter table fee_invoices enable row level security;
 alter table year_ends enable row level security;
+alter table calendar_feeds enable row level security;
 alter table invitations enable row level security;
 alter table invoice_lines enable row level security;
 alter table invoice_payments enable row level security;
@@ -2938,6 +2954,9 @@ create policy time_entries_access on time_entries for all to authenticated using
 -- A year end: seen by everyone who may see the company (its auditor included); kept by the practice.
 create policy year_ends_read on year_ends for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
 create policy year_ends_write on year_ends for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
+-- Each person's own calendar links, for companies they can see. Reading a link's calendar goes through the service, by its hash.
+create policy calendar_feeds_own on calendar_feeds for all to authenticated using (user_id = (select app_user_id()))
+  with check (user_id = (select app_user_id()) and (organisation_id is null or organisation_id = any ((select visible_companies())::uuid[])));
 create policy fee_invoices_access on fee_invoices for all to authenticated using (client_organisation_id = any ((select practice_companies())::uuid[])) with check (client_organisation_id = any ((select practice_companies())::uuid[]));
 
 -- The audit trail: read by everyone who may see the company; written only by audit_append.

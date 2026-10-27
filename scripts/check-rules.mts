@@ -9,6 +9,8 @@ import { addMonths, annualReturnDates, obligations, taxReturnDue } from "../src/
 import { extendedDue } from "../src/lib/domain/extensions";
 import { companySize, journalFlags, reviewEligibility, reviewTurnoverLimit, yearEndSteps } from "../src/lib/domain/audit";
 import { vatQuarters } from "../src/lib/domain/vat";
+import { calendarRange } from "../src/lib/domain/calendar";
+import { icsCalendar } from "../src/lib/documents/ics";
 
 const checks: [string, unknown, unknown][] = [];
 const expect = (what: string, got: unknown, wanted: unknown) => checks.push([what, got, wanted]);
@@ -54,6 +56,16 @@ expect("Medium-sized: €6m assets and €12m turnover are both over the small l
 // Journals an auditor asks about (ISA 240).
 expect("A journal dated in 2025, posted on Saturday 10 January 2026, for €5,000, said little", journalFlags({ entry_date: "2025-12-31", created_at: "2026-01-10T09:00:00Z", total: 5000, narration: "adj" }, "2025-12-31"), ["after_year_end", "weekend", "round", "thin"]);
 expect("Opening balances: agreed to last year's accounts (ISA 510), not flagged as round", journalFlags({ entry_date: "2025-07-01", created_at: "2025-07-03T09:00:00Z", total: 91_000, narration: "Opening balances on moving the books to Ledgerline" }, "2025-12-31"), ["opening"]);
+
+// The calendar: weeks from Monday; a month shows whole weeks.
+expect("October 2026 runs Monday 28 September to Sunday 1 November", (({ from, to }) => [from, to])(calendarRange("month", "2026-10-27")), ["2026-09-28", "2026-11-01"]);
+expect("The week of Tuesday 27 October 2026 is Monday 26 October to Sunday 1 November", (({ from, to }) => [from, to])(calendarRange("week", "2026-10-27")), ["2026-10-26", "2026-11-01"]);
+expect("From February 2027 back a month is January", calendarRange("month", "2027-02-15").prev, "2027-01-01");
+// A subscribed calendar (RFC 5545): all-day events, text escaped, long lines folded at 75 bytes.
+const ics = icsCalendar("Ledgerline · Test", [{ uid: "a@ledgerline", date: "2026-11-10", summary: "VAT return, Jul–Sept 2026; Aegean, Λεμεσός and more, a summary long enough that it has to be folded onto a second line" }], new Date("2026-10-27T09:00:00Z"));
+expect("An all-day event starts on its day and ends the next", ics.includes("DTSTART;VALUE=DATE:20261110\r\nDTEND;VALUE=DATE:20261111"), true);
+expect("Commas and semicolons are escaped", ics.includes("Jul–Sept 2026\\; Aegean\\, Λεμεσός"), true);
+expect("No line is longer than 75 bytes", ics.split("\r\n").every(line => Buffer.byteLength(line, "utf8") <= 75), true);
 
 let failed = 0;
 for (const [what, got, wanted] of checks) {

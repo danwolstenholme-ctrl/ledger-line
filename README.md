@@ -57,8 +57,11 @@ to reconcile.
 - The Home is for the person who runs the company: six large buttons (Raise an
   invoice, Record a bill, Upload a receipt, Money in, Money out, Write a
   quote), three figures (in the bank, customers owe you, you owe suppliers),
-  one list of what needs attention, and the to-dos. The accountant's pages are
-  under Reports and **More**.
+  one list of what needs attention, and the to-dos. The menu runs the way the
+  owner works: **CRM** (enquiries, customers, quotes, invoices, products,
+  matters, tasks, calendar), then **Money** (bank, receipts, bills,
+  suppliers), then **Reports & tax**; the accountant's pages are under
+  **More**.
 
 ### 1c. Everyday work, 6 minutes
 - **Raise an invoice**: choose a customer (or **+ New customer…** and type a
@@ -171,7 +174,7 @@ to reconcile.
 - A VAT return closes itself when it is filed: file one from **Open the
   return** and it shows as Done. A VAT return still to file says how ready it
   is: bank lines in the quarter to match, documents to check.
-- Inside a company, **Deadlines** (under Reports) shows only its own. Who
+- Inside a company, **Deadlines** (under Reports & tax) shows only its own. Who
   looks after a company is set in its Company settings.
 
 ### 1h. Time and fees (`/time`, `/fees`), 3 minutes
@@ -237,7 +240,7 @@ to reconcile.
   a demo register and say "Demo answer"; any real number goes to the real
   VIES. Saving a customer or supplier with a mistyped EU number is refused.
 
-### 1k. Year end and audit (a company's **Year end**, under Reports), 3 minutes
+### 1k. Year end and audit (a company's **Year end**, under Reports & tax), 3 minutes
 - **Kalamies Dental**: 2025's turnover and total assets, and 2024's, are within
   the limits, so its accounts may be **reviewed** (ISRE 2400) instead of
   audited, and the company has chosen that. The page shows why, figure by
@@ -260,6 +263,18 @@ to reconcile.
   IESBA Code (section 601) asks of a firm that audits books it keeps.
 - **People** (under More): invite the auditor with the role **Auditor**. They
   read the books and take the audit file; the database refuses any change.
+
+### 1l. Calendar (`/calendar`, and **Calendar** in each company), 2 minutes
+- What is due, on its day: month, week or agenda. Across all clients it opens
+  on the filing deadlines; **Everything** adds each client's tasks, invoices
+  falling due (one line per client per day) and quotes running out. Pick a
+  client to see that one alone; inside a company it is that company's.
+- **Agenda**: what is overdue first (Kalamies' slipped provisional tax,
+  Mesogeios' AML review), then each day.
+- **Subscribe in your calendar**: a private link for Google, Outlook or Apple
+  Calendar showing what the page shows, given once; making a new one stops the
+  old. On the laptop, Apple Calendar can read it; Google and Outlook read from
+  their own servers, so they need Ledgerline online.
 
 ### 2. AI capture (`/capture`), 4 minutes
 - Drag all four files from `demo-files/` in at once:
@@ -516,5 +531,11 @@ real project, `npm run supabase:demo-users` gives the demo's people sign-ins.
   (files stored as they are, CRC-32 from Node's own zlib: no dependency).
   `npm run check:rules` checks the dates and tests against the law;
   `npx tsx scripts/check-tenancy.mts` checks that an auditor reads and never writes.
+- Calendar (`src/components/calendar`, `src/lib/data/calendar.ts`,
+  `src/lib/domain/calendar.ts`): deadlines, tasks, invoices and quotes, read as
+  the person asking. A subscribe link (`src/app/ics/[token]`,
+  `src/lib/calendar-feeds.ts`) is a random token kept only as its SHA-256; a
+  calendar app's request runs as the link's owner, under the same row-level
+  security, and gets iCalendar from `src/lib/documents/ics.ts` (RFC 5545).
 - Not in this demo: passwords (the laptop lists its people; live, Supabase
   Auth), currencies other than EUR, live bank feeds.
