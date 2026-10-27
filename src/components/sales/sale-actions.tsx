@@ -12,6 +12,7 @@ import { INVOICE_PAYMENT_METHODS, type CustomerRow } from "@/types/database";
 import { useCurrency } from "@/components/common/regime";
 import { useRegime } from "@/components/common/regime";
 import { regimeOf } from "@/lib/domain/regimes";
+import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "@/lib/documents/document-words";
 
 const METHODS: Record<(typeof INVOICE_PAYMENT_METHODS)[number], string> = { bank_transfer: "Bank transfer", card: "Card", cash: "Cash", cheque: "Cheque", other: "Other" };
 
@@ -69,7 +70,11 @@ export function QuoteActions({ id, status }: { id: string; status: "draft" | "se
   </div>;
 }
 
-export function CustomerForm({ customer, companyTerms }: { customer?: Pick<CustomerRow, "id" | "name" | "email" | "phone" | "vat_number" | "country" | "address" | "eu_business" | "payment_terms_days">; companyTerms: number }) {
+export function CustomerForm({ customer, companyTerms, companyLanguage = "en" }: {
+  customer?: Pick<CustomerRow, "id" | "name" | "email" | "phone" | "vat_number" | "country" | "address" | "eu_business" | "payment_terms_days" | "document_language">; companyTerms: number;
+  /** The language the company's documents are in, unless this customer's are in another. */
+  companyLanguage?: DocumentLanguage;
+}) {
   const [state, action] = useActionState(saveCustomer, idleState);
   // A customer is where the company is, unless said otherwise.
   const { country: home } = useRegime();
@@ -87,6 +92,12 @@ export function CustomerForm({ customer, companyTerms }: { customer?: Pick<Custo
       <Field label="Payment terms" hint={`days; empty for the company's ${companyTerms}`} error={errors.payment_terms_days}>
         <TextInput name="payment_terms_days" inputMode="numeric" defaultValue={customer?.payment_terms_days ?? ""} placeholder={String(companyTerms)} className="tabular-nums" />
       </Field>
+      {home === "CY" ? <Field label="Documents in" htmlFor="customer-language" hint="invoices, quotes and statements">
+        <NativeSelect id="customer-language" name="document_language" defaultValue={customer?.document_language ?? ""}>
+          <option value="">The company’s: {DOCUMENT_LANGUAGES.find(item => item.value === companyLanguage)?.label}</option>
+          {DOCUMENT_LANGUAGES.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </NativeSelect>
+      </Field> : null}
       {home === "CY" && country !== "CY" && EU_COUNTRIES.has(country) ? <Checkbox name="eu_business" defaultChecked={customer?.eu_business ?? true} label="A business in another EU state: invoices are reverse charge and go on the VIES statement" className="sm:col-span-2" /> : null}
     </div>
     <FormError message={state.error} />

@@ -4,7 +4,7 @@ import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-p
 
 import { one } from "@/lib/db";
 import { letterDate, type Letter } from "@/lib/domain/onboarding";
-import "./pdf";
+import { makePdf } from "./pdf-fonts";
 
 /**
  * The engagement letter as a PDF: the practice's letterhead, the letter word
@@ -98,9 +98,9 @@ export async function letterPdfResponse(fileId: string, inline: boolean, draft?:
      from client_files f join practices p on p.id = f.practice_id left join organisations o on o.practice_id = p.id and o.is_practice where f.id = $1`, [fileId]);
   const letter: Letter | null = row?.letter_text ? JSON.parse(row.letter_text) : draft ?? null;
   if (!row || !letter) return new Response("There is no letter for this client yet.", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
-  const bytes = await renderToBuffer(<EngagementLetter letter={letter} accent={/^#[0-9a-f]{6}$/i.test(row.brand_color) ? row.brand_color : INK}
+  const bytes = await makePdf(() => renderToBuffer(<EngagementLetter letter={letter} accent={/^#[0-9a-f]{6}$/i.test(row.brand_color) ? row.brand_color : INK}
     practice={{ name: row.practice_name ?? "", address: row.address, email: row.email, he: row.he }} sentAt={row.letter_sent_at} hash={row.letter_hash}
-    signed={row.signed_at && row.signed_name ? { name: row.signed_name, position: row.signed_position, at: row.signed_at, ip: row.signed_ip, agent: row.signed_agent, hash: row.signed_hash } : null} />);
+    signed={row.signed_at && row.signed_name ? { name: row.signed_name, position: row.signed_position, at: row.signed_at, ip: row.signed_ip, agent: row.signed_agent, hash: row.signed_hash } : null} />));
   const name = `Engagement letter ${row.company_name.replace(/[^A-Za-z0-9 ._-]+/g, "-")}${row.signed_at ? " (signed)" : ""}.pdf`;
   return new Response(new Uint8Array(bytes), { headers: { "content-type": "application/pdf", "content-disposition": `${inline ? "inline" : "attachment"}; filename="${name}"`, "cache-control": "private, no-store" } });
 }

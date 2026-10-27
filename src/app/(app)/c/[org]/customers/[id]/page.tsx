@@ -103,7 +103,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             {!client.email && !client.phone && !client.address ? <dd className="text-ink-faint">No contact details yet.</dd> : null}
           </dl>
           <p className="border-hairline text-ink-muted border-t px-4 py-2 text-[12.5px]">Pays within {client.payment_terms_days ?? org.payment_terms_days} days{client.payment_terms_days === null ? " (the company's terms)" : ""}</p>
-          <RecordDisclosure title="Edit details"><CustomerForm customer={client} companyTerms={org.payment_terms_days} /></RecordDisclosure>
+          <RecordDisclosure title="Edit details"><CustomerForm customer={client} companyTerms={org.payment_terms_days} companyLanguage={org.document_language} /></RecordDisclosure>
         </RecordSection>
         {fields.length ? <RecordSection title="Details" hint={`What ${org.name.replace(/ (Ltd|Limited|LLP)$/, "")} keeps on each`}>
           <dl className="divide-hairline divide-y px-4">{fields.map(field => <div key={field.key} className="grid gap-0.5 py-2 sm:grid-cols-[130px_minmax(0,1fr)] sm:gap-4">

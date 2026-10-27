@@ -176,6 +176,8 @@ export type OrganisationRow = {
   contact_email: string | null; address: string | null; invoice_prefix: string; payment_terms_days: number;
   /** The colour of its documents' headings and totals, and the terms printed at their foot. */
   invoice_accent: string; invoice_footer: string | null; manager: string | null; is_practice: boolean;
+  /** The language its documents are written in (lib/documents/document-words). */
+  document_language: "en" | "el" | "en+el";
   /** The first month kept in Ledgerline, for a company whose books were opened before anything was posted. */
   books_from: string | null;
   /** Company law: incorporation (its annual return dates follow), its auditor, and what rules out a review instead of an audit. */
@@ -189,7 +191,9 @@ export type OrganisationRow = {
 };
 export type CustomerRow = { id: string; organisation_id: string; name: string; email: string | null; phone: string | null; vat_number: string | null; country: string; address: string | null; eu_business: boolean; default_account_id: string | null;
   /** Days to pay; the company's terms when null. */
-  payment_terms_days: number | null; is_active: boolean };
+  payment_terms_days: number | null; is_active: boolean;
+  /** The language of the documents it is sent; the company's when null. */
+  document_language: "en" | "el" | "en+el" | null };
 export const INVOICE_STATUSES = ["draft", "issued", "part_paid", "paid", "void"] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export const VAT_TREATMENTS = ["standard", "exempt", "reverse_charge", "outside_scope"] as const;

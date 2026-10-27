@@ -6,7 +6,7 @@ import type { getPayslipDocuments } from "@/lib/data/payroll";
 import { CY_RATES, employerCost } from "@/lib/domain/payroll-cy";
 import { formatIban } from "@/lib/domain/iban";
 import { formatAmount, formatDate } from "@/lib/format";
-import "./pdf";
+import { makePdf } from "./pdf-fonts";
 
 /**
  * A month's payslips as one PDF, a page for each employee: what they earned,
@@ -103,5 +103,5 @@ function Payslips({ org, run, slips }: PayslipData) {
 }
 
 export async function renderPayslips(data: PayslipData): Promise<Buffer> {
-  return renderToBuffer(<Payslips {...data} />);
+  return makePdf(() => renderToBuffer(<Payslips {...data} />));
 }

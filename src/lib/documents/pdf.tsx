@@ -1,15 +1,14 @@
 import "server-only";
 
 import type { ReactNode } from "react";
-import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer, type Styles } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer, type Styles } from "@react-pdf/renderer";
 
 import type { getDocumentForPdf, getStatement } from "@/lib/data/sales";
 import { countryName } from "@/lib/domain/countries";
-import { formatQuantity, formatUnitPrice } from "@/lib/domain/line-math";
-import { formatAmount, formatDate } from "@/lib/format";
 import type { OrganisationRow } from "@/types/database";
-import { ROBOTO_MEDIUM, ROBOTO_REGULAR } from "./fonts";
+import { makePdf } from "./pdf-fonts";
 import { accentOf, treatmentNote } from "./document-text";
+import { caps, documentWords, type DocumentWords, type WordKey } from "./document-words";
 
 /**
  * The documents a customer receives, as A4 PDFs in the name of the company
@@ -18,9 +17,6 @@ import { accentOf, treatmentNote } from "./document-text";
  * the very same lines; and the statement of account.
  */
 
-Font.register({ family: "Roboto", fonts: [{ src: ROBOTO_REGULAR, fontWeight: 400 }, { src: ROBOTO_MEDIUM, fontWeight: 500 }] });
-// A company name is never broken across lines with a hyphen.
-Font.registerHyphenationCallback(word => [word]);
 
 export type DocumentPdfData = NonNullable<Awaited<ReturnType<typeof getDocumentForPdf>>>;
 export type StatementPdfData = NonNullable<Awaited<ReturnType<typeof getStatement>>>;
@@ -82,9 +78,9 @@ function lines(text: string | null | undefined) {
 const heOf = (org: OrganisationRow) => !org.he_number ? null : org.country === "GB" ? `Company no. ${org.he_number}` : /^HE/i.test(org.he_number) ? org.he_number : `HE ${org.he_number}`;
 
 /** The issuing company across the top: its logo or its name, and what it prints about itself. */
-function CompanyHeader({ org, logo }: { org: OrganisationRow; logo: string | null }) {
+function CompanyHeader({ org, logo, words }: { org: OrganisationRow; logo: string | null; words: DocumentWords }) {
   // A UK company's UTR is HMRC's business, not its customers': it isn't printed.
-  const registration = [org.vat_number ? `VAT ${org.vat_number}` : null, heOf(org), org.tic && org.country !== "GB" ? `TIC ${org.tic}` : null].filter(Boolean).join(" · ");
+  const registration = [org.vat_number ? `${words.word("vatLabel")} ${org.vat_number}` : null, heOf(org), org.tic && org.country !== "GB" ? `${words.word("ticLabel")} ${org.tic}` : null].filter(Boolean).join(" · ");
   return <View style={styles.header}>
     <View style={styles.brand}>
       {/* eslint-disable-next-line jsx-a11y/alt-text -- a PDF image, not an HTML one */}
@@ -101,29 +97,36 @@ function CompanyHeader({ org, logo }: { org: OrganisationRow; logo: string | nul
 }
 
 /** The company's own terms, printed at the foot of every document it sends. */
-function Terms({ org }: { org: OrganisationRow }) {
+function Terms({ org, words }: { org: OrganisationRow; words: DocumentWords }) {
   return org.invoice_footer ? <View style={styles.block} wrap={false}>
-    <Text style={styles.blockLabel}>Terms</Text>
+    <Text style={styles.blockLabel}>{words.label("terms")}</Text>
     {lines(org.invoice_footer).map((line, index) => <P key={index} size={8.5} style={{ color: MUTED }}>{line}</P>)}
   </View> : null;
 }
 
-function Footer({ org, title }: { org: OrganisationRow; title: string }) {
+/** Where the company is registered, as its documents must say: Cyprus, or for a UK company the part of the UK its number belongs to. */
+function registeredIn(org: OrganisationRow, words: DocumentWords) {
+  if (org.country !== "GB") return words.word("registeredInCyprus");
+  const number = (org.he_number ?? "").toUpperCase();
+  return number.startsWith("SC") ? "Registered in Scotland" : number.startsWith("NI") ? "Registered in Northern Ireland" : "Registered in England and Wales";
+}
+
+function Footer({ org, title, words }: { org: OrganisationRow; title: string; words: DocumentWords }) {
   const he = heOf(org);
   return <View style={styles.footer} fixed>
-    <P size={7.5} style={{ flex: 1, paddingRight: 16 }}>{[org.name, he ? `Registered in Cyprus, ${he}` : "Registered in Cyprus"].join(" · ")}</P>
-    <Text render={({ pageNumber, totalPages }) => `${title} · page ${pageNumber} of ${totalPages}`} />
+    <P size={7.5} style={{ flex: 1, paddingRight: 16 }}>{[org.name, he ? `${registeredIn(org, words)}, ${he}` : registeredIn(org, words)].join(" · ")}</P>
+    <Text render={({ pageNumber, totalPages }) => `${title} · ${words.pageOf(pageNumber, totalPages)}`} />
   </View>;
 }
 
 /** The word across the top of a document that is not simply open: paid, void, a draft, accepted. */
-function stampFor(data: DocumentPdfData) {
+function stampFor(data: DocumentPdfData): WordKey | null {
   const { kind, document } = data;
   if (kind === "invoice") {
     if (document.status === "paid" && "amount_credited" in document && Number(document.amount_credited) >= Number(document.total)) return "CREDITED";
-    return ({ draft: "DRAFT", void: "VOID", paid: "PAID" } as Record<string, string>)[document.status] ?? null;
+    return ({ draft: "DRAFT", void: "VOID", paid: "PAID" } as Record<string, WordKey>)[document.status] ?? null;
   }
-  if (kind === "credit_note") return ({ draft: "DRAFT", void: "VOID" } as Record<string, string>)[document.status] ?? null;
+  if (kind === "credit_note") return ({ draft: "DRAFT", void: "VOID" } as Record<string, WordKey>)[document.status] ?? null;
   if (document.status === "accepted") return "ACCEPTED";
   if (document.status === "declined") return "DECLINED";
   if ("expired" in document && document.expired) return "EXPIRED";
@@ -134,10 +137,12 @@ const TITLES = { invoice: "Invoice", quote: "Quote", credit_note: "Credit note" 
 
 export function SalesDocument(data: DocumentPdfData) {
   const { kind, org, document, lines: items, customer, bank, corrects, logo } = data;
+  const words = documentWords(data.language);
   const { accent, onAccent } = accentOf(org);
   // In the document's own currency: an invoice carries one; a quote or credit note is in the company's.
-  const money = (value: number | string) => formatAmount(value, ("currency" in document && document.currency) || org.currency);
-  const title = TITLES[kind];
+  const currency = ("currency" in document && document.currency) || org.currency;
+  const money = (value: number | string) => words.money(value, currency);
+  const title = words.word(kind);
   const until = "due_on" in document ? document.due_on : "valid_until" in document ? document.valid_until : null;
   const paid = "amount_paid" in document ? Number(document.amount_paid) : 0;
   const credited = "amount_credited" in document ? Number(document.amount_credited) : 0;
@@ -145,39 +150,39 @@ export function SalesDocument(data: DocumentPdfData) {
   const charged = document.vat_treatment === "standard" && org.vat_registered;
   const itemised = items.some(item => item.unit_price !== null && (Number(item.quantity) !== 1 || Number(item.discount_pct) > 0 || item.item_id));
   const discounted = items.some(item => Number(item.discount_pct) > 0);
-  const stamp = stampFor(data), note = treatmentNote(data);
+  const stamp = stampFor(data), note = treatmentNote(data, words);
   const payable = kind === "invoice" && (document.status === "issued" || document.status === "part_paid" || document.status === "draft");
   const vatByRate = [...items.reduce((rates, line) => Number(line.vat_rate) > 0 ? rates.set(Number(line.vat_rate), (rates.get(Number(line.vat_rate)) ?? 0) + Number(line.vat_amount)) : rates, new Map<number, number>())]
     .sort(([a], [b]) => b - a);
-  const panel = kind === "quote" ? { label: "Quote total", amount: Number(document.total), note: until ? `Valid until ${formatDate(until)}` : null }
-    : kind === "credit_note" ? { label: "Credit", amount: Number(document.total), note: corrects ? `Against invoice ${corrects.number}` : null }
-    : { label: paid + credited > 0 ? "Balance due" : "Amount due", amount: balance, note: until ? `By ${formatDate(until)}` : null };
+  const panel = kind === "quote" ? { label: words.label("quoteTotal"), amount: Number(document.total), note: until ? words.sayShort("validUntilDate", words.date(until)) : null }
+    : kind === "credit_note" ? { label: words.label("credit"), amount: Number(document.total), note: corrects ? words.sayShort("againstInvoice", corrects.number) : null }
+    : { label: words.label(paid + credited > 0 ? "balanceDue" : "amountDue"), amount: balance, note: until ? words.sayShort("by", words.date(until)) : null };
 
-  return <Document title={`${title} ${document.number}`} author={org.name} subject={customer?.name ?? undefined} creator={org.name} producer={org.name}>
+  return <Document title={`${title} ${document.number}`} author={org.name} subject={customer?.name ?? undefined} creator={org.name} producer={org.name} language={words.lang}>
     <Page size="A4" style={styles.page}>
-      <CompanyHeader org={org} logo={logo} />
+      <CompanyHeader org={org} logo={logo} words={words} />
 
       <View style={[styles.titleRow, { borderBottomColor: accent }]}>
         <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
-          <Text style={[styles.title, { color: accent }]}>{title.toUpperCase()}</Text>
-          {stamp ? <Text style={styles.stamp}>{stamp}</Text> : null}
+          <Text style={[styles.title, { color: accent }, words.language === "en+el" ? { fontSize: 17 } : {}]}>{caps(title)}</Text>
+          {stamp ? <Text style={styles.stamp}>{words.word(stamp)}</Text> : null}
         </View>
         <View style={styles.meta}>
-          <View><Text style={styles.label}>Number</Text><Text style={styles.metaValue}>{document.number}</Text></View>
-          <View><Text style={styles.label}>Date</Text><Text style={styles.metaValue}>{formatDate(document.issued_on)}</Text></View>
-          {until && kind !== "credit_note" ? <View><Text style={styles.label}>{kind === "quote" ? "Valid until" : "Due"}</Text><Text style={styles.metaValue}>{formatDate(until)}</Text></View> : null}
-          {corrects ? <View><Text style={styles.label}>Credits invoice</Text><Text style={styles.metaValue}>{corrects.number}</Text></View> : null}
-          {"reference" in document && document.reference ? <View><Text style={styles.label}>Your reference</Text><Text style={styles.metaValue}>{document.reference}</Text></View> : null}
+          <View><Text style={styles.label}>{words.label("number")}</Text><Text style={styles.metaValue}>{document.number}</Text></View>
+          <View><Text style={styles.label}>{words.label("date")}</Text><Text style={styles.metaValue}>{words.date(document.issued_on)}</Text></View>
+          {until && kind !== "credit_note" ? <View><Text style={styles.label}>{words.label(kind === "quote" ? "validUntil" : "due")}</Text><Text style={styles.metaValue}>{words.date(until)}</Text></View> : null}
+          {corrects ? <View><Text style={styles.label}>{words.label("creditsInvoice")}</Text><Text style={styles.metaValue}>{corrects.number}</Text></View> : null}
+          {"reference" in document && document.reference ? <View><Text style={styles.label}>{words.label("yourReference")}</Text><Text style={styles.metaValue}>{document.reference}</Text></View> : null}
         </View>
       </View>
 
       <View style={styles.parties}>
         <View style={styles.party}>
-          <Text style={styles.label}>{kind === "quote" ? "Prepared for" : kind === "credit_note" ? "Credited to" : "Billed to"}</Text>
+          <Text style={styles.label}>{words.label(kind === "quote" ? "preparedFor" : kind === "credit_note" ? "creditedTo" : "billedTo")}</Text>
           <P style={styles.partyName}>{customer?.name ?? document.client_name}</P>
           {lines(customer?.address).map((line, index) => <P key={index} style={{ color: MUTED }}>{line}</P>)}
           {customer && customer.country !== "CY" ? <P style={{ color: MUTED }}>{countryName(customer.country)}</P> : null}
-          {customer?.vat_number ? <P style={{ color: MUTED }}>VAT {customer.vat_number}</P> : null}
+          {customer?.vat_number ? <P style={{ color: MUTED }}>{words.word("vatLabel")} {customer.vat_number}</P> : null}
         </View>
         <View style={styles.due}>
           <Text style={styles.label}>{panel.label}</Text>
@@ -186,21 +191,21 @@ export function SalesDocument(data: DocumentPdfData) {
         </View>
       </View>
 
-      {kind === "credit_note" && "reason" in document ? <P style={{ marginTop: 16, color: MUTED }}>Reason: {document.reason}{corrects ? `. This credit note corrects invoice ${corrects.number} of ${formatDate(corrects.issued_on)}.` : "."}</P> : null}
+      {kind === "credit_note" && "reason" in document ? <P style={{ marginTop: 16, color: MUTED }}>{words.say("reasonLine", document.reason, corrects ? { number: corrects.number, date: words.date(corrects.issued_on) } : null)}</P> : null}
 
       <View style={styles.table}>
         <View style={styles.headRow} fixed>
-          <Text style={[styles.head, styles.description]}>Description</Text>
-          {itemised ? <Text style={[styles.head, styles.qty]}>Qty</Text> : null}
-          {itemised ? <Text style={[styles.head, styles.price]}>Unit price</Text> : null}
-          {discounted ? <Text style={[styles.head, styles.disc]}>Disc</Text> : null}
-          {charged ? <Text style={[styles.head, styles.rate]}>VAT</Text> : null}
-          <Text style={[styles.head, styles.amount]}>{charged ? "Net" : "Amount"}</Text>
+          <Text style={[styles.head, styles.description]}>{words.label("description")}</Text>
+          {itemised ? <Text style={[styles.head, styles.qty]}>{words.label("qty")}</Text> : null}
+          {itemised ? <Text style={[styles.head, styles.price]}>{words.label("unitPrice")}</Text> : null}
+          {discounted ? <Text style={[styles.head, styles.disc]}>{words.label("disc")}</Text> : null}
+          {charged ? <Text style={[styles.head, styles.rate]}>{words.label("vat")}</Text> : null}
+          <Text style={[styles.head, styles.amount]}>{words.label(charged ? "net" : "amount")}</Text>
         </View>
         {items.map(item => <View key={item.id} style={styles.row} wrap={false}>
           <P style={styles.description}>{item.description}</P>
-          {itemised ? <Text style={styles.qty}>{formatQuantity(item.quantity)}{item.unit ? ` ${item.unit}` : ""}</Text> : null}
-          {itemised ? <Text style={styles.price}>{formatUnitPrice(item.unit_price ?? item.net)}</Text> : null}
+          {itemised ? <Text style={styles.qty}>{words.quantity(item.quantity)}{item.unit ? ` ${item.unit}` : ""}</Text> : null}
+          {itemised ? <Text style={styles.price}>{words.unitPrice(item.unit_price ?? item.net, currency)}</Text> : null}
           {discounted ? <Text style={[styles.disc, { color: MUTED }]}>{Number(item.discount_pct) ? `${Number(item.discount_pct)}%` : ""}</Text> : null}
           {charged ? <Text style={[styles.rate, { color: MUTED }]}>{Number(item.vat_rate)}%</Text> : null}
           <Text style={styles.amount}>{money(item.net)}</Text>
@@ -208,102 +213,104 @@ export function SalesDocument(data: DocumentPdfData) {
       </View>
 
       <View style={styles.totals} wrap={false}>
-        <View style={styles.totalRow}><Text style={{ color: MUTED }}>Subtotal</Text><Text>{money(document.net)}</Text></View>
-        {charged ? vatByRate.map(([rate, amount]) => <View key={rate} style={styles.totalRow}><Text style={{ color: MUTED }}>VAT at {rate}%</Text><Text>{money(amount)}</Text></View>)
-          : <View style={styles.totalRow}><Text style={{ color: MUTED }}>VAT</Text><Text>{money(0)}</Text></View>}
-        <View style={[styles.grandRow, { backgroundColor: accent, color: onAccent }]}><Text style={styles.grand}>{kind === "credit_note" ? "Total credit" : "Total"}</Text><Text style={styles.grand}>{money(document.total)}</Text></View>
+        <View style={styles.totalRow}><Text style={{ color: MUTED }}>{words.word("subtotal")}</Text><Text>{money(document.net)}</Text></View>
+        {charged ? vatByRate.map(([rate, amount]) => <View key={rate} style={styles.totalRow}><Text style={{ color: MUTED }}>{words.sayShort("vatAt", rate)}</Text><Text>{money(amount)}</Text></View>)
+          : <View style={styles.totalRow}><Text style={{ color: MUTED }}>{words.word("vat")}</Text><Text>{money(0)}</Text></View>}
+        <View style={[styles.grandRow, { backgroundColor: accent, color: onAccent }]}><Text style={styles.grand}>{words.word(kind === "credit_note" ? "totalCredit" : "total")}</Text><Text style={styles.grand}>{money(document.total)}</Text></View>
         {kind === "invoice" && (paid > 0 || credited > 0) && document.status !== "void" ? <>
-          {paid > 0 ? <View style={styles.totalRow}><Text style={{ color: MUTED }}>Paid</Text><Text>−{money(paid)}</Text></View> : null}
-          {credited > 0 ? <View style={styles.totalRow}><Text style={{ color: MUTED }}>Credited</Text><Text>−{money(credited)}</Text></View> : null}
-          <View style={styles.totalRow}><Text style={{ fontWeight: 500 }}>Balance due</Text><Text style={{ fontWeight: 500 }}>{money(balance)}</Text></View>
+          {paid > 0 ? <View style={styles.totalRow}><Text style={{ color: MUTED }}>{words.word("paid")}</Text><Text>−{money(paid)}</Text></View> : null}
+          {credited > 0 ? <View style={styles.totalRow}><Text style={{ color: MUTED }}>{words.word("credited")}</Text><Text>−{money(credited)}</Text></View> : null}
+          <View style={styles.totalRow}><Text style={{ fontWeight: 500 }}>{words.word("balanceDue")}</Text><Text style={{ fontWeight: 500 }}>{money(balance)}</Text></View>
         </> : null}
       </View>
       {note ? <P size={8.5} style={{ color: MUTED, marginTop: 10 }}>{note}</P> : null}
 
       {document.notes ? <View style={styles.block} wrap={false}>
-        <Text style={styles.blockLabel}>Notes</Text>
+        <Text style={styles.blockLabel}>{words.label("notes")}</Text>
         {lines(document.notes).map((line, index) => <P key={index}>{line}</P>)}
       </View> : null}
 
       {payable && bank ? <View style={styles.block} wrap={false}>
-        <Text style={styles.blockLabel}>How to pay</Text>
-        <P style={{ fontWeight: 500 }}>By bank transfer to {bank.name}</P>
+        <Text style={styles.blockLabel}>{words.label("howToPay")}</Text>
+        <P style={{ fontWeight: 500 }}>{words.say("byTransfer", bank.name)}</P>
         {lines(bank.bank_details).map((line, index) => <P key={index}>{line}</P>)}
-        <P style={{ color: MUTED, marginTop: 4 }}>Please use {document.number} as the payment reference.</P>
+        <P style={{ color: MUTED, marginTop: 4 }}>{words.say("useReference", document.number)}</P>
       </View> : null}
       {kind === "quote" && (document.status === "draft" || document.status === "sent") ? <View style={styles.block} wrap={false}>
-        <Text style={styles.blockLabel}>To accept</Text>
-        <P>Reply to {org.contact_email ?? org.name} quoting {document.number}. We will invoice on acceptance.</P>
+        <Text style={styles.blockLabel}>{words.label("toAccept")}</Text>
+        <P>{words.say("replyToAccept", org.contact_email ?? org.name, document.number)}</P>
       </View> : null}
       {kind === "credit_note" ? <View style={styles.block} wrap={false}>
-        <Text style={styles.blockLabel}>This credit</Text>
-        <P>{"amount_allocated" in document && Number(document.amount_allocated) > 0 ? `${money(document.amount_allocated)} has been taken off what you owe.` : "It will be taken off what you owe us, or refunded to you."}
-          {"amount_refunded" in document && Number(document.amount_refunded) > 0 ? ` ${money(document.amount_refunded)} has been refunded.` : ""}</P>
+        <Text style={styles.blockLabel}>{words.label("thisCredit")}</Text>
+        <P>{"amount_allocated" in document && Number(document.amount_allocated) > 0 ? words.say("takenOff", money(document.amount_allocated)) : words.say("willBeTakenOff")}
+          {"amount_refunded" in document && Number(document.amount_refunded) > 0 ? ` ${words.say("refunded", money(document.amount_refunded))}` : ""}</P>
       </View> : null}
 
-      <Terms org={org} />
-      <Footer org={org} title={`${title} ${document.number}`} />
+      <Terms org={org} words={words} />
+      <Footer org={org} title={`${title} ${document.number}`} words={words} />
     </Page>
   </Document>;
 }
 
-const AGES = [["current", "Not yet due"], ["1-30", "1–30 days"], ["31-60", "31–60 days"], ["61-90", "61–90 days"], ["90+", "Over 90 days"]] as const;
+const AGES = [["current", "notYetDue"], ["1-30", "days1to30"], ["31-60", "days31to60"], ["61-90", "days61to90"], ["90+", "over90"]] as const;
 
 /** A statement of account: the customer's running balance with the company, and what is overdue. */
 export function StatementDocument(data: StatementPdfData) {
   const { org, customer, from, to, opening, lines: rows, closing, ageing, unusedCredit, bank, logo } = data;
+  const words = documentWords(data.language);
   const { accent } = accentOf(org);
-  const money = (value: number | string) => formatAmount(value, org.currency);
+  const money = (value: number | string) => words.money(value, org.currency);
   const overdue = AGES.slice(1).reduce((sum, [key]) => sum + (ageing.get(key) ?? 0), 0);
-  const kindLabel = { invoice: "Invoice", payment: "Payment", credit_note: "Credit note", refund: "Refund" } as const;
-  return <Document title={`Statement ${customer.name}`} author={org.name} subject={customer.name} creator={org.name} producer={org.name}>
+  const kindLabel = { invoice: words.word("invoice"), payment: words.word("payment"), credit_note: words.word("credit_note"), refund: words.word("refund") } as const;
+  const dueNote = (date: string) => words.language === "en" ? `, due ${words.date(date)}` : words.language === "el" ? `, λήξη ${words.date(date)}` : `, λήξη / due ${words.date(date)}`;
+  return <Document title={`${words.word("statement")} ${customer.name}`} author={org.name} subject={customer.name} creator={org.name} producer={org.name} language={words.lang}>
     <Page size="A4" style={styles.page}>
-      <CompanyHeader org={org} logo={logo} />
+      <CompanyHeader org={org} logo={logo} words={words} />
       <View style={[styles.titleRow, { borderBottomColor: accent }]}>
-        <Text style={[styles.title, { color: accent }]}>STATEMENT</Text>
+        <Text style={[styles.title, { color: accent }, words.language === "en+el" ? { fontSize: 15 } : {}]}>{caps(words.word("statement"))}</Text>
         <View style={styles.meta}>
-          <View><Text style={styles.label}>From</Text><Text style={styles.metaValue}>{formatDate(from)}</Text></View>
-          <View><Text style={styles.label}>To</Text><Text style={styles.metaValue}>{formatDate(to)}</Text></View>
+          <View><Text style={styles.label}>{words.label("from")}</Text><Text style={styles.metaValue}>{words.date(from)}</Text></View>
+          <View><Text style={styles.label}>{words.label("to")}</Text><Text style={styles.metaValue}>{words.date(to)}</Text></View>
         </View>
       </View>
       <View style={styles.parties}>
         <View style={styles.party}>
-          <Text style={styles.label}>Account of</Text>
+          <Text style={styles.label}>{words.label("accountOf")}</Text>
           <P style={styles.partyName}>{customer.name}</P>
           {lines(customer.address).map((line, index) => <P key={index} style={{ color: MUTED }}>{line}</P>)}
-          {customer.vat_number ? <P style={{ color: MUTED }}>VAT {customer.vat_number}</P> : null}
+          {customer.vat_number ? <P style={{ color: MUTED }}>{words.word("vatLabel")} {customer.vat_number}</P> : null}
         </View>
         <View style={styles.due}>
-          <Text style={styles.label}>Balance owed</Text>
+          <Text style={styles.label}>{words.label("balanceOwed")}</Text>
           <Text style={styles.dueAmount}>{money(closing)}</Text>
-          <P size={8.5} style={{ color: overdue > 0 ? STAMP : MUTED, marginTop: 2 }}>{overdue > 0 ? `${money(overdue)} of it overdue` : "Nothing overdue"}</P>
+          <P size={8.5} style={{ color: overdue > 0 ? STAMP : MUTED, marginTop: 2 }}>{overdue > 0 ? words.sayShort("overdueOf", money(overdue)) : words.word("nothingOverdue")}</P>
         </View>
       </View>
 
       <View style={styles.table}>
         <View style={styles.headRow} fixed>
-          <Text style={[styles.head, { width: 64 }]}>Date</Text>
-          <Text style={[styles.head, styles.description]}>Details</Text>
-          <Text style={[styles.head, styles.amount]}>Charged</Text>
-          <Text style={[styles.head, styles.amount]}>Paid or credited</Text>
-          <Text style={[styles.head, styles.amount]}>Balance</Text>
+          <Text style={[styles.head, { width: 64 }]}>{words.label("date")}</Text>
+          <Text style={[styles.head, styles.description]}>{words.label("details")}</Text>
+          <Text style={[styles.head, styles.amount]}>{words.label("charged")}</Text>
+          <Text style={[styles.head, styles.amount]}>{words.label("paidOrCredited")}</Text>
+          <Text style={[styles.head, styles.amount]}>{words.label("balance")}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={{ width: 64 }}>{formatDate(from)}</Text>
-          <P style={[styles.description, { color: MUTED }] as unknown as Styles[string]}>Brought forward</P>
+          <Text style={{ width: 64 }}>{words.date(from)}</Text>
+          <P style={[styles.description, { color: MUTED }] as unknown as Styles[string]}>{words.word("broughtForward")}</P>
           <Text style={styles.amount} /><Text style={styles.amount} />
           <Text style={styles.amount}>{money(opening)}</Text>
         </View>
         {rows.map((row, index) => <View key={index} style={styles.row} wrap={false}>
-          <Text style={{ width: 64 }}>{formatDate(row.date)}</Text>
-          <P style={styles.description}>{kindLabel[row.kind]} {row.reference}{row.kind === "invoice" && row.due_on ? `, due ${formatDate(row.due_on)}` : ""}</P>
+          <Text style={{ width: 64 }}>{words.date(row.date)}</Text>
+          <P style={styles.description}>{kindLabel[row.kind]} {row.reference}{row.kind === "invoice" && row.due_on ? dueNote(row.due_on) : ""}</P>
           <Text style={styles.amount}>{Number(row.debit) ? money(row.debit) : ""}</Text>
           <Text style={styles.amount}>{Number(row.credit) ? money(row.credit) : ""}</Text>
           <Text style={styles.amount}>{money(row.balance)}</Text>
         </View>)}
         <View style={[styles.row, { borderBottomWidth: 0 }]}>
-          <Text style={{ width: 64 }}>{formatDate(to)}</Text>
-          <P style={[styles.description, { fontWeight: 500 }] as unknown as Styles[string]}>Balance owed</P>
+          <Text style={{ width: 64 }}>{words.date(to)}</Text>
+          <P style={[styles.description, { fontWeight: 500 }] as unknown as Styles[string]}>{words.word("balanceOwed")}</P>
           <Text style={styles.amount} /><Text style={styles.amount} />
           <Text style={[styles.amount, { fontWeight: 500 }]}>{money(closing)}</Text>
         </View>
@@ -311,30 +318,30 @@ export function StatementDocument(data: StatementPdfData) {
 
       <View style={styles.ageing} wrap={false}>
         {AGES.map(([key, label], index) => <View key={key} style={[styles.ageCell, index === AGES.length - 1 ? { borderRightWidth: 0 } : {}]}>
-          <Text style={styles.label}>{label}</Text>
+          <Text style={styles.label}>{words.label(label)}</Text>
           <Text style={{ fontWeight: 500, color: index > 0 && (ageing.get(key) ?? 0) > 0 ? STAMP : INK }}>{money(ageing.get(key) ?? 0)}</Text>
         </View>)}
       </View>
-      {unusedCredit > 0 ? <P size={8.5} style={{ color: MUTED, marginTop: 8 }}>{money(unusedCredit)} of credit is held for you and has been counted in the balance.</P> : null}
+      {unusedCredit > 0 ? <P size={8.5} style={{ color: MUTED, marginTop: 8 }}>{words.say("creditHeld", money(unusedCredit))}</P> : null}
 
       {closing > 0 && bank ? <View style={styles.block} wrap={false}>
-        <Text style={styles.blockLabel}>How to pay</Text>
-        <P style={{ fontWeight: 500 }}>By bank transfer to {bank.name}</P>
+        <Text style={styles.blockLabel}>{words.label("howToPay")}</Text>
+        <P style={{ fontWeight: 500 }}>{words.say("byTransfer", bank.name)}</P>
         {lines(bank.bank_details).map((line, index) => <P key={index}>{line}</P>)}
-        <P style={{ color: MUTED, marginTop: 4 }}>Please quote the invoice numbers you are paying.</P>
+        <P style={{ color: MUTED, marginTop: 4 }}>{words.say("quoteInvoices")}</P>
       </View> : null}
-      <Terms org={org} />
-      <Footer org={org} title={`Statement · ${customer.name}`} />
+      <Terms org={org} words={words} />
+      <Footer org={org} title={`${words.word("statement")} · ${customer.name}`} words={words} />
     </Page>
   </Document>;
 }
 
 export async function renderDocumentPdf(data: DocumentPdfData): Promise<Buffer> {
-  return renderToBuffer(<SalesDocument {...data} />);
+  return makePdf(() => renderToBuffer(<SalesDocument {...data} />));
 }
 
 export async function renderStatementPdf(data: StatementPdfData): Promise<Buffer> {
-  return renderToBuffer(<StatementDocument {...data} />);
+  return makePdf(() => renderToBuffer(<StatementDocument {...data} />));
 }
 
 /** A file name a mail client and a file system both accept: "Invoice LR-2026-0042.pdf". */

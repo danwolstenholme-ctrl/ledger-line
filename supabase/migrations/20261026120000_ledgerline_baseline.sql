@@ -44,6 +44,8 @@ create table organisations (
   -- How its documents look: an accent colour and terms printed at the foot. The logo is kept apart, below.
   invoice_accent          text not null default '#1d2433' check (invoice_accent ~ '^#[0-9a-fA-F]{6}$'),
   invoice_footer          text,
+  -- The language its invoices, quotes and statements are written in: English, Greek, or both (Greek first). A customer can have its own.
+  document_language       text not null default 'en' check (document_language in ('en', 'el', 'en+el')),
   -- Who at the practice looks after this company: its deadlines and work are theirs.
   manager                 text,
   -- The practice's own books: its clients are its customers, its fees its sales. One per practice.
@@ -156,6 +158,8 @@ create table customers (
   default_account_id uuid,
   -- Days this customer has to pay; the company's own terms when not set.
   payment_terms_days smallint check (payment_terms_days between 0 and 365),
+  -- The language of the documents it is sent; the company's when null.
+  document_language text check (document_language in ('en', 'el', 'en+el')),
   -- The company's own details on its customers (custom_fields), by key.
   extra           jsonb not null default '{}' check (jsonb_typeof(extra) = 'object'),
   is_active       boolean not null default true,

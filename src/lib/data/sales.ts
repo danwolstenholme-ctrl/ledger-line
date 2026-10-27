@@ -236,7 +236,8 @@ export async function documentFor(org: OrganisationRow, kind: SalesKind, id: str
       ? one<{ number: string; issued_on: string }>("select number, issued_on from invoices where id = $1", [(document as CreditNoteDirectoryRow).invoice_id]) : null,
     logoFor(org.id),
   ]);
-  return { org, kind, document, lines, customer, bank, corrects, logo };
+  // The customer's language for its documents, or the company's.
+  return { org, kind, document, lines, customer, bank, corrects, logo, language: customer?.document_language ?? org.document_language };
 }
 
 export type StatementRow = { date: string; kind: "invoice" | "payment" | "credit_note" | "refund"; reference: string; detail: string; debit: number; credit: number; due_on: string | null };
@@ -275,7 +276,8 @@ export async function getStatement(customerId: string, from: string, to: string)
     one<{ remaining: number }>("select coalesce(sum(remaining), 0) as remaining from v_credit_note_directory where customer_id = $1 and status = 'issued'", [customerId]),
   ]);
   const [bank, logo] = await Promise.all([one<{ name: string; bank_details: string | null }>("select name, bank_details from ledger_accounts where id = $1", [org.default_bank_account_id]), logoFor(org.id)]);
-  return { org, customer, from, to, opening: opening / 100, lines, closing: running / 100, ageing: new Map(ageing.map(row => [row.bucket, Number(row.amount)])), unusedCredit: Number(unused?.remaining ?? 0), bank, logo, today: firmToday() };
+  return { org, customer, from, to, opening: opening / 100, lines, closing: running / 100, ageing: new Map(ageing.map(row => [row.bucket, Number(row.amount)])), unusedCredit: Number(unused?.remaining ?? 0), bank, logo, today: firmToday(),
+    language: customer.document_language ?? org.document_language };
 }
 
 /** What a payment reminder says: the customer's overdue invoices, who to send it to, and how to pay. */

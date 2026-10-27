@@ -6,14 +6,19 @@ import { FileText } from "lucide-react";
 import { saveInvoiceDesign } from "@/lib/actions/sales";
 import { idleState } from "@/lib/actions/state";
 import { cn } from "@/lib/utils";
-import { Checkbox, Field, FormError, SubmitButton, TextArea } from "@/components/common/form-fields";
+import { Checkbox, Field, FormError, NativeSelect, SubmitButton, TextArea } from "@/components/common/form-fields";
+import { DOCUMENT_LANGUAGES, type DocumentLanguage } from "@/lib/documents/document-words";
 import { recordOutlineButton } from "@/components/records/record-layout";
 
 const SWATCHES = ["#1d2433", "#0d6e6e", "#1f3a8a", "#6b21a8", "#7c4a2d", "#9a3412", "#166534", "#b91c1c"];
 
 /** The logo, colour and footer terms on the company's invoices, quotes, credit notes and statements. */
 /** `logoVersion` changes whenever the logo does, so the browser shows the one just uploaded; null when there is none. */
-export function InvoiceDesignForm({ slug, accent, footer, logoVersion, previewHref }: { slug: string; accent: string; footer: string | null; logoVersion: string | null; previewHref: string | null }) {
+export function InvoiceDesignForm({ slug, accent, footer, logoVersion, previewHref, language = "en", cyprus = true }: {
+  slug: string; accent: string; footer: string | null; logoVersion: string | null; previewHref: string | null;
+  /** The language the documents are written in; a Cyprus company's can be Greek, or both. */
+  language?: DocumentLanguage; cyprus?: boolean;
+}) {
   const [state, action] = useActionState(saveInvoiceDesign, idleState);
   const [colour, setColour] = useState(accent);
   const [preview, setPreview] = useState<string | null>(null);
@@ -37,6 +42,11 @@ export function InvoiceDesignForm({ slug, accent, footer, logoVersion, previewHr
           className={cn("size-6 rounded-full border-2", colour.toLowerCase() === swatch ? "border-ink" : "border-transparent")} style={{ backgroundColor: swatch }} />)}
       </div>
     </Field>
+    {cyprus ? <Field label="Language" htmlFor="design-language" hint="a customer can have its own">
+      <NativeSelect id="design-language" name="document_language" defaultValue={language}>
+        {DOCUMENT_LANGUAGES.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+      </NativeSelect>
+    </Field> : <input type="hidden" name="document_language" value="en" />}
     <Field label="Terms at the foot" htmlFor="design-footer" hint="printed on every invoice, quote and statement">
       <TextArea id="design-footer" name="invoice_footer" rows={3} defaultValue={footer ?? ""} maxLength={600} placeholder="e.g. Payment within the agreed terms. Goods remain our property until paid in full." />
     </Field>

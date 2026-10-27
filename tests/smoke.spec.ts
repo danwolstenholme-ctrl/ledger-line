@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 
+import { pdfText } from "./support/pdf-text";
+
 // These walk through the laptop demo, signed in as its own user; the Supabase sign-in has its own tests.
 test.skip(process.env.LEDGERLINE_AUTH_E2E === "supabase", "The demo's journeys run without Supabase Auth");
 
@@ -115,6 +117,9 @@ test("an owner raises an invoice to a new customer, issues it, opens the PDF and
   const pdf = await page.request.get(href!);
   expect(pdf.headers()["content-type"]).toBe("application/pdf");
   expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  // Read back as a viewer shows it: every letter there.
+  const printed = pdfText(await pdf.body());
+  for (const words of ["INVOICE", "BILLED TO", "Harbour View Apartments Ltd", "House espresso blend, 20 kg", "€476.00", "HOW TO PAY"]) expect(printed).toContain(words);
 
   await page.getByRole("link", { name: "Edit", exact: true }).click();
   await page.getByLabel("Line 1 unit price").fill("500");
@@ -235,6 +240,7 @@ test("a customer's statement is a PDF, and a reminder lists what is overdue", as
   const pdf = await page.request.get(statement!);
   expect(pdf.headers()["content-type"]).toBe("application/pdf");
   expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  for (const words of ["STATEMENT", "ACCOUNT OF", "Finikoudes Beach Kiosk Ltd", "BALANCE OWED", "Brought forward"]) expect(pdfText(await pdf.body())).toContain(words);
   await page.getByRole("button", { name: "Send a reminder" }).click();
   await expect(page.getByLabel("Message")).toHaveValue(/overdue/);
   await page.getByRole("button", { name: "Copy the message" }).click();
@@ -603,6 +609,7 @@ test("a new client is taken on: the letter signed through their link, everyone s
   await expect(client.getByText("Thank you: the letter is signed. You can download a copy below.")).toBeVisible();
   const signed = await client.request.get(`${link}/letter.pdf`);
   expect(signed.headers()["content-type"]).toContain("application/pdf");
+  expect(pdfText(await signed.body())).toContain("Ferry Lines");
   await client.getByLabel("Alexander Petrov: proof of address, no more than six months old").setInputFiles({ name: "utility-bill.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
   await client.getByRole("listitem").filter({ hasText: "Alexander Petrov: proof of address" }).getByRole("button", { name: "Upload" }).click();
   await expect(client.getByText("Received. Thank you.")).toBeVisible();
@@ -962,6 +969,7 @@ test("Cyprus payroll: a month worked out from the year so far, extra pay added, 
   const base = "/c/aegean-blue-marine/payroll/" + page.url().split("/").pop();
   const payslips = await page.request.get(`${base}/payslips`);
   expect(payslips.headers()["content-type"]).toBe("application/pdf");
+  for (const name of ["Andri Ioannou", "Despina Stylianou"]) expect(pdfText(await payslips.body())).toContain(name);
   const sepa = await (await page.request.get(`${base}/sepa`)).text();
   expect(sepa).toContain("<CtgyPurp><Cd>SALA</Cd></CtgyPurp>");
   expect(sepa).toContain("<NbOfTxs>4</NbOfTxs>");
@@ -1253,6 +1261,7 @@ test("an invoice goes to its customer as a link for WhatsApp, Viber, a text or e
   const pdf = await customer.request.get(`${url}/pdf`);
   expect(pdf.status()).toBe(200);
   expect(pdf.headers()["content-type"]).toBe("application/pdf");
+  for (const words of ["INVOICE", "LRC-2026-0116", "12 Oct 2026", "Coral Sands Hotel Ltd", "HOW TO PAY"]) expect(pdfText(await pdf.body())).toContain(words);
 
   await page.reload();
   await expect(share).toContainText("Opened once");
@@ -1295,4 +1304,54 @@ test("a quote shared as a link is accepted online in the customer's name: the co
   await expect(page.getByText("Raise the invoice: Coral Sands Hotel Ltd accepted quote LRC-Q-001 online (Petros Hadjigeorgiou)")).toBeVisible();
   await page.goto("/c/larnaka-roast/audit");
   await expect(page.getByRole("row", { name: /Quote accepted online by the customer/ })).toContainText("Petros Hadjigeorgiou (customer)");
+});
+
+test("documents go in Greek, or in Greek and English, to the customers who read them so: the shared page in Greek with English a tap away, and the PDF", async ({ page, browser }) => {
+  // A customer's own language: Finikoudes Beach Kiosk reads Greek.
+  await page.goto("/c/larnaka-roast/customers");
+  await page.getByRole("link", { name: "Finikoudes Beach Kiosk Ltd" }).click();
+  await page.getByText("Edit details").click();
+  await page.getByLabel("Documents in").selectOption("el");
+  await page.getByRole("button", { name: "Save customer" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+
+  await page.goto("/c/larnaka-roast/sales");
+  await page.getByRole("link", { name: "LRC-2026-0128" }).click();
+  const share = page.locator("section.ll-panel").filter({ has: page.getByRole("heading", { name: "Share with Finikoudes Beach Kiosk Ltd" }) });
+  await share.getByRole("button", { name: "Share as a link" }).click();
+  const url = await share.getByRole("textbox", { name: "Link to LRC-2026-0128" }).inputValue();
+
+  const outside = await browser.newContext();
+  const customer = await outside.newPage();
+  await customer.goto(url);
+  await expect(customer.getByRole("heading", { name: "Τιμολόγιο LRC-2026-0128" })).toBeVisible();
+  await expect(customer.getByText("Πληρωτέο ποσό")).toBeVisible();
+  await expect(customer.getByText(/^773,50\s€$/).first()).toBeVisible();
+  await expect(customer.getByRole("link", { name: "Λήψη PDF" })).toBeVisible();
+  const pdf = await customer.request.get(`${url}/pdf`);
+  expect(pdf.status()).toBe(200);
+  expect(pdf.headers()["content-type"]).toBe("application/pdf");
+  const greek = pdfText(await pdf.body());
+  for (const words of ["ΤΙΜΟΛΟΓΙΟ", "ΠΕΛΑΤΗΣ", "ΠΛΗΡΩΤΕΟ ΠΟΣΟ", "773,50 €", "ΤΡΟΠΟΣ ΠΛΗΡΩΜΗΣ", "Παρακαλούμε σημειώστε το LRC-2026-0128 ως αιτιολογία της πληρωμής."]) expect(greek).toContain(words);
+  // An English document straight after a Greek one is whole too: react-pdf once let the one garble the other.
+  await page.goto("/c/larnaka-roast/sales");
+  await page.getByRole("link", { name: "LRC-2026-0116" }).click();
+  await expect(page).toHaveURL(/\/c\/larnaka-roast\/sales\/[0-9a-f-]{36}$/);
+  const english = pdfText(await (await page.request.get(`${page.url()}/pdf`)).body());
+  for (const words of ["INVOICE", "NUMBER", "12 Oct 2026", "DESCRIPTION", "VAT at 9%", "HOW TO PAY", "TERMS"]) expect(english).toContain(words);
+  await customer.getByRole("link", { name: "English" }).click();
+  await expect(customer.getByRole("heading", { name: "Invoice LRC-2026-0128" })).toBeVisible();
+  await expect(customer.getByText("Amount due")).toBeVisible();
+  await outside.close();
+
+  // A company's own choice: Troodos Gold's documents are in both, and its PDFs are made in both.
+  await page.goto("/c/troodos-gold/settings");
+  await expect(page.getByLabel("Language")).toHaveValue("en+el");
+  await page.goto("/c/troodos-gold/sales");
+  await page.getByRole("link", { name: /^[A-Z]+-2026-\d{4}$/ }).first().click();
+  await expect(page).toHaveURL(/\/c\/troodos-gold\/sales\/[0-9a-f-]{36}$/);
+  const both = await page.request.get(`${page.url()}/pdf`);
+  expect(both.status()).toBe(200);
+  expect(both.headers()["content-type"]).toBe("application/pdf");
+  for (const words of ["ΤΙΜΟΛΟΓΙΟ / INVOICE", "ΑΡΙΘΜΟΣ / NUMBER", "Σύνολο / Total", "ΤΡΟΠΟΣ ΠΛΗΡΩΜΗΣ / HOW TO PAY"]) expect(pdfText(await both.body())).toContain(words);
 });

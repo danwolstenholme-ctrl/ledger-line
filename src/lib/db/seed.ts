@@ -441,6 +441,8 @@ export async function seedDemo(pg: PGlite, options: { companies?: number } = {})
       manager: MANAGERS[profile.slug] ?? (TEMPLATE.has(profile.slug) ? STAFF[ALL_PROFILES.indexOf(profile) % STAFF.length].name : "Maria Antoniou"),
       // On Ledgerline since its books were opened, the day its client file says.
       created_at: "2025-06-30T11:20:00.000Z",
+      // A clinic's patients are local: its documents are in Greek. The olive oil sells at home and abroad: in both.
+      document_language: base(profile.slug) === "kalamies-dental" ? "el" : base(profile.slug) === "troodos-gold" ? "en+el" : "en",
     });
     const acc = (code: string) => { const id = accounts.get(code); if (!id) throw new Error(`${profile.slug}: no account ${code}`); return id; };
     const movements: Movement[] = [];

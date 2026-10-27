@@ -117,6 +117,16 @@ to reconcile.
   ("Opened once, last 2 minutes ago"); **See what they see** previews it
   without counting, and **Stop the link** shuts it at once. The page wears the
   company's logo and colour.
+- **In Greek, or both**: Company settings → How your documents look →
+  **Language** (English, Ελληνικά, or both, Greek first), and any customer
+  can have its own (**Documents in**, on the customer). The PDF is then
+  written as Cypriot documents are: ΤΙΜΟΛΟΓΙΟ / INVOICE, Αρ. ΦΠΑ / VAT, ΑΦΤ /
+  TIC, the payment instructions and the VAT wording in Greek (the reverse
+  charge under άρθρο 196 της Οδηγίας 2006/112/ΕΚ), Greek capitals without
+  their accents, and in Greek alone amounts and dates the Greek way
+  (4.055,00 €, 10 Οκτ 2026); in both, dates as 26/11/2026. Kalamies Dental's
+  documents are in Greek and Troodos Gold's in both. A shared link opens in
+  Greek, with **English** a tap away.
 - A quote's link has **Accept this quote**: the customer types their name and
   accepts. Nothing posts: the quote says "accepted it online", the person
   who shared it gets a to-do to raise the invoice (one press, as before), and
@@ -703,6 +713,11 @@ search: 250 KB and 140 KB with 700 clients, down from 1 MB and 865 KB.
   someone presses Post, so a failed read never touches the books.
 
 ## How it is built
+- PDFs (`src/lib/documents`) are made with react-pdf, one at a time and with
+  Roboto registered afresh for each (`pdf-fonts.ts`): react-pdf shares a
+  loaded font between documents, and one with much Greek in it otherwise
+  garbles the next (letters drop out). `tests/support/pdf-text.ts` reads a
+  PDF's text back as a viewer shows it, so the tests catch that.
 - Next.js 16.4 (App Router, Turbopack) on React 19.3 with the React Compiler,
   run by its Rust port inside Turbopack (`next.config.ts`), so components are
   memoised without hand-written `useMemo`. TypeScript 6.0, the newest the

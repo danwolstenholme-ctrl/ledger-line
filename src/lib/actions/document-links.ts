@@ -74,8 +74,11 @@ export async function markLinkSent(invoiceId: string, by: "WhatsApp" | "Viber" |
 export async function acceptSharedQuote(_previous: ActionState, form: FormData): Promise<ActionState> {
   const token = String(form.get("token") ?? "");
   const name = String(form.get("name") ?? "").trim().replace(/\s+/g, " ").slice(0, 200);
-  if (!TOKEN.test(token)) return { ok: false, error: "This link can’t be used." };
-  if (name.length < 2) return { ok: false, error: "Write your name, as the person accepting it.", fieldErrors: { name: "Your name" } };
+  // Answered in the language the customer is reading.
+  const greek = form.get("lang") === "el";
+  const say = (en: string, el: string) => greek ? el : en;
+  if (!TOKEN.test(token)) return { ok: false, error: say("This link can’t be used.", "Ο σύνδεσμος δεν ισχύει.") };
+  if (name.length < 2) return { ok: false, error: say("Write your name, as the person accepting it.", "Γράψτε το όνομά σας, ως το πρόσωπο που την αποδέχεται."), fieldErrors: { name: say("Your name", "Το όνομά σας") } };
   try {
     const done = await asService("a customer accepting a shared quote", () => transaction(async run => {
       const [link] = await run<{ id: string; organisation_id: string; quote_id: string | null; revoked_at: string | null; accepted_at: string | null; created_by_name: string | null }>(
@@ -92,10 +95,10 @@ export async function acceptSharedQuote(_previous: ActionState, form: FormData):
         [link.organisation_id, `Raise the invoice: ${quote.customer} accepted quote ${quote.number} online (${name})`, firmToday(), link.created_by_name ?? quote.manager ?? "Owner", quote.customer_id]);
       return "accepted";
     }));
-    if (done === "gone") return { ok: false, error: "This quote can’t be accepted from this link any more. Ask whoever sent it." };
+    if (done === "gone") return { ok: false, error: say("This quote can’t be accepted from this link any more. Ask whoever sent it.", "Η προσφορά δεν μπορεί πια να γίνει αποδεκτή από αυτόν τον σύνδεσμο. Ρωτήστε όποιον σας την έστειλε.") };
     // Nothing to refresh: the company's pages are drawn fresh each time, and the customer keeps their thank-you.
     return { ok: true, error: null };
   } catch (error) {
-    return { ok: false, error: describeDbError(asDbError(error), "It could not be accepted. Try again.") };
+    return { ok: false, error: describeDbError(asDbError(error), say("It could not be accepted. Try again.", "Η αποδοχή δεν έγινε. Δοκιμάστε ξανά.")) };
   }
 }

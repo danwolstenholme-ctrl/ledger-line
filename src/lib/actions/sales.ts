@@ -418,16 +418,18 @@ export async function saveCustomer(_previous: ActionState, form: FormData): Prom
   const termsText = p.text("payment_terms_days", { max: 3, label: "Payment terms" });
   const terms = termsText === null ? null : Number(termsText);
   if (terms !== null && (!Number.isInteger(terms) || terms < 0 || terms > 365)) p.errors.payment_terms_days = "Between 0 and 365 days, or empty for the company's terms.";
+  // Empty: the company's own language for its documents.
+  const language = p.enum("document_language", ["en", "el", "en+el"] as const, { label: "Documents in" });
   if (p.failed || !name) return p.fail();
   let saved = id;
   try {
     if (id) {
-      await sql("update customers set name = $3, email = $4, phone = $5, vat_number = $6, country = $7, address = $8, eu_business = $9, payment_terms_days = $10 where id = $1 and organisation_id = $2",
-        [id, org.id, name, email, phone, vat, country, address, eu, terms]);
+      await sql("update customers set name = $3, email = $4, phone = $5, vat_number = $6, country = $7, address = $8, eu_business = $9, payment_terms_days = $10, document_language = $11 where id = $1 and organisation_id = $2",
+        [id, org.id, name, email, phone, vat, country, address, eu, terms, language]);
     } else {
       const sales = await one<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [org.id]);
-      saved = (await one<{ id: string }>("insert into customers (organisation_id, name, email, phone, vat_number, country, address, eu_business, default_account_id, payment_terms_days) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id",
-        [org.id, name, email, phone, vat, country, address, eu, sales?.id ?? null, terms]))!.id;
+      saved = (await one<{ id: string }>("insert into customers (organisation_id, name, email, phone, vat_number, country, address, eu_business, default_account_id, payment_terms_days, document_language) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id",
+        [org.id, name, email, phone, vat, country, address, eu, sales?.id ?? null, terms, language]))!.id;
     }
   } catch (error) { return fail(error, "The customer could not be saved."); }
   refresh();
@@ -590,6 +592,7 @@ export async function saveInvoiceDesign(_previous: ActionState, form: FormData):
   const accent = p.text("invoice_accent", { required: true, max: 7, label: "Colour" });
   if (accent && !/^#[0-9a-fA-F]{6}$/.test(accent)) p.errors.invoice_accent = "Choose a colour.";
   const footer = p.text("invoice_footer", { max: 600, label: "Footer" });
+  const language = p.enum("document_language", ["en", "el", "en+el"] as const, { label: "Language" }) ?? "en";
   const file = form.get("logo");
   let logo: { type: string; bytes: Buffer } | null = null;
   if (file instanceof File && file.size > 0) {
@@ -601,7 +604,7 @@ export async function saveInvoiceDesign(_previous: ActionState, form: FormData):
   if (p.failed || !accent) return p.fail();
   try {
     await transaction(async run => {
-      await run("update organisations set invoice_accent = $2, invoice_footer = $3 where id = $1", [org.id, accent.toLowerCase(), footer]);
+      await run("update organisations set invoice_accent = $2, invoice_footer = $3, document_language = $4 where id = $1", [org.id, accent.toLowerCase(), footer, language]);
       if (logo) await run(`insert into organisation_logos (organisation_id, media_type, content) values ($1, $2, $3)
                            on conflict (organisation_id) do update set media_type = excluded.media_type, content = excluded.content, updated_at = now()`, [org.id, logo.type, logo.bytes]);
       if (p.boolean("remove_logo") && !logo) await run("delete from organisation_logos where organisation_id = $1", [org.id]);

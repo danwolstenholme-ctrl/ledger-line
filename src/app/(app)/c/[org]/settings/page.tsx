@@ -57,7 +57,7 @@ export default async function AccountsSettingsPage() {
             vat_annual_payments: org.vat_annual_payments, vat_cash_accounting: org.vat_cash_accounting, vat_flat_rate: org.vat_flat_rate === null ? null : Number(org.vat_flat_rate) }} /></div>
         </RecordSection> : null}
         <RecordSection title="How your documents look">
-          <div className="p-4 sm:p-5"><InvoiceDesignForm slug={org.slug} accent={org.invoice_accent} footer={org.invoice_footer} logoVersion={logo} previewHref={latest ? `/c/${org.slug}/sales/${latest.id}/pdf` : null} /></div>
+          <div className="p-4 sm:p-5"><InvoiceDesignForm slug={org.slug} accent={org.invoice_accent} footer={org.invoice_footer} logoVersion={logo} language={org.document_language} cyprus={org.country === "CY"} previewHref={latest ? `/c/${org.slug}/sales/${latest.id}/pdf` : null} /></div>
         </RecordSection>
         <RecordSection title="AI in the books" hint={settings.ai_suggestions ? "On" : "Off"}>
           <div className="text-ink-muted space-y-2 p-4 text-[13px] leading-relaxed sm:p-5">
