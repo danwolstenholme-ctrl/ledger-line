@@ -14,7 +14,7 @@ export const AUTH_MODE: "supabase" | "demo" = SUPABASE_URL && SUPABASE_PUBLISHAB
  * (lib/capture), so it costs nothing however many people try it. Known on
  * the server only.
  */
-export const HOSTED_DEMO = AUTH_MODE === "demo" && Boolean(process.env.VERCEL) && !process.env.DATABASE_URL;
+export const HOSTED_DEMO = AUTH_MODE === "demo" && Boolean(process.env.VERCEL) && !process.env.DATABASE_URL && !process.env.POSTGRES_URL;
 
 /** The demo's sign-in: whose stand-in sign-in this browser uses, or "out". */
 export const DEMO_COOKIE = "ll_demo_session";

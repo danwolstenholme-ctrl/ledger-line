@@ -46,7 +46,19 @@ function dataDir() {
   }
 }
 const DATA_DIR = dataDir();
-const DATABASE_URL = process.env.DATABASE_URL;
+/**
+ * The real Postgres, when there is one: DATABASE_URL, or the POSTGRES_URL that
+ * Vercel's Supabase integration sets (its transaction pooler). Its sslmode
+ * means what it means to Postgres itself: "require" encrypts the connection,
+ * where node-postgres would otherwise also demand a certificate it can check
+ * against the public authorities, which Supabase's are not.
+ */
+function databaseUrl() {
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!url || !/[?&]sslmode=/.test(url) || /[?&]uselibpqcompat=/.test(url)) return url;
+  return `${url}&uselibpqcompat=true`;
+}
+const DATABASE_URL = databaseUrl();
 const DEMO_DATA = !DATABASE_URL || process.env.LEDGERLINE_DEMO_DATA === "1";
 /** The laptop demo's person before anyone signs in: who opens it in a meeting. */
 const DEMO_USER = process.env.LEDGERLINE_DEMO_USER ?? "maria@saltlake.example";

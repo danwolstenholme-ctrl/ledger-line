@@ -681,6 +681,11 @@ enforces those rules too: what it shows Maria is what the database lets her see.
    `.env.example`: `DATABASE_URL` (the transaction pooler, port 6543),
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
    `SUPABASE_SECRET_KEY`, `LEDGERLINE_SITE_URL`, and `ANTHROPIC_API_KEY`.
+   Made from Vercel instead (the project's Storage → Create Database →
+   Supabase, Frankfurt), the project gets `POSTGRES_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`, which
+   Ledgerline reads as well; only `LEDGERLINE_SITE_URL` and
+   `ANTHROPIC_API_KEY` are left to add.
 4. In Supabase Auth: turn off "Allow new users to sign up" (accounts come
    only from invitations), set the Site URL to `LEDGERLINE_SITE_URL`, and
    add `LEDGERLINE_SITE_URL/auth/callback` to the redirect URLs.
