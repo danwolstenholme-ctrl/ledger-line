@@ -22,19 +22,19 @@ export default async function JournalPage({ params, searchParams }: { params: Pr
   const { journal, lines, locked, lockDate } = data;
   const debit = lines.reduce((sum, line) => sum + Math.round(Number(line.debit) * 100), 0) / 100;
   const credit = lines.reduce((sum, line) => sum + Math.round(Number(line.credit) * 100), 0) / 100;
-  const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap first:px-4 last:pr-4";
-  const cell = "px-3 py-2 text-[12.5px] first:px-4 last:pr-4";
+  const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap first:px-4 last:pr-4";
+  const cell = "px-3 py-2 text-[13px] first:px-4 last:pr-4";
 
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title={journal.narration} back={{ href: "/accounts/journals", label: "Journals" }}
       description={`Journal · ${formatDate(journal.entry_date)}${journal.reference ? ` · ${journal.reference}` : ""}`}
       action={<>
-        {locked ? <span className="text-ink-muted inline-flex items-center gap-1.5 text-[12px]"><Lock className="size-3.5" />Locked</span>
+        {locked ? <span className="text-ink-muted inline-flex items-center gap-1.5 text-[12.5px]"><Lock className="size-3.5" />Locked</span>
           : <Link href={`/accounts/journals/${id}/edit`} className={recordOutlineButton}><Pencil className="size-3.5" />Edit</Link>}
         <Link href={`/accounts/journals/new?reverse=${id}`} className={recordOutlineButton}><Undo2 className="size-3.5" />Reverse</Link>
       </>} />
 
-    {query.saved ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[12.5px]">
+    {query.saved ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]">
       <CheckCircle2 className="size-4 shrink-0" />{query.saved === "edited" ? "Saved. The ledger now shows the journal as it reads here." : "Posted. The debits equal the credits and every report includes it."}
     </p> : null}
 
@@ -45,13 +45,13 @@ export default async function JournalPage({ params, searchParams }: { params: Pr
           <th scope="col" className={cn(head, "text-right")}>Debit</th><th scope="col" className={cn(head, "text-right")}>Credit</th>
         </tr></thead>
         <tbody className="divide-hairline divide-y">{lines.map(line => <tr key={line.id}>
-          <td className={cell}><Link href={`/accounts/chart/${line.account_id}`} className="text-ink hover:text-brand hover:underline"><span className="text-ink-faint mr-2 font-mono text-[11.5px]">{line.code}</span>{line.account_name}</Link></td>
+          <td className={cell}><Link href={`/accounts/chart/${line.account_id}`} className="text-ink hover:text-brand hover:underline"><span className="text-ink-faint mr-2 font-mono text-[12px]">{line.code}</span>{line.account_name}</Link></td>
           <td className={cn(cell, "text-ink-muted")}>{line.description ?? ""}</td>
           <td className={cn(cell, "text-right tabular-nums")}>{Number(line.debit) ? formatAmount(line.debit) : ""}</td>
           <td className={cn(cell, "text-right tabular-nums")}>{Number(line.credit) ? formatAmount(line.credit) : ""}</td>
         </tr>)}</tbody>
         <tfoot className="border-hairline-strong bg-surface-sunken border-t"><tr>
-          <th scope="row" colSpan={2} className="text-ink px-4 py-2.5 text-left text-[12.5px] font-semibold">{debit === credit ? "Balanced" : "Out of balance"}</th>
+          <th scope="row" colSpan={2} className="text-ink px-4 py-2.5 text-left text-[13px] font-semibold">{debit === credit ? "Balanced" : "Out of balance"}</th>
           <td className={cn(cell, "py-2.5 text-right font-semibold tabular-nums")}>{formatAmount(debit)}</td>
           <td className={cn(cell, "py-2.5 text-right font-semibold tabular-nums")}>{formatAmount(credit)}</td>
         </tr></tfoot>

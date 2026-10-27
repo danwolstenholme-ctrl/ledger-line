@@ -21,8 +21,8 @@ export default async function NewClientPage() {
     <RecordHeader back={{ href: "/clients", label: "Client files" }} title="Take on a client" description="Start the client’s file. Ledgerline asks for what due diligence needs as you go, and opens the books once it is done." />
     {won.length ? <RecordSection title="Won enquiries" hint="From the firm’s own pipeline">
       <ul className="divide-hairline divide-y">{won.map(enquiry => <li key={enquiry.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <span className="min-w-0"><span className="text-ink block text-[13px] font-medium">{enquiry.company ?? enquiry.full_name}</span>
-          <span className="text-ink-faint block text-[11.5px]">{enquiry.full_name}{enquiry.service ? ` · ${enquiry.service}` : ""} · won {formatDate(enquiry.stage_changed_at.slice(0, 10))} · {enquiry.reference}</span></span>
+        <span className="min-w-0"><span className="text-ink block text-[13.5px] font-medium">{enquiry.company ?? enquiry.full_name}</span>
+          <span className="text-ink-faint block text-[12px]">{enquiry.full_name}{enquiry.service ? ` · ${enquiry.service}` : ""} · won {formatDate(enquiry.stage_changed_at.slice(0, 10))} · {enquiry.reference}</span></span>
         <form action={takeOnFromEnquiry}><input type="hidden" name="enquiry_id" value={enquiry.id} /><SubmitButton size="sm" pendingLabel="Starting…">Start their file<ArrowRight className="size-3.5" /></SubmitButton></form>
       </li>)}</ul>
     </RecordSection> : null}

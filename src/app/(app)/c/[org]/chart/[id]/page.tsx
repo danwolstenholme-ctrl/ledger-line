@@ -35,8 +35,8 @@ export default async function LedgerAccountPage({ params, searchParams }: { para
   if (!account) notFound();
   const sign = normalSign(account.type);
   const shown = (value: number) => value * sign;
-  const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
-  const cell = "px-3 py-2 text-[12.5px] whitespace-nowrap tabular-nums";
+  const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
+  const cell = "px-3 py-2 text-[13px] whitespace-nowrap tabular-nums";
 
   return <PageBody className="space-y-4">
     <RecordHeader title={`${account.code} · ${account.name}`} description={`${ACCOUNT_TYPES[account.type].label}${account.is_active ? "" : " · inactive"}${account.system_role ? " · used by the books" : ""}`}
@@ -56,12 +56,12 @@ export default async function LedgerAccountPage({ params, searchParams }: { para
             <th scope="col" className={cn(head, "hidden text-right sm:table-cell")}>Balance</th>
           </tr></thead>
           <tbody className="divide-hairline divide-y">
-            <tr className="text-ink-muted"><td className={cell}>{formatDate(period.from)}</td><td className="px-3 py-2 text-[12.5px]" colSpan={3}>{isResultAccount(account.type) ? "Start of the period" : "Opening balance"}</td><td className={cn(cell, "hidden text-right sm:table-cell")}>{formatAmount(shown(result.opening))}</td></tr>
+            <tr className="text-ink-muted"><td className={cell}>{formatDate(period.from)}</td><td className="px-3 py-2 text-[13px]" colSpan={3}>{isResultAccount(account.type) ? "Start of the period" : "Opening balance"}</td><td className={cn(cell, "hidden text-right sm:table-cell")}>{formatAmount(shown(result.opening))}</td></tr>
             {result.rows.map(line => <tr key={line.id} className="hover:bg-surface-sunken">
               <td className={cn(cell, "text-ink-muted")}>{formatDate(line.entry_date)}</td>
-              <td className="max-w-[40ch] px-3 py-2 text-[12.5px]">
+              <td className="max-w-[40ch] px-3 py-2 text-[13px]">
                 {line.href ? <Link href={line.href} className="text-ink hover:text-brand block truncate hover:underline touch:flex touch:min-h-10 touch:items-center">{line.description ?? line.narration}</Link> : <span className="text-ink block truncate">{line.description ?? line.narration}</span>}
-                <span className="text-ink-faint block text-[11px]">{SOURCE_LABELS[line.source]}{line.reference ? ` · ${line.reference}` : ""}</span>
+                <span className="text-ink-faint block text-[11.5px]">{SOURCE_LABELS[line.source]}{line.reference ? ` · ${line.reference}` : ""}</span>
               </td>
               <td className={cn(cell, "text-right")}>{Number(line.debit) ? formatAmount(Number(line.debit)) : ""}</td>
               <td className={cn(cell, "text-right")}>{Number(line.credit) ? formatAmount(Number(line.credit)) : ""}</td>
@@ -70,12 +70,12 @@ export default async function LedgerAccountPage({ params, searchParams }: { para
           </tbody>
           <tfoot className="border-hairline-strong bg-surface-sunken border-t"><tr>
             <td className={cn(cell, "text-ink-muted")}>{formatDate(period.to)}</td>
-            <th scope="row" colSpan={3} className="text-ink px-3 py-2.5 text-left text-[12.5px] font-semibold">{isResultAccount(account.type) ? "Total for the period" : "Closing balance"}</th>
+            <th scope="row" colSpan={3} className="text-ink px-3 py-2.5 text-left text-[13px] font-semibold">{isResultAccount(account.type) ? "Total for the period" : "Closing balance"}</th>
             <td className={cn(cell, "text-ink py-2.5 text-right font-semibold")}>{formatAmount(shown(result.closing))}</td>
           </tr></tfoot>
         </table></div>}
-        {!result.failed && !result.rows.length ? <p className="text-ink-faint border-hairline border-t px-4 py-3 text-[12.5px]">Nothing posted to this account in the period.</p> : null}
-        {result.truncated ? <p className="text-ink-muted border-hairline border-t px-4 py-2.5 text-[12px]">Only the first transactions are shown. Choose a shorter period to see them all.</p> : null}
+        {!result.failed && !result.rows.length ? <p className="text-ink-faint border-hairline border-t px-4 py-3 text-[13px]">Nothing posted to this account in the period.</p> : null}
+        {result.truncated ? <p className="text-ink-muted border-hairline border-t px-4 py-2.5 text-[12.5px]">Only the first transactions are shown. Choose a shorter period to see them all.</p> : null}
       </RecordSection>
 
       <RecordSection title="Account">

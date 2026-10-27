@@ -24,8 +24,8 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
   const draft = run.status === "draft";
   const month = monthName(run.period);
   const base = `/c/${org.slug}/payroll/${run.id}`;
-  const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap first:px-4 last:pr-4";
-  const cell = "px-3 py-2 text-[12.5px] first:px-4 last:pr-4";
+  const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap first:px-4 last:pr-4";
+  const cell = "px-3 py-2 text-[13px] first:px-4 last:pr-4";
   const late = !draft && due < today;
   const anyThirteenth = slips.some(slip => slip.thirteenth > 0), anyOther = slips.some(slip => slip.otherPay > 0);
   const noIban = slips.filter(slip => !slip.iban && slip.net > 0);
@@ -41,14 +41,14 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
 
     {draft ? <RecordSection title="Approve" hint="worked out from each employee as they are now">
       <div className="space-y-3 px-4 py-3.5">
-        <p className="text-ink-muted max-w-[80ch] text-[12.5px] leading-relaxed">Check the payslips below. Approving works the month out once more, posts it to the books on {formatDate(run.pay_date)}, and fixes it: next month’s tax is worked out from it.</p>
+        <p className="text-ink-muted max-w-[80ch] text-[13px] leading-relaxed">Check the payslips below. Approving works the month out once more, posts it to the books on {formatDate(run.pay_date)}, and fixes it: next month’s tax is worked out from it.</p>
         <ApproveRunForm id={run.id} label={`Approve and post ${month}`} />
       </div>
       <RecordDisclosure title="Overtime, a bonus or commission this month">
         <OtherPayForm runId={run.id} employees={slips.map(slip => ({ id: slip.employee_id, name: slip.name, otherPay: slip.otherPay }))} />
       </RecordDisclosure>
       <RecordDisclosure title="Delete this draft">
-        <p className="text-ink-muted mb-3 text-[12px]">Nothing of it is in the books. The month can be run again.</p>
+        <p className="text-ink-muted mb-3 text-[12.5px]">Nothing of it is in the books. The month can be run again.</p>
         <DeleteRunForm id={run.id} />
       </RecordDisclosure>
     </RecordSection> : null}
@@ -75,7 +75,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
           <th scope="col" className={cn(head, "text-right")}>Income tax</th><th scope="col" className={cn(head, "text-right")}>Net pay</th><th scope="col" className={cn(head, "text-right")}>Employer</th>
         </tr></thead>
         <tbody className="divide-hairline divide-y">{slips.map(slip => <tr key={slip.id}>
-          <td className={cell}><Link href={`/accounts/payroll/employees/${slip.employee_id}`} className="text-ink font-medium hover:underline">{slip.name}</Link>{slip.job_title ? <span className="text-ink-muted block text-[11.5px]">{slip.job_title}</span> : null}</td>
+          <td className={cell}><Link href={`/accounts/payroll/employees/${slip.employee_id}`} className="text-ink font-medium hover:underline">{slip.name}</Link>{slip.job_title ? <span className="text-ink-muted block text-[12px]">{slip.job_title}</span> : null}</td>
           {anyOther || anyThirteenth ? <td className={cn(cell, "text-right tabular-nums")}>{formatAmount(slip.salary)}</td> : null}
           {anyOther ? <td className={cn(cell, "text-right tabular-nums")}>{slip.otherPay ? formatAmount(slip.otherPay) : ""}</td> : null}
           {anyThirteenth ? <td className={cn(cell, "text-right tabular-nums")}>{slip.thirteenth ? formatAmount(slip.thirteenth) : ""}</td> : null}
@@ -87,7 +87,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
           <td className={cn(cell, "text-ink-muted text-right tabular-nums")}>{formatAmount(employerCost(slip))}</td>
         </tr>)}</tbody>
         <tfoot className="border-hairline-strong bg-surface-sunken border-t"><tr>
-          <th scope="row" colSpan={1 + (anyOther || anyThirteenth ? 1 : 0) + (anyOther ? 1 : 0) + (anyThirteenth ? 1 : 0)} className="text-ink px-4 py-2.5 text-left text-[12.5px] font-semibold">Total</th>
+          <th scope="row" colSpan={1 + (anyOther || anyThirteenth ? 1 : 0) + (anyOther ? 1 : 0) + (anyThirteenth ? 1 : 0)} className="text-ink px-4 py-2.5 text-left text-[13px] font-semibold">Total</th>
           <td className={cn(cell, "text-right font-semibold tabular-nums")}>{formatAmount(totals.gross)}</td>
           <td className={cn(cell, "text-right font-semibold tabular-nums")}>{formatAmount(totals.siEmployee)}</td>
           <td className={cn(cell, "text-right font-semibold tabular-nums")}>{formatAmount(totals.gesyEmployee)}</td>
@@ -96,7 +96,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
           <td className={cn(cell, "text-right font-semibold tabular-nums")}>{formatAmount(totals.employer)}</td>
         </tr></tfoot>
       </table></div>
-      <p className="border-hairline text-ink-muted border-t px-4 py-2.5 text-[12px] leading-relaxed">Income tax is the year’s tax on the year’s pay at today’s salary, less what is already withheld, after social insurance and GESY (up to a fifth of the pay) and what each employee declared on TD59.{anyThirteenth ? " The 13th salary is declared to Social Insurance on its own, against the year’s maximum insurable earnings." : ""}</p>
+      <p className="border-hairline text-ink-muted border-t px-4 py-2.5 text-[12.5px] leading-relaxed">Income tax is the year’s tax on the year’s pay at today’s salary, less what is already withheld, after social insurance and GESY (up to a fifth of the pay) and what each employee declared on TD59.{anyThirteenth ? " The 13th salary is declared to Social Insurance on its own, against the year’s maximum insurable earnings." : ""}</p>
     </RecordSection>
   </PageBody>;
 }

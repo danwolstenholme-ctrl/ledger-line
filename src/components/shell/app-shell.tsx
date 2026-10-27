@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import Link from "@/components/navigation/navigation-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeCheck, Banknote, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, CalendarDays, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
-  LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, SlidersHorizontal, Truck, Users, X, type LucideIcon,
+  ArrowDownLeft, ArrowUpRight, BadgeCheck, Banknote, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, CalendarDays, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
+  LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, SlidersHorizontal, Truck, Upload, UserPlus, Users, X, type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -16,6 +16,8 @@ import { MenuPanel, Motion, NavigationProgress } from "@/components/motion/motio
 import { TimerControl, type TimerRunning } from "@/components/work/timer-control";
 import { UserMenu } from "@/components/shell/user-menu";
 import { loadCompanies, useCompanies, useCurrentCompany, type CompanyEntry } from "@/components/shell/companies";
+import { matchOf, plain, readRecent, rememberCompany, sameSection } from "@/components/shell/finding";
+import { CommandPalette, type PaletteEntry } from "@/components/shell/command-palette";
 import type { ShellCompany } from "@/lib/data/shell";
 import { motion } from "motion/react";
 
@@ -45,11 +47,11 @@ export function AppShell(props: ShellProps) {
 
 export function PracticeMark({ practice, size = "md" }: { practice: Pick<ShellPractice, "initials" | "name" | "tagline">; size?: "md" | "lg" }) {
   return <span className="flex min-w-0 items-center gap-3">
-    <span className={cn("bg-brand grid shrink-0 place-items-center rounded-[2px] font-semibold tracking-tight text-white", size === "lg" ? "size-11 text-[16px]" : "size-10 text-[14px]")}>{practice.initials}</span>
+    <span className={cn("bg-brand grid shrink-0 place-items-center rounded-lg font-semibold tracking-tight text-white shadow-[inset_0_-1px_0_rgb(0_0_0/0.12)]", size === "lg" ? "size-11 text-[16px]" : "size-9 text-[13.5px]")}>{practice.initials}</span>
     <span className="bg-hairline-strong h-9 w-px shrink-0" />
     <span className="min-w-0">
-      <span className={cn("text-ink-muted block leading-tight", size === "lg" ? "text-[16px]" : "text-[12.5px]")}>{practice.name}</span>
-      {practice.tagline ? <span className="text-ink-faint block truncate text-[10.5px] leading-tight">{practice.tagline}</span> : null}
+      <span className={cn("text-ink-muted block leading-tight", size === "lg" ? "text-[16px]" : "text-[13px]")}>{practice.name}</span>
+      {practice.tagline ? <span className="text-ink-faint block truncate text-[11px] leading-tight">{practice.tagline}</span> : null}
     </span>
   </span>;
 }
@@ -97,37 +99,13 @@ function companyNav(base: string, client: ShellClient): NavGroup[] {
   ];
 }
 
-/** Where the same section is in another company: an invoice's page becomes the invoice list, and so on. */
-function sameSection(pathname: string, slug: string) {
-  const rest = pathname.replace(/^\/c\/[a-z0-9-]+/, "").split("/").filter(Boolean);
-  const keep = rest[0] === "crm" || rest[0] === "reports" ? rest.slice(0, 2) : rest.slice(0, 1);
-  const section = keep.filter(part => part !== "new" && !/^[0-9a-f-]{36}$/.test(part));
-  return `/c/${slug}${section.length ? `/${section.join("/")}` : ""}`;
-}
-
-const RECENT_KEY = "ledgerline.recent-companies";
-/** The companies this browser opened last, most recent first. Kept in the browser only: a convenience, never a record. */
-function readRecent(): string[] {
-  try { const stored: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]"); return Array.isArray(stored) ? stored.filter((slug): slug is string => typeof slug === "string").slice(0, 6) : []; }
-  catch { return []; }
-}
-/** Search without case or accents, and numbers without their spaces: "he412907" finds HE 412907, "αιγαιο" finds ΑΙΓΑΙΟ. */
-const plain = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-const compact = (text: string) => plain(text).replace(/[^a-z0-9\u03b1-\u03c9]/g, "");
-/** How a company matches what was typed: by its name (""), by another name or number it goes by (that text), or not at all (null). */
-function matchOf(entry: CompanyEntry, query: string): string | null {
-  if (plain(entry.name).includes(query)) return "";
-  const short = compact(query);
-  for (const alias of [entry.greek, entry.he, entry.vat]) if (alias && (plain(alias).includes(query) || (short.length > 2 && compact(alias).includes(short)))) return alias;
-  return null;
-}
 const subscribeNothing = () => () => undefined;
 
 /**
  * Which company's books: a search over every client by name, Greek name,
  * registration or VAT number, the last few opened first. Built for a
- * practice with a hundred clients: type a few letters and press Enter, or
- * ⌘K (Ctrl+K) from anywhere to open it.
+ * practice with a hundred clients: type a few letters and press Enter. The
+ * command palette (⌘K, Ctrl+K) finds companies too, from any page.
  */
 function CompanySwitcher({ current, count, pathname, onNavigate, member }: { current: ShellClient | null; count: number; pathname: string; onNavigate: () => void; member: boolean }) {
   const router = useRouter();
@@ -154,19 +132,8 @@ function CompanySwitcher({ current, count, pathname, onNavigate, member }: { cur
     window.addEventListener("keydown", key);
     return () => { document.removeEventListener("mousedown", away); window.removeEventListener("keydown", key); };
   }, [open]);
-  // ⌘K or Ctrl+K, anywhere: find a company.
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setRecent(readRecent()); setActive(0); setOpen(true); }
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, []);
   // The company being looked at goes to the front of this browser's recent list.
-  useEffect(() => {
-    if (!current || current.practice) return;
-    try { localStorage.setItem(RECENT_KEY, JSON.stringify([current.slug, ...readRecent().filter(slug => slug !== current.slug)].slice(0, 6))); } catch { /* private window: no list */ }
-  }, [current]);
+  useEffect(() => { if (current && !current.practice) rememberCompany(current.slug); }, [current]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" }); }, [active]);
 
   const companies = clients.filter(entry => !entry.practice);
@@ -191,23 +158,23 @@ function CompanySwitcher({ current, count, pathname, onNavigate, member }: { cur
   };
   const row = (entry: CompanyEntry, index: number, via: string | null) => <li key={`${index}-${entry.slug}`}>
     <Link href={sameSection(pathname, entry.slug)} onClick={done} data-index={index} onMouseEnter={() => setActive(index)}
-      className={cn("flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", index === active ? "bg-muted" : "", entry.slug === current?.slug ? "text-brand font-medium" : "text-ink")}>
-      <span className="min-w-0 flex-1 truncate">{entry.name}{via ? <span className="text-ink-faint ml-1.5 text-[11.5px]">{via}</span> : null}</span>
-      {entry.toReview ? <span className="bg-brand rounded px-1.5 text-[10.5px] leading-[18px] font-semibold text-white tabular-nums" title="Documents to review">{entry.toReview}</span> : null}
+      className={cn("flex items-center gap-2 px-2.5 py-1.5 text-[13px] touch:py-3", index === active ? "bg-muted" : "", entry.slug === current?.slug ? "text-brand font-medium" : "text-ink")}>
+      <span className="min-w-0 flex-1 truncate">{entry.name}{via ? <span className="text-ink-faint ml-1.5 text-[12px]">{via}</span> : null}</span>
+      {entry.toReview ? <span className="bg-brand rounded px-1.5 text-[11px] leading-[18px] font-semibold text-white tabular-nums" title="Documents to review">{entry.toReview}</span> : null}
       {entry.slug === current?.slug ? <Check className="size-3.5" /> : null}
     </Link>
   </li>;
-  const heading = (text: string) => <li aria-hidden className="text-ink-faint px-2.5 pt-2 pb-0.5 text-[10.5px] font-semibold tracking-[0.08em] uppercase">{text}</li>;
+  const heading = (text: string) => <li aria-hidden className="text-ink-faint px-2.5 pt-2 pb-0.5 text-[11px] font-semibold tracking-[0.08em] uppercase">{text}</li>;
 
   return <div ref={ref} className="relative">
-    <button type="button" onClick={() => open ? setOpen(false) : show()} aria-expanded={open} aria-haspopup="true" aria-keyshortcuts="Meta+K Control+K"
+    <button type="button" onClick={() => open ? setOpen(false) : show()} aria-expanded={open} aria-haspopup="true"
       className="border-hairline-strong hover:bg-muted bg-surface flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 touch:py-3">
-      <span className={cn("grid size-7 shrink-0 place-items-center rounded text-[11px] font-semibold", current ? "bg-brand-50 text-brand" : "bg-surface-sunken text-ink-muted")}>
+      <span className={cn("grid size-7 shrink-0 place-items-center rounded text-[11.5px] font-semibold", current ? "bg-brand-50 text-brand" : "bg-surface-sunken text-ink-muted")}>
         {current ? current.name.split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase() : <LayoutDashboard className="size-3.5" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="text-ink block truncate text-[12.5px] leading-tight font-semibold">{current ? shortName(current.name) : "All clients"}</span>
-        <span className="text-ink-faint block truncate text-[11px] leading-tight">{current ? current.industry : `${count} compan${count === 1 ? "y" : "ies"}`}</span>
+        <span className="text-ink block truncate text-[13px] leading-tight font-semibold">{current ? shortName(current.name) : "All clients"}</span>
+        <span className="text-ink-faint block truncate text-[11.5px] leading-tight">{current ? current.industry : `${count} compan${count === 1 ? "y" : "ies"}`}</span>
       </span>
       <ChevronsUpDown className="text-ink-faint size-3.5 shrink-0" />
     </button>
@@ -216,26 +183,25 @@ function CompanySwitcher({ current, count, pathname, onNavigate, member }: { cur
         <Search className="text-ink-faint size-3.5 shrink-0" />
         <input autoFocus value={filter} onChange={event => { setFilter(event.target.value); setActive(0); }} onKeyDown={onKeyDown}
           placeholder="Name, HE or VAT number…" aria-label="Find a company" aria-describedby="switcher-hint"
-          className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
+          className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
       </div>
       <ul ref={listRef} className="max-h-[min(60vh,32rem)] overflow-y-auto py-1">
-        {!query && member ? <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3"><LayoutDashboard className="size-3.5" />Practice dashboard</Link></li> : null}
-        {!query && firm && member ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
+        {!query && member ? <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[13px] touch:py-3"><LayoutDashboard className="size-3.5" />Practice dashboard</Link></li> : null}
+        {!query && firm && member ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[13px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
           <BookOpen className="size-3.5" /><span className="min-w-0 flex-1 truncate">Your firm’s own books</span>{firm.slug === current?.slug ? <Check className="size-3.5" /> : null}</Link></li> : null}
         {recentEntries.length ? <>{heading("Recent")}{recentEntries.map((entry, index) => row(entry, index, null))}</> : null}
-        {!query && !clients.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12px]">Finding your companies…</li> : null}
+        {!query && !clients.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12.5px]">Finding your companies…</li> : null}
         {!query && clients.length ? <>{heading(`All ${companies.length}`)}{companies.map((entry, index) => row(entry, recentEntries.length + index, null))}</> : null}
         {query ? matches.map((match, index) => row(match.entry, index, match.via || null)) : null}
-        {query && !matches.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12px]">No company by that name or number.</li> : null}
+        {query && !matches.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12.5px]">No company by that name or number.</li> : null}
       </ul>
-      <p id="switcher-hint" className="border-hairline text-ink-faint border-t px-2.5 py-1.5 text-[11px] touch:hidden">↑ ↓ to choose, Enter to open{shortcut ? ` · ${shortcut} from any page` : ""}</p>
+      <p id="switcher-hint" className="border-hairline text-ink-faint border-t px-2.5 py-1.5 text-[11.5px] touch:hidden">↑ ↓ to choose, Enter to open{shortcut ? ` · ${shortcut} finds anything` : ""}</p>
     </MenuPanel>
   </div>;
 }
 
 function WorkspaceShell({ practice, initialCompany, companyCount, user, member, toReview, timer, children }: ShellProps) {
   const pathname = usePathname() ?? "/";
-  const router = useRouter();
   const slug = slugFromPath(pathname);
   const client = useCurrentCompany(initialCompany, slug);
   const base = client && slug ? `/c/${slug}` : "";
@@ -267,27 +233,41 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
   // On a short screen the menu scrolls: keep the page's own item in sight.
   useEffect(() => { navRef.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ block: "nearest" }); }, [pathname]);
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const close = () => setOpen(false);
+  // The command palette's offers: what is done next here, then every page of this menu.
+  const has = (module: string) => Boolean(client?.nav.modules.includes(module));
+  const actions: PaletteEntry[] = client ? [
+    { id: "invoice", label: "New invoice", href: `${base}/sales/new`, icon: FileText, keywords: "raise bill customer sale" },
+    { id: "bill", label: "Record a bill", href: `${base}/bills/new`, icon: Receipt, keywords: "supplier expense purchase cost" },
+    { id: "receipt", label: "Upload receipts", href: `${base}/capture`, icon: ScanText, keywords: "scan photo document capture read" },
+    ...(has("quotes") ? [{ id: "quote", label: "New quote", href: `${base}/quotes/new`, icon: FilePen, keywords: "estimate proposal offer" }] : []),
+    { id: "in", label: "Money in", href: `${base}/bank/new?kind=receive`, icon: ArrowDownLeft, keywords: "receive received deposit" },
+    { id: "out", label: "Money out", href: `${base}/bank/new?kind=spend`, icon: ArrowUpRight, keywords: "spend spent pay paid expense" },
+    { id: "customer", label: `New ${client.nav.customer.toLowerCase()}`, href: `${base}/customers/new`, icon: Users, keywords: "customer client contact add" },
+    ...(has("pipeline") ? [{ id: "deal", label: `New ${client.nav.deal.toLowerCase()}`, href: `${base}/crm/pipeline/new`, icon: Inbox, keywords: "lead enquiry deal opportunity" }] : []),
+    ...(has("jobs") ? [{ id: "job", label: `New ${client.nav.job.toLowerCase()}`, href: `${base}/crm/jobs/new`, icon: BriefcaseBusiness, keywords: "job project order work" }] : []),
+    { id: "supplier", label: "New supplier", href: `${base}/suppliers/new`, icon: Truck, keywords: "vendor add" },
+    ...(has("products") ? [{ id: "product", label: "New product", href: `${base}/items/new`, icon: Package, keywords: "item service price" }] : []),
+    ...(client.country === "CY" && has("payroll") && client.payroll ? [{ id: "payroll", label: "Run payroll", href: `${base}/payroll`, icon: Banknote, keywords: "salaries payslips social insurance gesy" }] : []),
+    { id: "vat", label: "VAT return", href: `${base}/reports/vat`, icon: Percent, keywords: "vat4 tax tfa return file" },
+    { id: "statement", label: "Import a bank statement", href: `${base}/bank`, icon: Landmark, keywords: "statement csv reconcile match bank" },
+  ] : member ? [
+    { id: "take-on", label: "Take on a client", href: "/clients/new", icon: UserPlus, keywords: "onboard new client engagement letter" },
+    { id: "import", label: "Bring clients over", href: "/clients/import", icon: Upload, keywords: "import spreadsheet csv list" },
+    { id: "owners", label: "Invite owners", href: "/clients/owners", icon: Users, keywords: "owners invitation join" },
+    { id: "capture", label: "Capture documents", href: "/capture", icon: ScanText, keywords: "upload receipts scan" },
+    { id: "vies", label: "Check a VAT number", href: "/vat-numbers", icon: BadgeCheck, keywords: "vies vat number" },
+  ] : [];
+  const pages: PaletteEntry[] = [...groups.flatMap(group => group.items.map(entry => ({ id: entry.href, label: entry.title, detail: group.label ?? undefined, href: entry.href, icon: entry.icon }))),
+    ...(client && member ? [{ id: "practice", label: "Practice dashboard", detail: practice.name, href: "/", icon: LayoutDashboard }] : [])];
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
-  const item = (active: boolean) => cn("group relative flex items-center gap-2.5 rounded-md py-[5px] pr-2.5 pl-2.5 text-[12.5px] transition-colors touch:gap-3 touch:py-3 touch:text-[15px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+  const item = (active: boolean) => cn("group relative flex items-center gap-2.5 rounded-md py-[5px] pr-2.5 pl-2.5 text-[13px] transition-colors touch:gap-3 touch:py-3 touch:text-[15px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
     active ? "text-brand font-medium" : "text-ink-muted hover:bg-muted hover:text-ink");
-  const search = (event: React.FormEvent) => {
-    event.preventDefault();
-    const term = query.trim().toLowerCase();
-    if (!term) return;
-    if (client) { router.push(`${base}/customers?q=${encodeURIComponent(query.trim())}`); return; }
-    // One client by that name or number: open it. Several, or the list not loaded yet: the dashboard, narrowed to them.
-    void loadCompanies().then(companies => {
-      const found = companies.filter(entry => !entry.practice && matchOf(entry, plain(query.trim())) !== null);
-      router.push(found.length === 1 ? `/c/${found[0].slug}` : `/?q=${encodeURIComponent(query.trim())}`);
-    });
-  };
   const link = (entry: NavItem) => {
     const active = current?.href === entry.href;
     return <li key={entry.href}><Link href={entry.href} onClick={close} aria-current={active ? "page" : undefined} className={item(active)}>
@@ -296,14 +276,14 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
       </motion.span> : null}
       <entry.icon className={cn("relative size-[14px] shrink-0 touch:size-[18px]", active ? "text-brand" : "text-ink-faint group-hover:text-ink-muted")} />
       <span className="relative truncate">{entry.label}</span>
-      {entry.badge ? <span className="bg-brand relative ml-auto rounded px-1.5 text-[10.5px] leading-[18px] font-semibold text-white tabular-nums">{entry.badge}</span> : null}
+      {entry.badge ? <span className="bg-brand relative ml-auto rounded px-1.5 text-[11px] leading-[18px] font-semibold text-white tabular-nums">{entry.badge}</span> : null}
     </Link></li>;
   };
 
   return <div className="flex min-h-dvh">
     <aside aria-label="Main navigation" className={cn("bg-sidebar border-hairline fixed inset-y-0 left-0 z-50 flex w-[224px] flex-col border-r print:hidden",
       "transition-transform duration-200 ease-out lg:translate-x-0", open ? "translate-x-0 shadow-xl" : "-translate-x-full lg:shadow-none")}>
-      <div className="border-hairline flex h-16 shrink-0 items-center justify-between border-b pr-3 pl-4">
+      <div className="border-hairline flex h-14 shrink-0 items-center justify-between border-b pr-3 pl-4">
         <Link href="/" onClick={close} className="min-w-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" aria-label={`${practice.name} dashboard`}><PracticeMark practice={practice} /></Link>
         <button type="button" onClick={close} className="hover:bg-muted text-ink-muted grid size-7 shrink-0 place-items-center rounded-md lg:hidden touch:size-11" aria-label="Close navigation"><X className="size-4" /></button>
       </div>
@@ -313,7 +293,7 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
           if (group.more) {
             const expanded = moreOpen || moreActive;
             return <div key={group.label} className="border-hairline mt-3 border-t pt-2">
-              <button type="button" onClick={() => setMoreOpen(value => !value)} aria-expanded={expanded} className="text-ink-faint hover:text-ink-muted flex w-full items-center gap-1 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] uppercase">
+              <button type="button" onClick={() => setMoreOpen(value => !value)} aria-expanded={expanded} className="text-ink-faint hover:text-ink-muted flex w-full items-center gap-1 px-2.5 py-1 text-[11.5px] font-semibold tracking-[0.08em] uppercase">
                 {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}{group.label}
               </button>
               {expanded ? <ul className="mt-0.5 space-y-0.5">{group.items.map(link)}</ul> : null}
@@ -326,15 +306,15 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
         })}
       </nav>
       <div className="border-hairline border-t px-4 py-2.5">
-        <Link href="/compare" onClick={close} className="text-ink-faint hover:text-ink inline-flex items-center gap-1.5 text-[11px]">Powered by <LedgerlineMark className="size-3.5" title="" /><span className="text-ink-muted font-semibold">Ledgerline</span></Link>
+        <Link href="/compare" onClick={close} className="text-ink-faint hover:text-ink inline-flex items-center gap-1.5 text-[11.5px]">Powered by <LedgerlineMark className="size-3.5" title="" /><span className="text-ink-muted font-semibold">Ledgerline</span></Link>
       </div>
     </aside>
     {open ? <button type="button" aria-label="Close navigation" onClick={close} className="bg-brand-deep/25 fixed inset-0 z-40 lg:hidden" /> : null}
     <div className="flex min-w-0 flex-1 flex-col lg:pl-[224px] print:pl-0">
-      <header className="bg-surface border-hairline sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b px-3 sm:px-5 print:hidden">
+      <header className="bg-surface/90 border-hairline sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b px-3 backdrop-blur-md sm:px-5 print:hidden">
         <button type="button" onClick={() => setOpen(true)} className="hover:bg-muted text-ink-muted -ml-1 grid size-8 shrink-0 place-items-center rounded-md lg:hidden touch:size-11" aria-label="Open navigation"><PanelLeft className="size-4" /></button>
         <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
-          <ol className="flex min-w-0 items-center gap-1 text-[12.5px] leading-tight">
+          <ol className="flex min-w-0 items-center gap-1 text-[13px] leading-tight">
             {crumbs.map((crumb, index) => {
               const last = index === crumbs.length - 1;
               return <li key={crumb.href} className={cn("flex min-w-0 items-center gap-1", index === 0 && crumbs.length > 1 && "hidden sm:flex", last ? "shrink" : "shrink-[2]")}>
@@ -346,10 +326,9 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
           </ol>
         </nav>
         {member ? <TimerControl running={timer} currentSlug={slug} /> : null}
-        <form onSubmit={search} className="border-hairline-strong bg-surface hidden h-8 w-[220px] items-center gap-2 rounded-md border px-2.5 md:flex xl:w-[260px]">
-          <Search className="text-ink-faint size-3.5 shrink-0" />
-          <input value={query} onChange={event => setQuery(event.target.value)} placeholder={client ? "Search customers" : "Search clients"} aria-label="Search" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
-        </form>
+        <CommandPalette actions={actions} pages={pages} pathname={pathname} scope={client && slug ? { slug, name: client.name } : null}
+          labels={{ customer: client?.nav.customers ?? "Customers", supplier: "Suppliers", invoice: "Invoices", bill: "Bills", quote: "Quotes", product: "Products",
+            deal: client?.nav.deals ?? "Enquiries", job: client?.nav.jobs ?? "Jobs", employee: "Employees" }} />
         <Link href={client ? `${base}/capture` : "/capture"} aria-label={toReview ? `${toReview} documents to review` : "Documents"} className="text-ink-muted hover:bg-muted relative grid size-8 place-items-center rounded-md">
           <Bell className="size-4" />{toReview ? <span className="bg-critical absolute top-1.5 right-1.5 size-1.5 rounded-full" /> : null}
         </Link>

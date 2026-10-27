@@ -40,8 +40,8 @@ function CheckRow({ check }: { check: BooksCheck }) {
   const body = <>
     <look.icon aria-label={look.label} className={cn("mt-0.5 size-4 shrink-0", look.className)} />
     <span className="min-w-0">
-      <span className="text-ink block text-[13px] font-medium">{check.title}</span>
-      <span className="text-ink-muted block text-[12px] leading-relaxed">{check.detail}</span>
+      <span className="text-ink block text-[13.5px] font-medium">{check.title}</span>
+      <span className="text-ink-muted block text-[12.5px] leading-relaxed">{check.detail}</span>
     </span>
   </>;
   return <li>{check.href
@@ -72,8 +72,8 @@ export default async function OverviewPage() {
     : !books.settings.ai_suggestions ? "Switched off for this company. Switch it on in its Settings." : null;
   // The books start on 1 July 2025: a comparison with a year they only half cover would mislead.
   const comparable = books.lastYear.from >= "2025-07-01";
-  const head = "text-ink-faint px-3 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase";
-  const cell = "px-3 py-2 text-right text-[12.5px] tabular-nums";
+  const head = "text-ink-faint px-3 py-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase";
+  const cell = "px-3 py-2 text-right text-[13px] tabular-nums";
 
   return <PageBody className="space-y-4">
     <RecordHeader title="Business overview" back={{ href: "/accounts/reports", label: "Reports" }}
@@ -102,7 +102,7 @@ export default async function OverviewPage() {
           table={<table className="w-full border-collapse">
             <thead><tr className="border-hairline border-b text-left"><th scope="col" className={head}>Month</th><th scope="col" className={cn(head, "text-right")}>Income</th><th scope="col" className={cn(head, "text-right")}>Expenses</th><th scope="col" className={cn(head, "text-right")}>Profit</th></tr></thead>
             <tbody className="divide-hairline divide-y">{months.map(month => <tr key={month.key}>
-              <th scope="row" className="px-3 py-2 text-left text-[12.5px] font-normal">{month.title}</th>
+              <th scope="row" className="px-3 py-2 text-left text-[13px] font-normal">{month.title}</th>
               <td className={cell}>{euros(month.income)}</td><td className={cell}>{euros(month.expenses)}</td>
               <td className={cn(cell, month.profit < 0 && "text-critical")}>{euros(month.profit)}</td>
             </tr>)}</tbody>
@@ -114,7 +114,7 @@ export default async function OverviewPage() {
           table={<table className="w-full border-collapse">
             <thead><tr className="border-hairline border-b text-left"><th scope="col" className={head}>Month</th><th scope="col" className={cn(head, "text-right")}>In</th><th scope="col" className={cn(head, "text-right")}>Out</th><th scope="col" className={cn(head, "text-right")}>Balance</th></tr></thead>
             <tbody className="divide-hairline divide-y">{months.map(month => <tr key={month.key}>
-              <th scope="row" className="px-3 py-2 text-left text-[12.5px] font-normal">{month.title}</th>
+              <th scope="row" className="px-3 py-2 text-left text-[13px] font-normal">{month.title}</th>
               <td className={cell}>{euros(month.moneyIn)}</td><td className={cell}>{euros(month.moneyOut)}</td>
               <td className={cn(cell, month.cash < 0 && "text-critical")}>{euros(month.cash)}</td>
             </tr>)}</tbody>
@@ -129,8 +129,8 @@ export default async function OverviewPage() {
           table={<table className="w-full border-collapse">
             <thead><tr className="border-hairline border-b text-left"><th scope="col" className={head}>Account</th><th scope="col" className={cn(head, "text-right")}>Amount</th><th scope="col" className={cn(head, "text-right")}>Share</th></tr></thead>
             <tbody className="divide-hairline divide-y">
-              {books.expenses.top.map(item => <tr key={item.accountId}><th scope="row" className="px-3 py-2 text-left text-[12.5px] font-normal">{item.code} · {item.name}</th><td className={cell}>{euros(item.amount)}</td><td className={cell}>{item.share.toFixed(1)}%</td></tr>)}
-              {books.expenses.other > 0 ? <tr><th scope="row" className="px-3 py-2 text-left text-[12.5px] font-normal">Everything else</th><td className={cell}>{euros(books.expenses.other)}</td><td className={cell}>{(100 - books.expenses.top.reduce((sum, item) => sum + item.share, 0)).toFixed(1)}%</td></tr> : null}
+              {books.expenses.top.map(item => <tr key={item.accountId}><th scope="row" className="px-3 py-2 text-left text-[13px] font-normal">{item.code} · {item.name}</th><td className={cell}>{euros(item.amount)}</td><td className={cell}>{item.share.toFixed(1)}%</td></tr>)}
+              {books.expenses.other > 0 ? <tr><th scope="row" className="px-3 py-2 text-left text-[13px] font-normal">Everything else</th><td className={cell}>{euros(books.expenses.other)}</td><td className={cell}>{(100 - books.expenses.top.reduce((sum, item) => sum + item.share, 0)).toFixed(1)}%</td></tr> : null}
             </tbody>
           </table>}>
           <BarList empty="Nothing spent yet this year." rows={[
@@ -143,7 +143,7 @@ export default async function OverviewPage() {
             <thead><tr className="border-hairline border-b text-left"><th scope="col" className={head}>Owed</th>{AGES.map(age => <th key={age.key} scope="col" className={cn(head, "text-right")}>{age.label}</th>)}<th scope="col" className={cn(head, "text-right")}>Total</th></tr></thead>
             <tbody className="divide-hairline divide-y">
               {[{ label: "To the company", ageing: books.receivables }, { label: "By the company", ageing: books.payables }].map(row => <tr key={row.label}>
-                <th scope="row" className="px-3 py-2 text-left text-[12.5px] font-normal">{row.label}</th>
+                <th scope="row" className="px-3 py-2 text-left text-[13px] font-normal">{row.label}</th>
                 {AGES.map(age => <td key={age.key} className={cell}>{euros(row.ageing.buckets[age.key as keyof typeof row.ageing.buckets])}</td>)}
                 <td className={cn(cell, "font-medium")}>{euros(row.ageing.total)}</td>
               </tr>)}
@@ -162,25 +162,25 @@ export default async function OverviewPage() {
           <ul className="divide-hairline divide-y">{books.checks.map(check => <CheckRow key={check.key} check={check} />)}</ul>
         </Panel>
         <Panel className="min-w-0 overflow-hidden">
-          <PanelHeader title="Bank accounts" action={<Link href="/accounts/bank" className="text-brand text-[12px] touch:inline-flex touch:min-h-10 touch:items-center">Bank</Link>} />
+          <PanelHeader title="Bank accounts" action={<Link href="/accounts/bank" className="text-brand text-[12.5px] touch:inline-flex touch:min-h-10 touch:items-center">Bank</Link>} />
           <ul className="divide-hairline divide-y">{activeBanks.map(bank => <li key={bank.id}>
             <Link href={`/accounts/chart/${bank.id}`} className="hover:bg-surface-sunken flex items-baseline gap-3 px-4 py-2.5 touch:min-h-11 touch:items-center">
-              <span className="text-ink-faint font-mono text-[11.5px]">{bank.code}</span>
-              <span className="text-ink min-w-0 flex-1 truncate text-[13px]">{bank.name}</span>
-              <span className={cn("text-[13px] font-medium tabular-nums", bank.balance < 0 ? "text-critical" : "text-ink")}>{euros(bank.balance)}</span>
+              <span className="text-ink-faint font-mono text-[12px]">{bank.code}</span>
+              <span className="text-ink min-w-0 flex-1 truncate text-[13.5px]">{bank.name}</span>
+              <span className={cn("text-[13.5px] font-medium tabular-nums", bank.balance < 0 ? "text-critical" : "text-ink")}>{euros(bank.balance)}</span>
             </Link>
           </li>)}</ul>
         </Panel>
         <Panel className="min-w-0 overflow-hidden">
-          <PanelHeader title="Bills to pay" count={books.payables.count} action={<Link href="/accounts/bills" className="text-brand text-[12px] touch:inline-flex touch:min-h-10 touch:items-center">All bills</Link>} />
+          <PanelHeader title="Bills to pay" count={books.payables.count} action={<Link href="/accounts/bills" className="text-brand text-[12.5px] touch:inline-flex touch:min-h-10 touch:items-center">All bills</Link>} />
           {books.billsToPay.length ? <ul className="divide-hairline divide-y">{books.billsToPay.map(bill => <li key={bill.id}>
             <Link href={`/accounts/bills/${bill.id}`} className="hover:bg-surface-sunken flex items-baseline gap-3 px-4 py-2.5 touch:min-h-11 touch:items-center">
               <FileText aria-hidden className="text-ink-faint size-3.5 shrink-0 translate-y-0.5" />
-              <span className="min-w-0 flex-1 truncate text-[13px]"><span className="text-ink">{bill.supplier_name}</span>{bill.number ? <span className="text-ink-faint font-mono text-[11.5px]"> · {bill.number}</span> : null}</span>
-              <span className={cn("shrink-0 text-[12px] tabular-nums", bill.days_overdue > 0 ? "text-critical font-medium" : "text-ink-muted")}>{bill.due_on ? (bill.days_overdue > 0 ? `${bill.days_overdue} days late` : `Due ${formatDate(bill.due_on)}`) : "No due date"}</span>
-              <span className="text-ink shrink-0 text-[13px] font-medium tabular-nums">{euros(Number(bill.balance))}</span>
+              <span className="min-w-0 flex-1 truncate text-[13.5px]"><span className="text-ink">{bill.supplier_name}</span>{bill.number ? <span className="text-ink-faint font-mono text-[12px]"> · {bill.number}</span> : null}</span>
+              <span className={cn("shrink-0 text-[12.5px] tabular-nums", bill.days_overdue > 0 ? "text-critical font-medium" : "text-ink-muted")}>{bill.due_on ? (bill.days_overdue > 0 ? `${bill.days_overdue} days late` : `Due ${formatDate(bill.due_on)}`) : "No due date"}</span>
+              <span className="text-ink shrink-0 text-[13.5px] font-medium tabular-nums">{euros(Number(bill.balance))}</span>
             </Link>
-          </li>)}</ul> : <p className="text-ink-faint px-4 py-6 text-center text-[12.5px]">Nothing to pay. <Link href="/accounts/bills/new" className="text-brand">Record a bill</Link></p>}
+          </li>)}</ul> : <p className="text-ink-faint px-4 py-6 text-center text-[13px]">Nothing to pay. <Link href="/accounts/bills/new" className="text-brand">Record a bill</Link></p>}
         </Panel>
       </div>
     </>}

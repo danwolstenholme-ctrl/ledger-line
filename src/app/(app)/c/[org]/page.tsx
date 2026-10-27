@@ -77,12 +77,12 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
   return <PageBody width="6xl" className="space-y-5">
     <RecordHeader title={org.name} description={`${org.industry}${org.vat_registered ? ` · VAT ${org.vat_number}` : " · not registered for VAT"}`} />
 
-    {welcome ? <p role="status" className="border-positive-line bg-positive-soft flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2.5 text-[12.5px]">
+    {welcome ? <p role="status" className="border-positive-line bg-positive-soft flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2.5 text-[13px]">
       <CheckCircle2 className="text-positive size-4 shrink-0" /><span className="text-positive font-medium">Welcome to Ledgerline, {firstName(welcome[0].name)}.</span>
       <span className="text-ink-muted">{welcome[1].name} keeps {org.name}’s books, and you see them here as they stand.{start ? " The steps below get you going." : ""}</span>
     </p> : null}
 
-    {query.opened ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2.5 text-[12.5px]">
+    {query.opened ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2.5 text-[13px]">
       <CheckCircle2 className="size-4 shrink-0" /><span className="font-medium">{org.name} is taken on, and its books are open{org.books_from ? ` from ${formatDate(String(org.books_from).slice(0, 10))}` : ""}.</span>
       <span className="text-ink-muted">Its deadlines and fee are set. Next: <Link href={`/c/${org.slug}/journals/new`} className="text-brand font-medium hover:underline">bring in the opening balances</Link>, or <Link href={`/c/${org.slug}/bank`} className="text-brand font-medium hover:underline">import the first bank statement</Link>.</span>
     </p> : null}
@@ -94,8 +94,8 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
         className={cn("group flex min-h-[92px] flex-col gap-2.5 rounded-lg border p-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
           index === 0 ? "bg-brand border-brand hover:bg-brand-dark text-white" : "bg-surface border-hairline hover:border-brand-200 hover:bg-brand-50")}>
         <action.icon className={cn("size-5", index === 0 ? "text-white" : "text-brand")} />
-        <span><span className={cn("block text-[13px] leading-tight font-semibold", index === 0 ? "text-white" : "text-ink")}>{action.label}</span>
-          <span className={cn("mt-0.5 block text-[11.5px] leading-snug", index === 0 ? "text-white/80" : "text-ink-muted")}>{action.hint}</span></span>
+        <span><span className={cn("block text-[13.5px] leading-tight font-semibold", index === 0 ? "text-white" : "text-ink")}>{action.label}</span>
+          <span className={cn("mt-0.5 block text-[12px] leading-snug", index === 0 ? "text-white/80" : "text-ink-muted")}>{action.hint}</span></span>
       </Link>)}
     </nav>
 
@@ -113,19 +113,19 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
             <span className={cn("grid size-7 shrink-0 place-items-center rounded-md", item.tone === "critical" ? "bg-critical-soft text-critical" : item.tone === "caution" ? "bg-caution-soft text-caution" : "bg-surface-sunken text-ink-muted")}>
               {item.tone === "critical" ? <AlertTriangle className="size-3.5" /> : <item.icon className="size-3.5" />}
             </span>
-            <span className="min-w-0 flex-1"><span className="text-ink block truncate text-[13px] font-medium">{item.title}</span><span className="text-ink-muted block truncate text-[12px]">{item.detail}</span></span>
+            <span className="min-w-0 flex-1"><span className="text-ink block truncate text-[13.5px] font-medium">{item.title}</span><span className="text-ink-muted block truncate text-[12.5px]">{item.detail}</span></span>
             <ArrowRight className="text-ink-faint group-hover:text-brand size-3.5 shrink-0" />
           </Link>
-        </li>)}</ul> : <p className="text-ink-muted flex items-center gap-2 px-4 py-4 text-[12.5px]"><CheckCircle2 className="text-positive size-4" />Nothing needs attention. The books are up to date.</p>}
+        </li>)}</ul> : <p className="text-ink-muted flex items-center gap-2 px-4 py-4 text-[13px]"><CheckCircle2 className="text-positive size-4" />Nothing needs attention. The books are up to date.</p>}
       </Panel>
 
       <Panel className="min-w-0 overflow-hidden">
-        <PanelHeader title="To-dos" count={home.tasks.length || undefined} action={<Link href={`/c/${org.slug}/crm/tasks`} className="text-brand text-[12px]">All tasks</Link>} />
+        <PanelHeader title="To-dos" count={home.tasks.length || undefined} action={<Link href={`/c/${org.slug}/crm/tasks`} className="text-brand text-[12.5px]">All tasks</Link>} />
         <div className="p-3"><AddTodo /></div>
         {tasks.length ? <ul className="divide-hairline border-hairline divide-y border-t">{tasks.map(task => <li key={task.id} className="flex items-center gap-3 px-4 py-2">
           <TaskCheck id={task.id} done={Boolean(task.done_at)} />
-          <span className="min-w-0 flex-1"><span className="text-ink block truncate text-[12.5px]">{task.title}</span>{task.link_label ? <span className="text-ink-faint block truncate text-[11px]">{task.link_kind ? `${workspace.labels[task.link_kind][0]} · ` : ""}{task.link_label}</span> : null}</span>
-          <span className={cn("shrink-0 text-[12px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? formatDate(task.due_on) : ""}</span>
+          <span className="min-w-0 flex-1"><span className="text-ink block truncate text-[13px]">{task.title}</span>{task.link_label ? <span className="text-ink-faint block truncate text-[11.5px]">{task.link_kind ? `${workspace.labels[task.link_kind][0]} · ` : ""}{task.link_label}</span> : null}</span>
+          <span className={cn("shrink-0 text-[12.5px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? formatDate(task.due_on) : ""}</span>
         </li>)}</ul> : null}
       </Panel>
     </div>

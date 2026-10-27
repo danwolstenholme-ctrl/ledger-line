@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 const CONTROL_BASE =
   "border-hairline-strong bg-surface text-ink placeholder:text-ink-faint w-full rounded-md border " +
-  "px-2.5 text-[12.5px] transition-colors outline-none " +
+  "px-2.5 text-[13px] transition-colors outline-none " +
   "focus-visible:border-ring focus-visible:ring-ring/40 focus-visible:ring-[3px] " +
   "disabled:cursor-not-allowed disabled:opacity-60 " +
   "aria-[invalid=true]:border-critical aria-[invalid=true]:ring-critical/20";
@@ -43,7 +43,7 @@ export function Field({
     <div className={cn("space-y-1", className)}>
       <label
         htmlFor={htmlFor}
-        className="text-ink flex items-baseline gap-1 text-[12px] font-medium"
+        className="text-ink flex items-baseline gap-1 text-[12.5px] font-medium"
       >
         {label}
         {required ? (
@@ -52,14 +52,14 @@ export function Field({
           </span>
         ) : null}
         {hint ? (
-          <span className="text-ink-faint ml-auto pl-2 text-[11px] font-normal">
+          <span className="text-ink-faint ml-auto pl-2 text-[11.5px] font-normal">
             {hint}
           </span>
         ) : null}
       </label>
       {children}
       {error ? (
-        <p className="text-critical text-[11.5px]" role="alert">
+        <p className="text-critical text-[12px]" role="alert">
           {error}
         </p>
       ) : null}
@@ -126,7 +126,7 @@ export function Checkbox({
   return (
     <label
       className={cn(
-        "text-ink flex cursor-pointer items-center gap-2 text-[12.5px] select-none touch:min-h-10 touch:text-[14px]",
+        "text-ink flex cursor-pointer items-center gap-2 text-[13px] select-none touch:min-h-10 touch:text-[14px]",
         className,
       )}
     >
@@ -146,7 +146,7 @@ export function FormError({ message }: { message?: string | null }) {
   return (
     <p
       role="alert"
-      className="border-critical-line bg-critical-soft text-critical flex items-start gap-2 rounded-md border px-3 py-2 text-[12.5px]"
+      className="border-critical-line bg-critical-soft text-critical flex items-start gap-2 rounded-md border px-3 py-2 text-[13px]"
     >
       <AlertCircle className="mt-px size-4 shrink-0" />
       {message}
@@ -176,7 +176,7 @@ export function SubmitButton({
       disabled={pending || disabled}
       className={cn(
         "focus-visible:ring-ring/40 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-medium transition-colors outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-60",
-        size === "sm" ? "h-7 px-2.5 text-[12px] touch:h-10 touch:px-3 touch:text-[13px]" : "h-8 px-3 text-[12.5px] touch:h-11 touch:px-4 touch:text-[15px]",
+        size === "sm" ? "h-7 px-2.5 text-[12.5px] touch:h-10 touch:px-3 touch:text-[13.5px]" : "h-8 px-3 text-[13px] touch:h-11 touch:px-4 touch:text-[15px]",
         variant === "primary"
           ? "bg-brand hover:bg-brand-dark text-white"
           : "border-hairline-strong text-ink hover:bg-muted border",
@@ -212,7 +212,7 @@ export function InlineSubmit({
       title={title}
       disabled={pending}
       className={cn(
-        "focus-visible:ring-ring/40 inline-flex items-center gap-1 rounded text-[11.5px] transition-colors outline-none focus-visible:ring-[3px] disabled:opacity-50 touch:min-h-10 touch:min-w-10 touch:px-1.5 touch:text-[13px]",
+        "focus-visible:ring-ring/40 inline-flex items-center gap-1 rounded text-[12px] transition-colors outline-none focus-visible:ring-[3px] disabled:opacity-50 touch:min-h-10 touch:min-w-10 touch:px-1.5 touch:text-[13.5px]",
         destructive ? "text-ink-faint hover:text-critical" : "text-ink-faint hover:text-brand",
         className,
       )}

@@ -24,7 +24,7 @@ export default async function ViesPage({ searchParams }: { searchParams: Promise
   const { period, lines, total, boxEightB } = report;
   const query = new URLSearchParams({ range: period.range, from: period.from, to: period.to });
   const agrees = Math.round(total * 100) === Math.round(boxEightB * 100);
-  const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
+  const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
   // Each number on the statement, as VIES last confirmed it: the statement is what an inspector cross-checks.
   const checks = await latestChecks(lines.filter(line => !line.missingNumber).map(line => `${line.vies_country}${line.vies_number}`));
   const unconfirmed = lines.filter(line => { const check = checks.get(`${line.vies_country}${line.vies_number}`); return !line.missingNumber && (!check || !check.valid); }).length;
@@ -41,28 +41,28 @@ export default async function ViesPage({ searchParams }: { searchParams: Promise
           <th scope="col" className={cn(head, "text-right")}>Invoices</th><th scope="col" className={cn(head, "text-right")}>Credit notes</th><th scope="col" className={cn(head, "text-right")}>Value of services</th>
         </tr></thead>
         <tbody className="divide-hairline divide-y">{lines.map(line => <tr key={line.customer_id}>
-          <td className="px-3 py-2.5 text-[12.5px]"><span className="font-mono font-medium">{line.vies_country}</span><span className="text-ink-faint ml-2">{countryName(line.country)}</span></td>
-          <td className="px-3 py-2.5 font-mono text-[12.5px]">{line.missingNumber ? <span className="text-critical inline-flex items-center gap-1 font-sans"><AlertTriangle className="size-3.5" />No VAT number</span> : line.vies_number}</td>
-          <td className="px-3 py-2.5 text-[12.5px]"><Link href={`/accounts/customers/${line.customer_id}`} className="text-ink hover:text-brand">{line.name}</Link></td>
-          <td className="px-3 py-2.5 text-[12.5px]">{(() => {
+          <td className="px-3 py-2.5 text-[13px]"><span className="font-mono font-medium">{line.vies_country}</span><span className="text-ink-faint ml-2">{countryName(line.country)}</span></td>
+          <td className="px-3 py-2.5 font-mono text-[13px]">{line.missingNumber ? <span className="text-critical inline-flex items-center gap-1 font-sans"><AlertTriangle className="size-3.5" />No VAT number</span> : line.vies_number}</td>
+          <td className="px-3 py-2.5 text-[13px]"><Link href={`/accounts/customers/${line.customer_id}`} className="text-ink hover:text-brand">{line.name}</Link></td>
+          <td className="px-3 py-2.5 text-[13px]">{(() => {
             const check = line.missingNumber ? null : checks.get(`${line.vies_country}${line.vies_number}`);
             if (!check) return <Link href={`/accounts/customers/${line.customer_id}`} className="text-caution hover:underline">Not checked</Link>;
             if (!check.valid) return <span className="text-critical font-medium">Not valid, {formatDate(check.checked_at)}</span>;
             const stale = Date.parse(check.checked_at) < Date.parse(`${period.to}T00:00:00Z`) - STALE_AFTER_DAYS * 86_400_000;
             return <span className={stale ? "text-caution" : "text-positive"}>{stale ? "Last valid " : "Valid, "}{formatDate(check.checked_at)}</span>;
           })()}</td>
-          <td className="text-ink-muted px-3 py-2.5 text-right text-[12.5px] tabular-nums">{line.invoices}</td>
-          <td className="text-ink-muted px-3 py-2.5 text-right text-[12.5px] tabular-nums">{line.credit_notes || "—"}</td>
-          <td className="px-3 py-2.5 text-right text-[12.5px] font-medium tabular-nums">{formatAmount(line.value)}</td>
+          <td className="text-ink-muted px-3 py-2.5 text-right text-[13px] tabular-nums">{line.invoices}</td>
+          <td className="text-ink-muted px-3 py-2.5 text-right text-[13px] tabular-nums">{line.credit_notes || "—"}</td>
+          <td className="px-3 py-2.5 text-right text-[13px] font-medium tabular-nums">{formatAmount(line.value)}</td>
         </tr>)}</tbody>
         <tfoot className="border-hairline-strong border-t"><tr>
-          <td colSpan={6} className="text-ink px-3 py-2.5 text-[12.5px] font-semibold">Total</td>
-          <td className="px-3 py-2.5 text-right text-[13px] font-semibold tabular-nums">{formatAmount(total)}</td>
+          <td colSpan={6} className="text-ink px-3 py-2.5 text-[13px] font-semibold">Total</td>
+          <td className="px-3 py-2.5 text-right text-[13.5px] font-semibold tabular-nums">{formatAmount(total)}</td>
         </tr></tfoot>
       </table></div> : <RecordEmpty title="Nothing to report for this period">No services were invoiced to businesses in other EU states under the reverse charge.</RecordEmpty>}
     </Panel>
-    {unconfirmed ? <p className="text-caution flex items-center gap-2 text-[12.5px]"><AlertTriangle className="size-4" />{unconfirmed} customer{unconfirmed === 1 ? "’s" : "s’"} VAT number{unconfirmed === 1 ? " has" : "s have"} not been confirmed in VIES. <Link href="/vat-numbers" className="text-brand font-medium hover:underline">Check every number</Link></p> : null}
-    {lines.length ? <p className={cn("flex items-center gap-2 text-[12.5px]", agrees ? "text-positive" : "text-caution")}>
+    {unconfirmed ? <p className="text-caution flex items-center gap-2 text-[13px]"><AlertTriangle className="size-4" />{unconfirmed} customer{unconfirmed === 1 ? "’s" : "s’"} VAT number{unconfirmed === 1 ? " has" : "s have"} not been confirmed in VIES. <Link href="/vat-numbers" className="text-brand font-medium hover:underline">Check every number</Link></p> : null}
+    {lines.length ? <p className={cn("flex items-center gap-2 text-[13px]", agrees ? "text-positive" : "text-caution")}>
       {agrees ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />}
       {agrees ? `Agrees with box 8B of the VAT return for the same period (${formatAmount(boxEightB)}).` : `Box 8B of the VAT return for the period is ${formatAmount(boxEightB)}: check invoices to EU customers without a VAT number.`}
       <Link href={`/accounts/reports/vat?${query}`} className="text-brand font-medium hover:underline">Open the VAT return</Link>

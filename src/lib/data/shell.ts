@@ -23,14 +23,16 @@ export type ShellCompany = {
   payroll: boolean;
   /** What the person is at this company, when they are one of its own people rather than the practice's. */
   role: string | null;
-  nav: { customers: string; deals: string; jobs: string; modules: string[] };
+  /** What it calls its customers, deals and jobs, many and one ("Patients", "Patient"), and the parts it uses. */
+  nav: { customers: string; customer: string; deals: string; deal: string; jobs: string; job: string; modules: string[] };
 };
 
 export const getShellCompany = cache(async (slug: string): Promise<ShellCompany | null> => {
   const org = await getOrgBySlug(slug);
   if (!org) return null;
   const [settings, review, membership] = await Promise.all([
-    one<{ customer_many: string; deal_many: string; job_many: string; modules: string[] }>("select customer_many, deal_many, job_many, modules from workspace_settings where organisation_id = $1", [org.id]),
+    one<{ customer_one: string; customer_many: string; deal_one: string; deal_many: string; job_one: string; job_many: string; modules: string[] }>(
+      "select customer_one, customer_many, deal_one, deal_many, job_one, job_many, modules from workspace_settings where organisation_id = $1", [org.id]),
     one<{ count: number }>("select count(*) as count from capture_items where organisation_id = $1 and status = 'review'", [org.id]),
     getMembership(),
   ]);
@@ -39,7 +41,8 @@ export const getShellCompany = cache(async (slug: string): Promise<ShellCompany 
     slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, country: org.country, toReview: Number(review?.count ?? 0),
     payroll: membership.practice || membership.companies.some(company => company.slug === slug && (company.role === "owner" || company.role === "auditor")),
     role: mine ? companyRoleLabel(mine.role, org.name) : null,
-    nav: settings ? { customers: settings.customer_many, deals: settings.deal_many, jobs: settings.job_many, modules: settings.modules } : { customers: "Customers", deals: "Enquiries", jobs: "Jobs", modules: [...MODULES] },
+    nav: settings ? { customers: settings.customer_many, customer: settings.customer_one, deals: settings.deal_many, deal: settings.deal_one, jobs: settings.job_many, job: settings.job_one, modules: settings.modules }
+      : { customers: "Customers", customer: "Customer", deals: "Enquiries", deal: "Enquiry", jobs: "Jobs", job: "Job", modules: [...MODULES] },
   };
 });
 

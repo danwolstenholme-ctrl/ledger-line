@@ -70,7 +70,7 @@ function describe(row: AuditRow) {
  */
 export default async function AuditPage() {
   const org = await requireOrg();
-  const head = "text-ink-faint px-3 py-2 text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase first:px-4";
+  const head = "text-ink-faint px-3 py-2 text-[11.5px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase first:px-4";
   const [rows, chain] = await Promise.all([
     sql<AuditRow>(
       `select seq, at, actor, action, entity, detail, hash, prev_hash from audit_log where organisation_id = $1 order by seq desc limit ${LIMIT}`, [org.id]),
@@ -82,25 +82,25 @@ export default async function AuditPage() {
     <section className={`ll-panel flex flex-wrap items-center gap-3 px-4 py-3 ${chain?.broken_at ? "border-critical-line bg-critical-soft" : ""}`}>
       {chain?.broken_at ? <ShieldAlert className="text-critical size-5" /> : <CheckCircle2 className="text-positive size-5" />}
       <div>
-        <p className="text-ink text-[13.5px] font-semibold">{chain?.broken_at ? `The chain is broken at entry ${chain.broken_at}` : "The chain is intact"}</p>
-        <p className="text-ink-muted text-[12px]">{formatNumber(chain?.checked ?? 0)} entries across the practice recomputed just now. {chain?.broken_at ? "A row was changed outside Ledgerline." : "Nothing has been changed, added or removed behind the app’s back."}</p>
+        <p className="text-ink text-[14px] font-semibold">{chain?.broken_at ? `The chain is broken at entry ${chain.broken_at}` : "The chain is intact"}</p>
+        <p className="text-ink-muted text-[12.5px]">{formatNumber(chain?.checked ?? 0)} entries across the practice recomputed just now. {chain?.broken_at ? "A row was changed outside Ledgerline." : "Nothing has been changed, added or removed behind the app’s back."}</p>
       </div>
     </section>
     <Panel className="overflow-x-auto">
-      {rows.length ? <table className="w-full min-w-[40rem] border-collapse text-left text-[12.5px]">
+      {rows.length ? <table className="w-full min-w-[40rem] border-collapse text-left text-[13px]">
         <thead><tr className="border-hairline bg-surface-sunken border-b">
           <th scope="col" className={head}>Entry</th><th scope="col" className={head}>When</th><th scope="col" className={head}>What happened</th>
           <th scope="col" className={head}>By</th><th scope="col" className={cn(head, "hidden md:table-cell")}>Hash</th>
         </tr></thead>
         <tbody className="divide-hairline divide-y">{rows.map(row => <tr key={row.seq} className="align-top">
-          <td className="text-ink-faint w-16 px-4 py-2.5 font-mono text-[11px] tabular-nums">#{row.seq}</td>
+          <td className="text-ink-faint w-16 px-4 py-2.5 font-mono text-[11.5px] tabular-nums">#{row.seq}</td>
           <td className="text-ink-muted w-36 px-3 py-2.5 whitespace-nowrap tabular-nums">{formatDateTime(row.at)}</td>
-          <td className="px-3 py-2.5"><span className="text-ink font-medium">{headline(row)}</span><span className="text-ink-muted block text-[12px]">{describe(row)}</span></td>
+          <td className="px-3 py-2.5"><span className="text-ink font-medium">{headline(row)}</span><span className="text-ink-muted block text-[12.5px]">{describe(row)}</span></td>
           <td className="text-ink-muted px-3 py-2.5 whitespace-nowrap">{row.actor === "system" ? "Ledgerline" : row.actor}</td>
-          <td className="text-ink-faint hidden px-4 py-2.5 font-mono text-[10.5px] md:table-cell" title={row.hash}>{row.hash.slice(0, 12)}…</td>
+          <td className="text-ink-faint hidden px-4 py-2.5 font-mono text-[11px] md:table-cell" title={row.hash}>{row.hash.slice(0, 12)}…</td>
         </tr>)}</tbody>
-      </table> : <p className="text-ink-muted px-4 py-4 text-[12.5px]">Nothing recorded yet. Post a bill, match a bank line or file a VAT return and it appears here.</p>}
-      {rows.length === LIMIT ? <p className="border-hairline text-ink-muted border-t px-4 py-2.5 text-[12px]">The latest {LIMIT} entries. The check above covers every one.</p> : null}
+      </table> : <p className="text-ink-muted px-4 py-4 text-[13px]">Nothing recorded yet. Post a bill, match a bank line or file a VAT return and it appears here.</p>}
+      {rows.length === LIMIT ? <p className="border-hairline text-ink-muted border-t px-4 py-2.5 text-[12.5px]">The latest {LIMIT} entries. The check above covers every one.</p> : null}
     </Panel>
   </PageBody>;
 }

@@ -34,7 +34,7 @@ export function SupplierCreditForm({ bill, credit, suppliers, accounts, today, c
   return <form action={action} className="space-y-5" noValidate>
     {credit ? <input type="hidden" name="id" value={credit.id} /> : null}
     {bill ? <input type="hidden" name="bill_id" value={bill.id} /> : null}
-    {bill ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">
+    {bill ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">
       Corrects bill <span className="text-ink font-mono font-medium">{bill.number ?? "without a number"}</span> from {bill.supplier_name} ({formatAmount(bill.total, currency)}). Up to {formatAmount(left!, currency)} can be credited.
       {bill.balance > 0 ? ` It comes off the ${formatAmount(bill.balance, currency)} still to pay; anything more is kept as credit to use or to have refunded.` : " The bill is paid, so the credit is kept to use against their next bill, or to be refunded."}
     </p> : null}
@@ -54,8 +54,8 @@ export function SupplierCreditForm({ bill, credit, suppliers, accounts, today, c
       </Field>
     </div>
     <div className="space-y-1.5">
-      <p className="text-ink text-[12.5px] font-medium">What is credited</p>
-      <p className="text-ink-faint text-[11.5px]">{bill ? "The bill's lines, to start with. Remove what is not credited, or lower an amount: the VAT follows." : "Each line takes its cost back off its account, and its VAT off the VAT reclaimed."}</p>
+      <p className="text-ink text-[13px] font-medium">What is credited</p>
+      <p className="text-ink-faint text-[12px]">{bill ? "The bill's lines, to start with. Remove what is not credited, or lower an amount: the VAT follows." : "Each line takes its cost back off its account, and its VAT off the VAT reclaimed."}</p>
       <LineEditor key={supplier} accounts={accounts} initial={credit?.lines ?? bill?.lines} defaultAccount={suppliers.find(item => item.id === supplier)?.default_account_id ?? ""} error={errors.lines} reverseCharge={reverseCharge} />
     </div>
     <ReverseChargeField checked={reverseCharge} onChange={setReverseCharge} what="a supplier" />
@@ -65,8 +65,8 @@ export function SupplierCreditForm({ bill, credit, suppliers, accounts, today, c
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Recording…">{credit ? "Save changes" : "Record the credit note"}</SubmitButton>
-      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[12.5px]">Cancel</Link>
+      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[13px]">Cancel</Link>
     </div>
-    <p className="text-ink-faint text-[11.5px]">Recording it posts the reverse of a bill: the cost and the VAT reclaimed fall, and less is owed to the supplier. It comes off the VAT return for the period of its date.</p>
+    <p className="text-ink-faint text-[12px]">Recording it posts the reverse of a bill: the cost and the VAT reclaimed fall, and less is owed to the supplier. It comes off the VAT return for the period of its date.</p>
   </form>;
 }

@@ -40,20 +40,20 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
       <RecordSection title="Bills" hint={open.length ? `${formatAmount(owed)} to pay on ${open.length} bill${open.length === 1 ? "" : "s"}` : "Nothing to pay"}>
           {result.bills.length ? <ul className="divide-hairline divide-y">{result.bills.map(bill => <li key={bill.id}>
             <Link href={`/accounts/bills/${bill.id}`} className="hover:bg-surface-sunken flex items-baseline gap-3 px-4 py-2.5 sm:px-5 touch:min-h-11 touch:items-center">
-              <span className="text-ink-muted w-24 shrink-0 text-[12px] tabular-nums">{formatDate(bill.issued_on)}</span>
-              <span className="text-ink min-w-0 flex-1 truncate font-mono text-[12px]">{bill.number ?? "No number"}</span>
-              <span className={cn("shrink-0 text-[12px]", bill.status === "paid" ? "text-positive" : bill.days_overdue > 0 ? "text-critical" : "text-ink-muted")}>{bill.days_overdue > 0 ? `${bill.days_overdue} days late` : BILL_STATUS_LABELS[bill.status]}</span>
-              <span className="text-ink w-24 shrink-0 text-right text-[12.5px] tabular-nums">{formatAmount(Number(bill.total))}</span>
+              <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(bill.issued_on)}</span>
+              <span className="text-ink min-w-0 flex-1 truncate font-mono text-[12.5px]">{bill.number ?? "No number"}</span>
+              <span className={cn("shrink-0 text-[12.5px]", bill.status === "paid" ? "text-positive" : bill.days_overdue > 0 ? "text-critical" : "text-ink-muted")}>{bill.days_overdue > 0 ? `${bill.days_overdue} days late` : BILL_STATUS_LABELS[bill.status]}</span>
+              <span className="text-ink w-24 shrink-0 text-right text-[13px] tabular-nums">{formatAmount(Number(bill.total))}</span>
             </Link>
-          </li>)}</ul> : <p className="text-ink-faint px-4 py-4 text-[12.5px] sm:px-5">No bills from this supplier yet.</p>}
+          </li>)}</ul> : <p className="text-ink-faint px-4 py-4 text-[13px] sm:px-5">No bills from this supplier yet.</p>}
         </RecordSection>
         {credits.rows.length ? <RecordSection title="Credit notes" hint={credits.unused > 0 ? `${formatAmount(credits.unused)} of credit to use` : undefined}>
           <ul className="divide-hairline divide-y">{credits.rows.map(credit => <li key={credit.id}>
             <Link href={`/accounts/supplier-credits/${credit.id}`} className="hover:bg-surface-sunken flex items-baseline gap-3 px-4 py-2.5 sm:px-5">
-              <span className="text-ink-muted w-24 shrink-0 text-[12px] tabular-nums">{formatDate(credit.issued_on)}</span>
-              <span className="text-ink min-w-0 flex-1 truncate font-mono text-[12px]">{credit.number ?? "No number"}</span>
-              <span className={cn("shrink-0 text-[12px]", credit.status === "void" ? "text-ink-faint" : Number(credit.remaining) > 0 ? "text-caution" : "text-positive")}>{credit.status === "void" ? "Void" : Number(credit.remaining) > 0 ? `${formatAmount(credit.remaining)} to use` : "Used"}</span>
-              <span className="text-ink w-24 shrink-0 text-right text-[12.5px] tabular-nums">{formatAmount(Number(credit.total))}</span>
+              <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(credit.issued_on)}</span>
+              <span className="text-ink min-w-0 flex-1 truncate font-mono text-[12.5px]">{credit.number ?? "No number"}</span>
+              <span className={cn("shrink-0 text-[12.5px]", credit.status === "void" ? "text-ink-faint" : Number(credit.remaining) > 0 ? "text-caution" : "text-positive")}>{credit.status === "void" ? "Void" : Number(credit.remaining) > 0 ? `${formatAmount(credit.remaining)} to use` : "Used"}</span>
+              <span className="text-ink w-24 shrink-0 text-right text-[13px] tabular-nums">{formatAmount(Number(credit.total))}</span>
             </Link>
           </li>)}</ul>
         </RecordSection> : null}
@@ -68,7 +68,7 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
             <form action={setSupplierActive} className="space-y-2">
               <input type="hidden" name="id" value={supplier.id} />
               <input type="hidden" name="is_active" value={supplier.is_active ? "" : "on"} />
-              <p className="text-ink-muted text-[12px]">{supplier.is_active ? "Their bills stay in the books; they are just no longer offered for new ones." : "Offer this supplier for new bills again."}</p>
+              <p className="text-ink-muted text-[12.5px]">{supplier.is_active ? "Their bills stay in the books; they are just no longer offered for new ones." : "Offer this supplier for new bills again."}</p>
               <InlineSubmit>{supplier.is_active ? "Mark inactive" : "Mark active"}</InlineSubmit>
             </form>
           </RecordDisclosure>

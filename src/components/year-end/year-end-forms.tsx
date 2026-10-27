@@ -50,11 +50,11 @@ export function YearEndFiguresForm({ periodEnd, assurance, country = "CY", revie
   return <ActionForm action={saveYearEndFigures} label="Save">
     <input type="hidden" name="period_end" value={periodEnd} />
     <fieldset className="space-y-2">
-      <legend className="text-ink mb-1 text-[12px] font-medium">The financial statements are</legend>
-      <label className="text-ink flex items-start gap-2 text-[12.5px]"><input type="radio" name="assurance" value="audit" defaultChecked={assurance === "audit"} className="accent-brand mt-0.5" />Audited by a statutory auditor</label>
-      <label className={`flex items-start gap-2 text-[12.5px] ${reviewAllowed === false ? "text-ink-faint" : "text-ink"}`}>
+      <legend className="text-ink mb-1 text-[12.5px] font-medium">The financial statements are</legend>
+      <label className="text-ink flex items-start gap-2 text-[13px]"><input type="radio" name="assurance" value="audit" defaultChecked={assurance === "audit"} className="accent-brand mt-0.5" />Audited by a statutory auditor</label>
+      <label className={`flex items-start gap-2 text-[13px] ${reviewAllowed === false ? "text-ink-faint" : "text-ink"}`}>
         <input type="radio" name="assurance" value={country === "GB" ? "exempt" : "review"} defaultChecked={assurance === (country === "GB" ? "exempt" : "review")} disabled={reviewAllowed === false} className="accent-brand mt-0.5" />
-        <span>{country === "GB" ? "Exempt from audit, as a small company" : "Reviewed under ISRE 2400 instead"}{reviewAllowed === false ? <span className="block text-[11.5px]">Not allowed for this year</span> : reviewAllowed === null ? <span className="text-ink-muted block text-[11.5px]">{country === "GB" ? "Allowed once the figures show it small" : "Allowed only once both years’ figures show it"}</span> : null}</span>
+        <span>{country === "GB" ? "Exempt from audit, as a small company" : "Reviewed under ISRE 2400 instead"}{reviewAllowed === false ? <span className="block text-[12px]">Not allowed for this year</span> : reviewAllowed === null ? <span className="text-ink-muted block text-[12px]">{country === "GB" ? "Allowed once the figures show it small" : "Allowed only once both years’ figures show it"}</span> : null}</span>
       </label>
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">

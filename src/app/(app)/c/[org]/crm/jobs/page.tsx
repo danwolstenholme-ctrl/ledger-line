@@ -45,14 +45,14 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     {view === "board" ? <KanbanBoard board="job" columns={columns} closing={cancelled ? [cancelled] : []} cards={rows.map(card)}
       hint={done ? `${done.name} keeps the last 30 days. Drag a card onto ${cancelled?.name ?? "the last column"} to close it without finishing.` : undefined} />
       : rows.length ? <Panel className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
-          <thead className="border-hairline bg-surface-sunken border-b"><tr className="text-ink-faint text-left text-[11px] font-semibold tracking-[0.06em] uppercase">
+        <table className="w-full min-w-[860px] border-collapse text-[13px]">
+          <thead className="border-hairline bg-surface-sunken border-b"><tr className="text-ink-faint text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase">
             <th className="px-3 py-2">{one}</th><th className="px-3 py-2">{workspace.labels.customer[0]}</th><th className="px-3 py-2">Stage</th>
             {fields.map(field => <th key={field.key} className="px-3 py-2">{field.label}</th>)}
             <th className="px-3 py-2">Next action</th><th className="px-3 py-2">Due</th><th className="px-3 py-2">Owner</th><th className="px-3 py-2 text-right">Value</th>
           </tr></thead>
           <tbody className="divide-hairline divide-y">{rows.map(row => <tr key={row.id} className="hover:bg-surface-sunken">
-            <td className="px-3 py-2.5"><Link href={`${base}/${row.id}`} className="text-ink hover:text-brand font-medium">{row.title}</Link><span className="text-ink-faint block font-mono text-[11px]">#{row.reference}</span></td>
+            <td className="px-3 py-2.5"><Link href={`${base}/${row.id}`} className="text-ink hover:text-brand font-medium">{row.title}</Link><span className="text-ink-faint block font-mono text-[11.5px]">#{row.reference}</span></td>
             <td className="text-ink-muted px-3 py-2.5">{row.customer_name ?? "—"}</td>
             <td className="px-3 py-2.5"><span className="flex items-center gap-1.5"><StageBadge name={row.stage_name} outcome={row.outcome} position={row.stage_position} openCount={openCount} /><PriorityFlag priority={row.priority} /></span></td>
             {fields.map(field => <td key={field.key} className="text-ink-muted px-3 py-2.5">{showFieldValue(field, row.extra[field.key], amount => formatAmount(amount), formatDate) ?? "—"}</td>)}

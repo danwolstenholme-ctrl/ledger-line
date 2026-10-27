@@ -51,7 +51,7 @@ function Detail({ row }: { row: DeadlineRow }) {
 /** An official extension, said plainly: from when, and by whom. */
 function Extended({ row }: { row: DeadlineRow }) {
   if (!row.extension) return null;
-  return <span className="text-ink-faint block text-[11.5px]">Extended from {formatDate(row.extension.from)} by {row.extension.by} · <a href={row.extension.source} target="_blank" rel="noreferrer" className="hover:text-brand underline-offset-2 hover:underline">source</a></span>;
+  return <span className="text-ink-faint block text-[12px]">Extended from {formatDate(row.extension.from)} by {row.extension.by} · <a href={row.extension.source} target="_blank" rel="noreferrer" className="hover:text-brand underline-offset-2 hover:underline">source</a></span>;
 }
 
 function Action({ row }: { row: DeadlineRow }) {
@@ -63,7 +63,7 @@ function Action({ row }: { row: DeadlineRow }) {
   if (row.kind === "financial_statements" || row.kind === "accounts_filing") return <Link href={`${base}/year-end?period=${row.periodEnd}`} className={recordOutlineButton}>Open the year end</Link>;
   if (row.state === "done") return <form action={reopenDeadline}>{hidden}<InlineSubmit title="Open this deadline again">Undo</InlineSubmit></form>;
   return <div className="flex flex-wrap items-center justify-end gap-2">
-    {row.kind === "vies" ? <Link href={`${base}/reports/vies?range=custom&from=${row.periodStart}&to=${row.periodEnd}`} className="text-brand text-[12px] hover:underline">Statement</Link> : null}
+    {row.kind === "vies" ? <Link href={`${base}/reports/vies?range=custom&from=${row.periodStart}&to=${row.periodEnd}`} className="text-brand text-[12.5px] hover:underline">Statement</Link> : null}
     {row.state !== "running" ? <form action={markDeadlineDone}>{hidden}<SubmitButton size="sm" variant="outline" pendingLabel="Saving…">Mark done</SubmitButton></form> : null}
   </div>;
 }
@@ -116,24 +116,24 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
       {company ? null : <ClientFilter label="Client" options={[{ label: "All clients", href: href({ client: null }), active: !client }, ...data.clients.map(item => ({ label: item.name.replace(/ (Ltd|Limited)$/, ""), href: href({ client: item.slug }), active: client?.slug === item.slug }))]} />}
     </div>
 
-    {due ? <p role="status" className="border-hairline bg-surface-sunken text-ink flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-[12.5px]">
+    {due ? <p role="status" className="border-hairline bg-surface-sunken text-ink flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-[13px]">
       Due on {formatDate(due)}: {listed.length} deadline{listed.length === 1 ? "" : "s"}. <Link href={href({ due: null })} className="text-brand font-medium hover:underline">Show every day</Link>
     </p> : null}
     {shown.length ? [...groups].map(([group, rows]) => <Panel key={group} className="overflow-hidden">
-      <h2 className={cn("border-hairline bg-surface-sunken border-b px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase", group === "Overdue" ? "text-critical" : "text-ink-faint")}>{group}</h2>
+      <h2 className={cn("border-hairline bg-surface-sunken border-b px-4 py-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase", group === "Overdue" ? "text-critical" : "text-ink-faint")}>{group}</h2>
       <ul className="divide-hairline divide-y">{rows.map(row => <li key={row.key} className={cn("grid items-center gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[3.5rem_minmax(0,1fr)_9rem_8.5rem_8.5rem]", row.state === "done" && "opacity-70")}>
-        <span className="text-ink-faint flex items-baseline gap-1.5 text-[11.5px] sm:block"><b className="text-ink block text-[17px] leading-tight font-semibold tabular-nums">{formatDate(row.due).replace(/ \d{4}$/, "")}</b>{weekday(row.due)}</span>
+        <span className="text-ink-faint flex items-baseline gap-1.5 text-[12px] sm:block"><b className="text-ink block text-[17px] leading-tight font-semibold tabular-nums">{formatDate(row.due).replace(/ \d{4}$/, "")}</b>{weekday(row.due)}</span>
         <span className="min-w-0">
-          <span className="text-ink block text-[13px] font-medium">{row.title}</span>
-          <span className="text-ink-muted block text-[12px]"><Link href={`/c/${row.company.slug}`} className="text-ink hover:text-brand hover:underline">{row.company.name}</Link> · <Detail row={row} /></span>
+          <span className="text-ink block text-[13.5px] font-medium">{row.title}</span>
+          <span className="text-ink-muted block text-[12.5px]"><Link href={`/c/${row.company.slug}`} className="text-ink hover:text-brand hover:underline">{row.company.name}</Link> · <Detail row={row} /></span>
           <Extended row={row} />
         </span>
-        <span className="text-ink-muted text-[12px]">{row.company.manager ?? "No one yet"}</span>
+        <span className="text-ink-muted text-[12.5px]">{row.company.manager ?? "No one yet"}</span>
         <span><Status row={row} /></span>
         <span className="sm:text-right"><Action row={row} /></span>
       </li>)}</ul>
     </Panel>) : <Panel><RecordEmpty title={view === "overdue" ? "Nothing is overdue" : "No deadlines here"}>{view === "overdue" ? "Every deadline past its date has been dealt with." : "Nothing falls due in the next three months for this choice."}</RecordEmpty></Panel>}
     {listed.length > PAGE_SIZE ? <Panel><RecordPagination page={page} total={listed.length} pageSize={PAGE_SIZE} href={href({})} /></Panel> : null}
-    <p className="text-ink-faint text-[12px]">Showing what is overdue and what falls due by {formatDate(data.until)}.{country === "GB" ? "" : " VIES statements appear for the months a company sold services to businesses in other EU states."}</p>
+    <p className="text-ink-faint text-[12.5px]">Showing what is overdue and what falls due by {formatDate(data.until)}.{country === "GB" ? "" : " VIES statements appear for the months a company sold services to businesses in other EU states."}</p>
   </PageBody>;
 }

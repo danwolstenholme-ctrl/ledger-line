@@ -20,8 +20,8 @@ export default async function JournalReportPage({ searchParams }: { searchParams
   const report = await getJournalReport(await searchParams);
   const { period } = report;
   const query = new URLSearchParams({ range: period.range, from: period.from, to: period.to, source: report.view });
-  const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
-  const cell = "px-3 py-1.5 text-[12.5px] tabular-nums whitespace-nowrap";
+  const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
+  const cell = "px-3 py-1.5 text-[13px] tabular-nums whitespace-nowrap";
   const balanced = report.debit === report.credit;
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title="Journal report" description="Every entry as it was posted, with its lines and who posted it." back={{ href: "/accounts/reports", label: "Reports" }} />
@@ -38,18 +38,18 @@ export default async function JournalReportPage({ searchParams }: { searchParams
         {report.entries.map(entry => <tbody key={entry.id} className="border-hairline border-t first:border-t-0">
           <tr>
             <td className={cn(cell, "text-ink-muted pt-2.5 align-top")}>{formatDate(entry.entry_date)}</td>
-            <td colSpan={3} className="px-3 pt-2.5 pb-1 text-[12.5px]">
-              <span className="text-ink-faint mr-2 text-[11px] font-semibold tracking-[0.06em] uppercase">{JOURNAL_SOURCE_LABELS[entry.source]}</span>
+            <td colSpan={3} className="px-3 pt-2.5 pb-1 text-[13px]">
+              <span className="text-ink-faint mr-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase">{JOURNAL_SOURCE_LABELS[entry.source]}</span>
               {entry.href ? <Link href={entry.href} className="text-ink hover:text-brand font-medium hover:underline touch:inline-flex touch:min-h-10 touch:items-center">{entry.narration}</Link> : <span className="text-ink font-medium">{entry.narration}</span>}
-              {entry.reference ? <span className="text-ink-faint font-mono text-[11.5px]"> · {entry.reference}</span> : null}
-              <span className="text-ink-faint block text-[11px]">Posted {formatDateTime(entry.created_at)}{entry.postedBy ? ` by ${entry.postedBy}` : ""}</span>
+              {entry.reference ? <span className="text-ink-faint font-mono text-[12px]"> · {entry.reference}</span> : null}
+              <span className="text-ink-faint block text-[11.5px]">Posted {formatDateTime(entry.created_at)}{entry.postedBy ? ` by ${entry.postedBy}` : ""}</span>
             </td>
           </tr>
           {entry.lines.map(line => <tr key={line.id} className="hover:bg-surface-sunken">
             <td />
-            <td className="px-3 py-1 pl-6 text-[12.5px]">
+            <td className="px-3 py-1 pl-6 text-[13px]">
               <Link href={`/accounts/chart/${line.account_id}?range=custom&from=${period.from}&to=${period.to}`} className="text-ink hover:text-brand hover:underline touch:inline-flex touch:min-h-10 touch:items-center">
-                <span className="text-ink-faint mr-2 font-mono text-[11.5px]">{line.account_code}</span>{line.account_name}
+                <span className="text-ink-faint mr-2 font-mono text-[12px]">{line.account_code}</span>{line.account_name}
               </Link>
               {line.description && line.description !== entry.narration ? <span className="text-ink-faint"> · {line.description}</span> : null}
             </td>
@@ -59,11 +59,11 @@ export default async function JournalReportPage({ searchParams }: { searchParams
           <tr><td colSpan={4} className="pb-1.5" /></tr>
         </tbody>)}
         <tfoot className="border-ink bg-surface-sunken border-t"><tr>
-          <th scope="row" colSpan={2} className="text-ink px-3 py-2.5 text-left text-[13px] font-semibold">{balanced ? "Total — every entry balances" : "Total — debits and credits do not agree"}</th>
+          <th scope="row" colSpan={2} className="text-ink px-3 py-2.5 text-left text-[13.5px] font-semibold">{balanced ? "Total — every entry balances" : "Total — debits and credits do not agree"}</th>
           <td className={cn(cell, "py-2.5 text-right font-semibold", !balanced && "text-critical")}>{formatAmount(report.debit)}</td>
           <td className={cn(cell, "py-2.5 text-right font-semibold", !balanced && "text-critical")}>{formatAmount(report.credit)}</td>
         </tr></tfoot>
       </table></div>}
-    {report.truncated ? <p className="text-ink-muted text-[12px]">Only the first entries are shown. Choose a shorter period to see them all.</p> : null}
+    {report.truncated ? <p className="text-ink-muted text-[12.5px]">Only the first entries are shown. Choose a shorter period to see them all.</p> : null}
   </PageBody>;
 }

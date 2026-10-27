@@ -44,7 +44,7 @@ const PRICES = [
 
 function Cell({ mark, text, strong = false }: { mark: Mark; text: string; strong?: boolean }) {
   const Icon = mark === "yes" ? Check : mark === "no" ? X : Minus;
-  return <td className={cn("px-3 py-2.5 align-top text-[12px]", strong && "bg-brand-50")}>
+  return <td className={cn("px-3 py-2.5 align-top text-[12.5px]", strong && "bg-brand-50")}>
     <span className="flex items-start gap-1.5">
       <Icon aria-label={mark === "yes" ? "Yes" : mark === "no" ? "No" : mark === "part" ? "In part" : "Not stated"} className={cn("mt-0.5 size-3.5 shrink-0", mark === "yes" ? "text-positive" : mark === "no" ? "text-critical" : "text-ink-faint")} />
       <span className={cn(mark === "unknown" ? "text-ink-faint" : "text-ink-muted", strong && mark === "yes" && "text-ink")}>{text}</span>
@@ -55,24 +55,24 @@ function Cell({ mark, text, strong = false }: { mark: Mark; text: string; strong
 /** Ledgerline against Balabook. Public information only. */
 export default async function ComparePage() {
   const practice = await getPractice();
-  const head = "px-3 py-2.5 text-left text-[12.5px] font-semibold";
+  const head = "px-3 py-2.5 text-left text-[13px] font-semibold";
   return <PageBody width="6xl" className="space-y-4">
     <header className="space-y-1">
       <LedgerlineLockup size="lg" className="mb-2" />
       <h1 className="text-ink text-[22px] leading-tight font-semibold tracking-[-0.015em]">Balabook keeps a book per company. Ledgerline runs the practice.</h1>
-      <p className="text-ink-muted max-w-[90ch] text-[13px] leading-relaxed">Full double-entry books, AI capture that routes every document to the right client, a dashboard across the whole client book, Cyprus VAT 4, and a white label {practice.name === "Saltlake Accounting" ? "the practice" : practice.name} owns. Balabook from its public website, checked 20 October 2026.</p>
+      <p className="text-ink-muted max-w-[90ch] text-[13.5px] leading-relaxed">Full double-entry books, AI capture that routes every document to the right client, a dashboard across the whole client book, Cyprus VAT 4, and a white label {practice.name === "Saltlake Accounting" ? "the practice" : practice.name} owns. Balabook from its public website, checked 20 October 2026.</p>
     </header>
     <section className="ll-panel overflow-x-auto">
       <table className="w-full min-w-[760px] border-collapse">
         <thead className="border-hairline border-b"><tr>
-          <th scope="col" className={cn(head, "text-ink-faint w-[40%] text-[11px] tracking-[0.06em] uppercase")}>What a practice needs</th>
+          <th scope="col" className={cn(head, "text-ink-faint w-[40%] text-[11.5px] tracking-[0.06em] uppercase")}>What a practice needs</th>
           <th scope="col" className={cn(head, "bg-brand-50 text-brand w-[30%]")}>Ledgerline</th>
           <th scope="col" className={cn(head, "text-ink w-[30%]")}>Balabook</th>
         </tr></thead>
         {ROWS.map(group => <tbody key={group.group} className="divide-hairline border-hairline divide-y border-b">
-          <tr><th colSpan={3} scope="colgroup" className="text-ink-faint bg-surface-sunken px-3 pt-3 pb-1.5 text-left text-[10.5px] font-semibold tracking-[0.08em] uppercase">{group.group}</th></tr>
+          <tr><th colSpan={3} scope="colgroup" className="text-ink-faint bg-surface-sunken px-3 pt-3 pb-1.5 text-left text-[11px] font-semibold tracking-[0.08em] uppercase">{group.group}</th></tr>
           {group.rows.map(row => <tr key={row.label}>
-            <th scope="row" className="px-3 py-2.5 text-left align-top"><span className="text-ink block text-[12.5px] font-medium">{row.label}</span>{row.detail ? <span className="text-ink-faint block text-[11.5px] font-normal">{row.detail}</span> : null}</th>
+            <th scope="row" className="px-3 py-2.5 text-left align-top"><span className="text-ink block text-[13px] font-medium">{row.label}</span>{row.detail ? <span className="text-ink-faint block text-[12px] font-normal">{row.detail}</span> : null}</th>
             <Cell mark={row.ledgerline[0]} text={row.ledgerline[1]} strong />
             <Cell mark={row.balabook[0]} text={row.balabook[1]} />
           </tr>)}
@@ -81,11 +81,11 @@ export default async function ComparePage() {
     </section>
     <div className="grid gap-4 lg:grid-cols-2">
       {PRICES.map(price => <section key={price.name} className={cn("ll-panel px-4 py-3", price.name === "Ledgerline" && "border-brand-200 bg-brand-50")}>
-        <h3 className={cn("text-[13px] font-semibold", price.name === "Ledgerline" ? "text-brand" : "text-ink")}>{price.name}</h3>
-        <ul className="text-ink-muted mt-1.5 space-y-1 text-[12px] leading-relaxed">{price.lines.map(line => <li key={line}>{line}</li>)}</ul>
+        <h3 className={cn("text-[13.5px] font-semibold", price.name === "Ledgerline" ? "text-brand" : "text-ink")}>{price.name}</h3>
+        <ul className="text-ink-muted mt-1.5 space-y-1 text-[12.5px] leading-relaxed">{price.lines.map(line => <li key={line}>{line}</li>)}</ul>
       </section>)}
     </div>
-    <section className="ll-panel text-ink-muted space-y-1.5 px-4 py-3 text-[12px] leading-relaxed">
+    <section className="ll-panel text-ink-muted space-y-1.5 px-4 py-3 text-[12.5px] leading-relaxed">
       <p><span className="text-ink font-medium">Balabook also lists</span> 30+ currencies, Cyprus payroll, mobile apps, an API and MCP, and AI chat. Built by Factory 39 for Anyscript Ltd, launched October 2024.</p>
       <p><span className="text-ink font-medium">Others in Cyprus:</span> Cybooks, about €29–67 a month on a third-party listing, with Bank of Cyprus, Hellenic and Revolut connections and payroll &ldquo;upcoming&rdquo;; Sumly.cy from €39 a month.</p>
       <p className="text-ink-faint">“Not stated” means the competitor&apos;s public pages did not say, not that the product lacks it.</p>

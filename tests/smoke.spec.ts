@@ -1046,13 +1046,41 @@ test("a practice with many clients switches company by typing: a few letters or 
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/c\/pixelforge$/);
   await page.keyboard.press("Control+k");
-  await page.getByLabel("Find a company").fill("412907");
-  await expect(page.getByRole("dialog").getByRole("link")).toHaveText(/Aegean Blue Marine Services Ltd\s*HE 412907/);
+  await page.getByRole("combobox", { name: "Search or jump to" }).fill("412907");
+  await expect(page.getByRole("group", { name: "Companies" }).getByRole("option")).toHaveText(/Aegean Blue Marine Services Ltd\s*HE 412907/);
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/c\/aegean-blue-marine$/);
   // The last ones opened come first next time.
   await page.getByRole("button", { name: /Aegean Blue/ }).first().click();
   await expect(page.getByRole("dialog").getByRole("link").nth(2)).toHaveText(/Pixelforge Studio Ltd/);
+});
+
+test("the command palette finds anything from any page: an invoice by its number, a customer, an action, a company", async ({ page }) => {
+  await page.goto("/c/larnaka-roast");
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: "Search and jump" });
+  await expect(palette.getByRole("group", { name: "Actions" }).getByRole("option").first()).toHaveText(/New invoice/);
+  await palette.getByRole("combobox").fill("coral");
+  await expect(palette.getByRole("group", { name: "Customers" }).getByRole("option")).toHaveText(/Coral Sands Hotel Ltd/);
+  await expect(palette.getByRole("group", { name: "Invoices" }).getByRole("option").first()).toContainText("Coral Sands Hotel Ltd ·");
+  await palette.getByRole("combobox").fill("0116");
+  await palette.getByRole("option", { name: /LRC-2026-0116/ }).waitFor();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/c\/larnaka-roast\/sales\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { name: "Invoice LRC-2026-0116" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Search or jump to" }).click();
+  await page.getByRole("combobox", { name: "Search or jump to" }).fill("record bill");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/c\/larnaka-roast\/bills\/new$/);
+
+  // At the practice, it finds companies by name or number, and the clients' records across every company.
+  await page.goto("/");
+  await page.getByRole("button", { name: "Search or jump to" }).click();
+  await page.getByRole("combobox", { name: "Search or jump to" }).fill("troodos");
+  await expect(page.getByRole("group", { name: "Companies" }).getByRole("option").first()).toHaveText(/Troodos Gold Olive Oil Ltd/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Search and jump" })).toHaveCount(0);
 });
 
 test("a big practice's dashboard puts the clients that need something first, yours apart, found by name or number; deadlines open on one day", async ({ page }) => {

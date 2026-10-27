@@ -55,7 +55,7 @@ export function IntentButton({ intent, primary, children }: { intent: string; pr
   const { pending, data } = useFormStatus();
   const mine = pending && data?.get("intent") === intent;
   return <button type="submit" name="intent" value={intent} disabled={pending}
-    className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12.5px] font-medium transition-colors disabled:opacity-60",
+    className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors disabled:opacity-60",
       primary ? "bg-brand hover:bg-brand-dark text-white" : "border-hairline-strong text-ink hover:bg-muted border")}>
     {mine ? <Loader2 className="size-3.5 animate-spin" /> : null}{children}
   </button>;
@@ -138,8 +138,8 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
     {kind === "invoice" ? <Field label="Their reference" htmlFor={`${uid}-reference`} hint="optional: their purchase order number, printed on the invoice" className="max-w-md">
       <TextInput id={`${uid}-reference`} name="reference" defaultValue={document?.reference ?? ""} maxLength={80} autoComplete="off" placeholder="e.g. PO-4471" />
     </Field> : null}
-    {registered ? note ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">{note}</p> : null
-      : <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">Not registered for VAT: no VAT is charged, and the invoice says so.</p>}
+    {registered ? note ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">{note}</p> : null
+      : <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">Not registered for VAT: no VAT is charged, and the invoice says so.</p>}
     <SalesLineEditor key={`${editorKey}-${customerId}`} accounts={accounts} items={items} initial={start?.lines} noVat={treatment !== "standard"}
       defaultAccount={customer?.default_account_id ?? salesAccount} error={errors.lines} />
     <Field label="Notes" htmlFor={`${uid}-notes`} hint="printed on the document">
@@ -154,7 +154,7 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
         <Field label="Paid by" htmlFor={`${uid}-paid-method`}>
           <NativeSelect id={`${uid}-paid-method`} name="paid_method" defaultValue="card">{INVOICE_PAYMENT_METHODS.map(method => <option key={method} value={method}>{METHODS[method]}</option>)}</NativeSelect>
         </Field>
-        <p className="text-ink-faint text-[11.5px] sm:col-span-2">Issued and paid in one step, on the invoice date. The payment waits in the bank to be matched to the statement.</p>
+        <p className="text-ink-faint text-[12px] sm:col-span-2">Issued and paid in one step, on the invoice date. The payment waits in the bank to be matched to the statement.</p>
       </div> : null}
     </div> : null}
     <FormError message={state.error} />
@@ -163,8 +163,8 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
         <IntentButton intent={kind === "invoice" ? "issue" : "send"} primary>{kind === "invoice" ? paidNow ? "Save, issue and mark paid" : "Save and issue" : "Save and mark as sent"}</IntentButton>
         {!paidNow ? <IntentButton intent="draft">Save as draft</IntentButton> : null}
       </>}
-      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[12.5px]">Cancel</Link>
+      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[13px]">Cancel</Link>
     </div>
-    {kind === "invoice" ? <p className="text-ink-faint text-[11.5px]">Issuing posts it to the books: the customer owes the total, each line&apos;s account earns its net, and the VAT is owed. A draft posts nothing.</p> : null}
+    {kind === "invoice" ? <p className="text-ink-faint text-[12px]">Issuing posts it to the books: the customer owes the total, each line&apos;s account earns its net, and the VAT is owed. A draft posts nothing.</p> : null}
   </form>;
 }

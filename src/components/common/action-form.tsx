@@ -30,8 +30,8 @@ export function ActionForm({ action, children, label = "Save changes", pendingLa
     {children}
     <FormError message={state.error} />
     <DuplicateNotice duplicates={state.duplicates} noun={noun} />
-    {state.fieldErrors ? <ul className="text-critical space-y-1 text-[12px]" role="alert">{Object.entries(state.fieldErrors).map(([key, value]) => <li key={key}>{key.replaceAll("_", " ")}: {value}</li>)}</ul> : null}
-    <div className="flex flex-wrap items-center gap-3"><SubmitButton pendingLabel={pendingLabel} variant={variant}>{label}</SubmitButton>{state.ok && !dirty ? <p role="status" className="text-positive inline-flex items-center gap-1.5 text-[12.5px]"><Check className="size-3.5" />Saved</p> : null}</div>
+    {state.fieldErrors ? <ul className="text-critical space-y-1 text-[12.5px]" role="alert">{Object.entries(state.fieldErrors).map(([key, value]) => <li key={key}>{key.replaceAll("_", " ")}: {value}</li>)}</ul> : null}
+    <div className="flex flex-wrap items-center gap-3"><SubmitButton pendingLabel={pendingLabel} variant={variant}>{label}</SubmitButton>{state.ok && !dirty ? <p role="status" className="text-positive inline-flex items-center gap-1.5 text-[13px]"><Check className="size-3.5" />Saved</p> : null}</div>
   </form>;
 }
 

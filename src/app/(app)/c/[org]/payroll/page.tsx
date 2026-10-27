@@ -22,8 +22,8 @@ export default async function PayrollPage() {
   </PageBody>;
   const draft = runs.find(run => run.status === "draft");
   const current = employees.filter(employee => !employee.leave_date || employee.leave_date >= today);
-  const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap first:px-4 last:pr-4";
-  const cell = "px-3 py-2.5 text-[12.5px] first:px-4 last:pr-4";
+  const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap first:px-4 last:pr-4";
+  const cell = "px-3 py-2.5 text-[13px] first:px-4 last:pr-4";
 
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title="Payroll"
@@ -54,12 +54,12 @@ export default async function PayrollPage() {
       {employees.length ? <ul className="divide-hairline divide-y">{employees.map(employee => {
         const left = employee.leave_date && employee.leave_date < today;
         return <li key={employee.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2.5">
-          <Link href={`/accounts/payroll/employees/${employee.id}`} className={cn("min-w-0 flex-1 text-[12.5px] font-medium hover:underline", left ? "text-ink-muted" : "text-ink")}>{employee.name}</Link>
-          <span className="text-ink-muted text-[12px]">{employee.job_title ?? ""}{left ? ` · left ${formatDate(employee.leave_date)}` : ` · since ${formatDate(employee.start_date)}`}</span>
-          <span className="text-ink w-28 text-right text-[12.5px] tabular-nums">{formatAmount(employee.monthly_salary)}</span>
+          <Link href={`/accounts/payroll/employees/${employee.id}`} className={cn("min-w-0 flex-1 text-[13px] font-medium hover:underline", left ? "text-ink-muted" : "text-ink")}>{employee.name}</Link>
+          <span className="text-ink-muted text-[12.5px]">{employee.job_title ?? ""}{left ? ` · left ${formatDate(employee.leave_date)}` : ` · since ${formatDate(employee.start_date)}`}</span>
+          <span className="text-ink w-28 text-right text-[13px] tabular-nums">{formatAmount(employee.monthly_salary)}</span>
         </li>;
       })}</ul> : <RecordEmpty title="No employees yet">Add each employee with their salary, tax and social insurance numbers, and the year so far from the previous payroll.</RecordEmpty>}
-      {runs.some(run => run.status === "posted") ? <p className="border-hairline text-ink-muted border-t px-4 py-2.5 text-[12px]">
+      {runs.some(run => run.status === "posted") ? <p className="border-hairline text-ink-muted border-t px-4 py-2.5 text-[12.5px]">
         For the year: <a href={`/c/${org.slug}/payroll/year?year=${today.slice(0, 4)}`} className="text-brand hover:underline" download>each employee’s pay and tax in {today.slice(0, 4)}</a>, for the employer’s return (TD7) and their certificates (TD63).
       </p> : null}
     </RecordSection>

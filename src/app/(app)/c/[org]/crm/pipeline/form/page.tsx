@@ -58,11 +58,11 @@ export default async function WebsiteFormPage() {
       action={key ? <a href={`/f/${key.token}`} target="_blank" rel="noopener" className={recordOutlineButton}><ExternalLink className="size-3.5" />Open the form</a> : null} />
 
     <RecordSection title="The form" hint={key ? undefined : "Off"} action={key ? <RecordBadge tone="positive">Taking enquiries</RecordBadge> : <RecordBadge>Off</RecordBadge>}>
-      <div className="space-y-3 px-4 py-3.5 text-[12.5px]">
+      <div className="space-y-3 px-4 py-3.5 text-[13px]">
         {key ? <p className="text-ink-muted">{key.uses ? `${key.uses} enquir${key.uses === 1 ? "y" : "ies"} sent with this key, the last ${formatAgo(key.last_used_at)}.` : "No enquiries sent with this key yet."} Key made {formatDate(key.created_at)}: <span className="text-ink font-mono">{key.token.slice(0, 12)}…</span></p>
           : <p className="text-ink-muted">The form is off, so nothing from a website can reach the pipeline. Turn it on to get a key, a hosted form and a snippet for your own site.</p>}
         <FormKeyActions live={Boolean(key)} />
-        {key ? <p className="text-ink-faint text-[11.5px]">The key can only add enquiries, so it is safe in your website’s HTML. A new key stops the old one at once.</p> : null}
+        {key ? <p className="text-ink-faint text-[12px]">The key can only add enquiries, so it is safe in your website’s HTML. A new key stops the old one at once.</p> : null}
       </div>
     </RecordSection>
 
@@ -70,19 +70,19 @@ export default async function WebsiteFormPage() {
       <RecordSection title="On your own website" hint="Paste it where the form should go, and style it as you like">
         <div className="space-y-3 p-4">
           <CopyBlock label="The form" text={snippet} />
-          <p className="text-ink-muted text-[12px]">Or link straight to the form, in your colours: <a href={`/f/${key.token}`} target="_blank" rel="noopener" className="text-brand font-mono hover:underline">{origin}/f/{key.token.slice(0, 12)}…</a></p>
+          <p className="text-ink-muted text-[12.5px]">Or link straight to the form, in your colours: <a href={`/f/${key.token}`} target="_blank" rel="noopener" className="text-brand font-mono hover:underline">{origin}/f/{key.token.slice(0, 12)}…</a></p>
         </div>
       </RecordSection>
       <RecordSection title="From your own code" hint="JSON in, JSON back">
         <div className="space-y-3 p-4"><CopyBlock label="Post an enquiry" text={curl} />
-          <p className="text-ink-muted text-[12px]">Send <span className="font-mono">name</span> and an <span className="font-mono">email</span> or <span className="font-mono">phone</span>; <span className="font-mono">company</span>, <span className="font-mono">service</span>, <span className="font-mono">message</span> and <span className="font-mono">source</span> are optional. Up to 20 enquiries in 10 minutes from one key.</p>
+          <p className="text-ink-muted text-[12.5px]">Send <span className="font-mono">name</span> and an <span className="font-mono">email</span> or <span className="font-mono">phone</span>; <span className="font-mono">company</span>, <span className="font-mono">service</span>, <span className="font-mono">message</span> and <span className="font-mono">source</span> are optional. Up to 20 enquiries in 10 minutes from one key.</p>
         </div>
       </RecordSection>
     </> : null}
 
     <RecordSection title="Arrived from the web">
       {recent.length ? <ul className="divide-hairline divide-y">{recent.map(row => <li key={row.id}>
-        <Link href={`${base}/${row.id}`} className="hover:bg-surface-sunken flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2.5 text-[12.5px]">
+        <Link href={`${base}/${row.id}`} className="hover:bg-surface-sunken flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2.5 text-[13px]">
           <span className="text-ink font-medium">{row.full_name}</span>
           <span className="text-ink-muted">{row.company ?? ""}</span>
           <span className="text-ink-faint">{row.channel === "api" ? "API" : "Form"} · {row.owner}</span>

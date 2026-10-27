@@ -18,7 +18,7 @@ export function LedgerlineMark({ className, title = "Ledgerline" }: { className?
 export function LedgerlineLockup({ className, size = "md" }: { className?: string; size?: "sm" | "md" | "lg" }) {
   return <span className={cn("inline-flex items-center gap-1.5", className)}>
     <LedgerlineMark className={size === "lg" ? "size-7" : size === "sm" ? "size-3.5" : "size-5"} title="" />
-    <span className={cn("leading-none font-semibold tracking-[-0.01em]", size === "lg" ? "text-[20px]" : size === "sm" ? "text-[11px]" : "text-[14px]")}>
+    <span className={cn("leading-none font-semibold tracking-[-0.01em]", size === "lg" ? "text-[20px]" : size === "sm" ? "text-[11.5px]" : "text-[14px]")}>
       <span className="text-ink">Ledger</span><span style={{ color: "#0d6e6e" }}>line</span>
     </span>
   </span>;

@@ -43,7 +43,7 @@ export function TimerControl({ running, currentSlug }: { running: TimerRunning |
     return () => { document.removeEventListener("mousedown", away); window.removeEventListener("keydown", key); };
   }, [open]);
 
-  if (running) return <form action={stopTimer} className="border-hairline-strong bg-surface flex h-8 min-w-0 items-center gap-2 rounded-full border pr-1 pl-3 text-[12.5px]">
+  if (running) return <form action={stopTimer} className="border-hairline-strong bg-surface flex h-8 min-w-0 items-center gap-2 rounded-full border pr-1 pl-3 text-[13px]">
     <span aria-hidden className="bg-critical size-2 shrink-0 animate-pulse rounded-full motion-reduce:animate-none" />
     <span className="text-ink font-medium"><Elapsed since={running.started_at} /></span>
     <span className="text-ink-muted hidden max-w-[200px] truncate lg:inline">{running.company.replace(/ (Ltd|Limited)$/, "")} · {running.work}</span>
@@ -53,24 +53,24 @@ export function TimerControl({ running, currentSlug }: { running: TimerRunning |
   const current = companies.find(company => company.slug === currentSlug) ?? companies.find(company => !company.practice);
   return <div ref={ref} className="relative">
     <button type="button" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-haspopup="dialog"
-      className="border-hairline-strong text-ink-muted hover:bg-muted hover:text-ink flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[12.5px] active:scale-[0.98]">
+      className="border-hairline-strong text-ink-muted hover:bg-muted hover:text-ink flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[13px] active:scale-[0.98]">
       <Timer className="size-3.5" /><span className="hidden sm:inline">Start timer</span>
     </button>
     <MenuPanel open={open} role="dialog" className="bg-surface border-hairline absolute top-full right-0 z-40 mt-2 w-[19rem] rounded-lg border p-3.5 shadow-lg">
       <form action={action} onSubmit={() => setOpen(false)} className="space-y-3">
-        <p className="text-ink text-[13px] font-semibold">Start the clock</p>
-        <label className="block space-y-1 text-[12px]"><span className="text-ink-muted">For</span>
+        <p className="text-ink text-[13.5px] font-semibold">Start the clock</p>
+        <label className="block space-y-1 text-[12.5px]"><span className="text-ink-muted">For</span>
           {/* Made again once the list has come, and on another company's page, so it starts on the company being looked at. */}
           <select key={`${currentSlug ?? ""}:${loaded ? "loaded" : "loading"}`} name="organisation_id" defaultValue={current?.id} required disabled={!loaded}
-            className="border-hairline-strong bg-surface text-ink h-8 w-full rounded-md border px-2 text-[12.5px]">
+            className="border-hairline-strong bg-surface text-ink h-8 w-full rounded-md border px-2 text-[13px]">
             {loaded ? companies.map(company => <option key={company.id} value={company.id}>{company.practice ? `${company.name} (the firm’s own work)` : company.name}</option>)
               : <option value="">Loading the clients…</option>}
           </select></label>
-        <label className="block space-y-1 text-[12px]"><span className="text-ink-muted">Working on</span>
-          <input name="work" required maxLength={200} list="work-suggestions" autoFocus placeholder="VAT return" className="border-hairline-strong bg-surface text-ink h-8 w-full rounded-md border px-2.5 text-[12.5px]" />
+        <label className="block space-y-1 text-[12.5px]"><span className="text-ink-muted">Working on</span>
+          <input name="work" required maxLength={200} list="work-suggestions" autoFocus placeholder="VAT return" className="border-hairline-strong bg-surface text-ink h-8 w-full rounded-md border px-2.5 text-[13px]" />
           <datalist id="work-suggestions">{WORK_SUGGESTIONS.map(work => <option key={work} value={work} />)}</datalist></label>
         <SubmitButton size="sm" pendingLabel="Starting…" disabled={!loaded}><Timer className="size-3.5" />Start</SubmitButton>
-        {state.error ? <p role="alert" className="text-critical text-[12px]">{state.error}</p> : null}
+        {state.error ? <p role="alert" className="text-critical text-[12.5px]">{state.error}</p> : null}
       </form>
     </MenuPanel>
   </div>;

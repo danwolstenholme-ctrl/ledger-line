@@ -31,7 +31,7 @@ const cents = (value: string) => {
 const plain = (value: number) => (value / 100).toFixed(2);
 const ROW = "xl:grid-cols-[minmax(0,1fr)_12rem_6.5rem_5rem_6rem_2.25rem] xl:gap-3";
 /** Shown above each field while lines stack; each field carries its full name for screen readers. */
-const LABEL = "text-ink-muted block text-[11.5px] xl:hidden";
+const LABEL = "text-ink-muted block text-[12px] xl:hidden";
 
 /**
  * Lines as the supplier printed them: what it was, which account it belongs
@@ -89,7 +89,7 @@ export function LineEditor({ accounts, initial, defaultRate, defaultAccount = ""
       vat_rate: noVat ? 0 : line.vat_rate, vat_amount: noVat || cents(line.vat_amount) === null ? 0 : cents(line.vat_amount)! / 100,
     })))} />
     {/* One row per line on a wide screen; on anything narrower each line stacks, labelled, as the invoice form's do. */}
-    <div aria-hidden className={cn("text-ink-faint hidden text-[11px] font-semibold tracking-[0.06em] uppercase xl:grid", ROW)}>
+    <div aria-hidden className={cn("text-ink-faint hidden text-[11.5px] font-semibold tracking-[0.06em] uppercase xl:grid", ROW)}>
       <span>Description</span><span>Account</span><span className="text-right">Net {symbol}</span><span>VAT</span><span className="text-right">VAT {symbol}</span><span />
     </div>
     <ol className="space-y-3">{lines.map((line, index) => <li key={line.key} className={cn("border-hairline grid gap-2 border-b pb-3 last:border-b-0 last:pb-0 xl:items-start xl:border-b-0 xl:pb-0", ROW)}>
@@ -111,13 +111,13 @@ export function LineEditor({ accounts, initial, defaultRate, defaultAccount = ""
       </div>
     </li>)}</ol>
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <button type="button" onClick={add} className="text-brand inline-flex items-center gap-1 text-[12.5px] font-medium hover:underline touch:min-h-10"><Plus className="size-3.5" />Add a line</button>
-      <dl id={`${uid}-totals`} className="grid grid-cols-[auto_auto] gap-x-6 gap-y-0.5 text-[12.5px]">
+      <button type="button" onClick={add} className="text-brand inline-flex items-center gap-1 text-[13px] font-medium hover:underline touch:min-h-10"><Plus className="size-3.5" />Add a line</button>
+      <dl id={`${uid}-totals`} className="grid grid-cols-[auto_auto] gap-x-6 gap-y-0.5 text-[13px]">
         <dt className="text-ink-muted">Net</dt><dd className="text-right tabular-nums">{formatAmount(net / 100, currency)}</dd>
         <dt className="text-ink-muted">{reverseCharge ? "VAT due and reclaimed" : noVat ? "No VAT charged" : "VAT"}</dt><dd className="text-right tabular-nums">{formatAmount(vat / 100, currency)}</dd>
         <dt className="text-ink font-semibold">{reverseCharge ? "Total, no VAT charged" : "Total"}</dt><dd className={cn("text-right font-semibold tabular-nums")}>{formatAmount((reverseCharge ? net : net + vat) / 100, currency)}</dd>
       </dl>
     </div>
-    {error ? <p role="alert" className="text-critical text-[12px]">{error}</p> : null}
+    {error ? <p role="alert" className="text-critical text-[12.5px]">{error}</p> : null}
   </div>;
 }

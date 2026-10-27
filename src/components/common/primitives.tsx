@@ -56,22 +56,22 @@ export function PanelHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="border-hairline flex min-h-10 items-center gap-3 border-b px-4 py-2">
+    <header className="border-hairline flex min-h-11 items-center gap-3 border-b px-4 py-2">
       <div className="flex min-w-0 items-baseline gap-2">
-        <h2 className="text-ink text-[13px] font-semibold tracking-[0.01em]">
+        <h2 className="text-ink text-[14px] font-semibold tracking-[-0.005em]">
           {title}
         </h2>
         {typeof count === "number" ? (
           <span
             data-numeric
-            className="text-ink-faint text-[11.5px] tabular-nums"
+            className="text-ink-faint text-[12px] tabular-nums"
           >
             {count}
           </span>
         ) : null}
       </div>
       {hint ? (
-        <p className="text-ink-faint hidden truncate text-[11.5px] sm:block">
+        <p className="text-ink-faint hidden truncate text-[12px] sm:block">
           {hint}
         </p>
       ) : null}
@@ -97,9 +97,9 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("px-4 py-3.5", className)}>
-      <p className="text-ink text-[12.5px] font-medium">{title}</p>
+      <p className="text-ink text-[13px] font-medium">{title}</p>
       {body ? (
-        <p className="text-ink-muted mt-0.5 max-w-[70ch] text-[12px] leading-relaxed">{body}</p>
+        <p className="text-ink-muted mt-0.5 max-w-[70ch] text-[12.5px] leading-relaxed">{body}</p>
       ) : null}
     </div>
   );
@@ -112,10 +112,10 @@ export function EmptyState({
 export function LoadError({ what }: { what: string }) {
   return (
     <div className="px-4 py-3.5">
-      <p className="text-critical text-[12.5px] font-medium">
+      <p className="text-critical text-[13px] font-medium">
         Could not load {what}
       </p>
-      <p className="text-ink-muted mt-0.5 text-[12px]">
+      <p className="text-ink-muted mt-0.5 text-[12.5px]">
         Refresh the page. If it keeps happening, contact your administrator.
       </p>
     </div>

@@ -25,7 +25,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
     <ReportHeading period={periodLabel(period.from, period.to)} />
     {movements.failed || balances.failed ? <RecordFailure what="the cash flow" /> : <>
       <Statement rows={cashFlowRows(flow)} columns={[{ label: periodHeading(period.from, period.to), from: period.from, to: period.to }]} />
-      <p className="text-ink-faint px-0.5 text-[11.5px]">Money moved between the company’s own bank accounts is left out. {flow.reconciles ? "The start and end figures agree with the bank balances." : "The figures do not agree with the bank balances; the trial balance will show why."}</p>
+      <p className="text-ink-faint px-0.5 text-[12px]">Money moved between the company’s own bank accounts is left out. {flow.reconciles ? "The start and end figures agree with the bank balances." : "The figures do not agree with the bank balances; the trial balance will show why."}</p>
     </>}
   </PageBody>;
 }

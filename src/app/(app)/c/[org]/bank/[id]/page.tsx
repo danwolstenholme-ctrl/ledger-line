@@ -87,7 +87,7 @@ export default async function ReconcilePage({ params, searchParams }: {
       action={<>
         <Link href={`/accounts/bank/${account.id}/import`} className={recordButton}><FileUp className="size-4" />Import a statement</Link>
       </>} />
-    {imported !== null && Number.isFinite(imported) ? <p role="status" className="border-positive-line bg-positive-soft text-positive rounded-lg border px-4 py-2.5 text-[12.5px]">
+    {imported !== null && Number.isFinite(imported) ? <p role="status" className="border-positive-line bg-positive-soft text-positive rounded-lg border px-4 py-2.5 text-[13px]">
       Imported {imported} line{imported === 1 ? "" : "s"}.{skipped ? ` ${skipped} ${skipped === 1 ? "was" : "were"} already here and left as they were.` : ""}
     </p> : null}
 
@@ -124,9 +124,9 @@ export default async function ReconcilePage({ params, searchParams }: {
       <PanelHeader title="In the books, not on a statement yet" hint="Recorded since the statements began; each clears when its line is matched" />
       <ul className="divide-hairline divide-y">{data.outstanding.map(item => <li key={`${item.kind}-${item.id}`}>
         <Link href={`${DOCUMENT_HREF[item.kind]}${item.document_id}`} className="hover:bg-surface-sunken flex items-baseline gap-3 px-4 py-2 touch:min-h-11">
-          <span className="text-ink-muted w-[5.5rem] shrink-0 text-[12px] tabular-nums">{formatDate(item.item_date)}</span>
-          <span className="text-ink min-w-0 flex-1 truncate text-[12.5px]">{item.label}{item.reference ? <span className="text-ink-faint"> · {item.reference}</span> : null}</span>
-          <span className={cn("shrink-0 text-[12.5px] tabular-nums", Number(item.amount) > 0 ? "text-positive" : "text-ink")}>{Number(item.amount) < 0 ? "−" : ""}{formatAmount(Math.abs(Number(item.amount)))}</span>
+          <span className="text-ink-muted w-[5.5rem] shrink-0 text-[12.5px] tabular-nums">{formatDate(item.item_date)}</span>
+          <span className="text-ink min-w-0 flex-1 truncate text-[13px]">{item.label}{item.reference ? <span className="text-ink-faint"> · {item.reference}</span> : null}</span>
+          <span className={cn("shrink-0 text-[13px] tabular-nums", Number(item.amount) > 0 ? "text-positive" : "text-ink")}>{Number(item.amount) < 0 ? "−" : ""}{formatAmount(Math.abs(Number(item.amount)))}</span>
         </Link>
       </li>)}</ul>
     </Panel> : null}

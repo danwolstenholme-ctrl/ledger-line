@@ -12,14 +12,14 @@ import { useCurrency } from "@/components/common/regime";
 export function SupplierCreditVoidButton({ id, isVoid }: { id: string; isVoid: boolean }) {
   const [state, action] = useActionState(setSupplierCreditVoid, idleState);
   const [armed, setArmed] = useState(false);
-  if (!isVoid && !armed) return <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical inline-flex items-center gap-1.5 text-[12.5px]"><Ban className="size-3.5" />Void this credit note</button>;
+  if (!isVoid && !armed) return <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical inline-flex items-center gap-1.5 text-[13px]"><Ban className="size-3.5" />Void this credit note</button>;
   return <form action={action} className="inline-flex flex-col gap-1">
     <input type="hidden" name="id" value={id} /><input type="hidden" name="void" value={isVoid ? "false" : "true"} />
     {isVoid ? <SubmitButton size="sm" variant="outline" pendingLabel="Restoring…"><RotateCcw className="size-3.5" />Restore</SubmitButton>
-      : <span className="flex flex-wrap items-center gap-2 text-[12.5px]">Void it? The bills it was set against will be owed again.
+      : <span className="flex flex-wrap items-center gap-2 text-[13px]">Void it? The bills it was set against will be owed again.
         <SubmitButton size="sm" variant="outline" pendingLabel="Voiding…">Yes, void it</SubmitButton>
-        <button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12px]">Keep it</button></span>}
-    {state.error ? <span role="alert" className="text-critical text-[11.5px]">{state.error}</span> : null}
+        <button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12.5px]">Keep it</button></span>}
+    {state.error ? <span role="alert" className="text-critical text-[12px]">{state.error}</span> : null}
   </form>;
 }
 
@@ -29,7 +29,7 @@ export function AllocateSupplierCreditForm({ creditId, remaining, bills }: { cre
   const [billId, setBillId] = useState(bills[0]?.id ?? "");
   const bill = bills.find(item => item.id === billId);
   const errors = state.fieldErrors ?? {};
-  if (!bills.length) return <p className="text-ink-muted text-[12px]">No open bills from this supplier to set it against.</p>;
+  if (!bills.length) return <p className="text-ink-muted text-[12.5px]">No open bills from this supplier to set it against.</p>;
   return <form action={action} className="space-y-3" key={`${remaining}-${bills.length}`}>
     <input type="hidden" name="supplier_credit_id" value={creditId} />
     <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3">

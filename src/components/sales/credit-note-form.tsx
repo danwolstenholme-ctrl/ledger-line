@@ -39,7 +39,7 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
   return <form action={action} className="space-y-5" noValidate>
     {document ? <input type="hidden" name="id" value={document.id} /> : null}
     {invoice ? <input type="hidden" name="invoice_id" value={invoice.id} /> : null}
-    {invoice ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">
+    {invoice ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px]">
       Credits invoice <span className="text-ink font-mono font-medium">{invoice.number}</span> ({formatAmount(invoice.total, currency)}). Up to {formatAmount(left!, currency)} can still be credited.
       {invoice.balance > 0 ? ` Issued, it comes off the ${formatAmount(invoice.balance, currency)} still owed on it; anything more is kept as credit to use or refund.` : " The invoice is paid, so the credit is kept to use against another invoice or to refund."}
     </p> : null}
@@ -65,8 +65,8 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
       </Field> : <input type="hidden" name="vat_treatment" value="exempt" />}
     </div>
     <div className="space-y-1.5">
-      <p className="text-ink text-[12.5px] font-medium">What is credited</p>
-      <p className="text-ink-faint text-[11.5px]">{invoice ? "The invoice's lines, to start with. Remove what is not being credited, or lower a quantity or a price." : "As on an invoice: each line takes its net back off its income account."}</p>
+      <p className="text-ink text-[13px] font-medium">What is credited</p>
+      <p className="text-ink-faint text-[12px]">{invoice ? "The invoice's lines, to start with. Remove what is not being credited, or lower a quantity or a price." : "As on an invoice: each line takes its net back off its income account."}</p>
       <SalesLineEditor key={`${editorKey}-${customerId}`} accounts={accounts} items={items} initial={document?.lines ?? invoice?.lines} noVat={treatment !== "standard"}
         defaultAccount={customer?.default_account_id ?? salesAccount} error={errors.lines} />
     </div>
@@ -77,8 +77,8 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
     <div className="flex flex-wrap items-center gap-3">
       <IntentButton intent="issue" primary>Save and issue</IntentButton>
       <IntentButton intent="draft">Save as draft</IntentButton>
-      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[12.5px]">Cancel</Link>
+      <Link href={cancelHref} className="text-ink-muted hover:text-ink text-[13px]">Cancel</Link>
     </div>
-    <p className="text-ink-faint text-[11.5px]">Issuing posts the reverse of a sale: income and the VAT due fall, and the customer owes less. It comes off the VAT return for the period of its date.</p>
+    <p className="text-ink-faint text-[12px]">Issuing posts the reverse of a sale: income and the VAT due fall, and the customer owes less. It comes off the VAT return for the period of its date.</p>
   </form>;
 }

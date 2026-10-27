@@ -11,7 +11,7 @@ export function ListSearch({ action, value, placeholder, keep = {} }: { action: 
   return <NavigationForm action={action} method="get" role="search" className="border-hairline-strong bg-surface flex h-8 w-full items-center gap-2 rounded-md border px-2.5 sm:w-72">
     {Object.entries(keep).map(([name, kept]) => kept ? <input key={name} type="hidden" name={name} value={kept} /> : null)}
     <Search className="text-ink-faint size-3.5 shrink-0" aria-hidden />
-    <input name="q" defaultValue={value ?? ""} placeholder={placeholder} aria-label={placeholder} className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
+    <input name="q" defaultValue={value ?? ""} placeholder={placeholder} aria-label={placeholder} className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
   </NavigationForm>;
 }
 

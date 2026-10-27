@@ -42,7 +42,7 @@ export function RepeatingForm({ values, today }: { values: Values; today: string
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…"><Repeat className="size-3.5" />{values.id ? "Save changes" : "Start repeating"}</SubmitButton>
-      {state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+      {state.ok ? <span role="status" className="text-positive text-[13px]">Saved</span> : null}
     </div>
   </form>;
 }
@@ -53,7 +53,7 @@ export function RaiseDueButton({ id, count, label }: { id?: string; count: numbe
   return <form action={action} className="flex flex-wrap items-center gap-3">
     {id ? <input type="hidden" name="id" value={id} /> : null}
     <SubmitButton pendingLabel="Raising…" disabled={count === 0}><Repeat className="size-3.5" />{label ?? `Raise ${count} due invoice${count === 1 ? "" : "s"}`}</SubmitButton>
-    {state.notice ? <span role="status" className="text-positive text-[12.5px]">{state.notice}</span> : null}
-    {state.error ? <span role="alert" className="text-critical text-[12.5px]">{state.error}</span> : null}
+    {state.notice ? <span role="status" className="text-positive text-[13px]">{state.notice}</span> : null}
+    {state.error ? <span role="alert" className="text-critical text-[13px]">{state.error}</span> : null}
   </form>;
 }

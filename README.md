@@ -62,6 +62,14 @@ to reconcile.
   jobs, tasks, calendar, each named the company's way), then **Money**
   (bank, receipts, bills, suppliers), then **Reports & tax**; the
   accountant's pages are under **More**.
+- **⌘K** (Ctrl+K, or /) from any page opens the command palette. Before
+  anything is typed it offers what is usually done next (New invoice, Record
+  a bill, Upload receipts…, in the company's own words: New patient at a
+  clinic). Type and it finds actions, pages, companies by name, HE or VAT
+  number, and the company's records: customers, invoices by number or
+  customer, bills, quotes, suppliers, products, enquiries, jobs and
+  employees, with their dates and amounts. Enter opens the one highlighted.
+  At the practice it searches every client's records.
 
 ### 1c. Everyday work, 6 minutes
 - **Raise an invoice**: choose a customer (or **+ New customer…** and type a

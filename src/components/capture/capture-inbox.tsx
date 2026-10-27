@@ -62,16 +62,16 @@ export async function CaptureInbox({ company }: { company?: OrganisationRow }) {
     <DropZone available={captureAvailable()} rehearsal={rehearsalMode()} company={company ? { id: company.id, name: company.name } : undefined} />
     <section aria-label="To review" className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-ink text-[13.5px] font-semibold">To review <span className="text-ink-faint font-normal tabular-nums">{review.length}</span></h2>
+        <h2 className="text-ink text-[14px] font-semibold">To review <span className="text-ink-faint font-normal tabular-nums">{review.length}</span></h2>
         <PostReady ids={ready.map(item => item.id)} />
       </div>
       {review.length ? <ul className="space-y-2">{review.map(item => <ReviewCard key={item.id} item={view(item)} clients={clients} />)}</ul>
-        : <p className="ll-panel text-ink-muted px-4 py-4 text-[12.5px]">{company ? "Nothing waiting. Drop a receipt or an invoice above." : "Nothing waiting. Drop a batch above: invoices from several clients can go in together."}</p>}
+        : <p className="ll-panel text-ink-muted px-4 py-4 text-[13px]">{company ? "Nothing waiting. Drop a receipt or an invoice above." : "Nothing waiting. Drop a batch above: invoices from several clients can go in together."}</p>}
     </section>
     {posted.length ? <section aria-label="Posted" className="ll-panel overflow-hidden">
-      <h2 className="border-hairline text-ink border-b px-4 py-2 text-[13px] font-semibold">Posted from capture</h2>
+      <h2 className="border-hairline text-ink border-b px-4 py-2 text-[13.5px] font-semibold">Posted from capture</h2>
       <ul className="divide-hairline divide-y">{posted.map(item => <li key={item.id}>
-        <Link href={`/c/${item.org_slug}/bills/${item.bill_id}`} className="hover:bg-surface-sunken flex items-center gap-3 px-4 py-2 text-[12.5px]">
+        <Link href={`/c/${item.org_slug}/bills/${item.bill_id}`} className="hover:bg-surface-sunken flex items-center gap-3 px-4 py-2 text-[13px]">
           <CheckCircle2 className="text-positive size-3.5 shrink-0" />
           <span className="text-ink min-w-0 flex-1 truncate">{item.extraction.supplier.name_latin}{item.extraction.invoice_number ? ` · ${item.extraction.invoice_number}` : ""}</span>
           {company ? null : <span className="text-ink-muted shrink-0">{item.org_name}</span>}

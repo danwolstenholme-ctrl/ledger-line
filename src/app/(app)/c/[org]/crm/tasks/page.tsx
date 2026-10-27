@@ -25,13 +25,13 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       <div className="p-4"><AddTodo /></div>
       <ul className="divide-hairline border-hairline divide-y border-t">{rows.map(task => <li key={task.id} className="flex items-center gap-3 px-4 py-2.5">
         <TaskCheck id={task.id} done={Boolean(task.done_at)} />
-        <span className={cn("min-w-0 flex-1 truncate text-[13px]", task.done_at ? "text-ink-faint line-through" : "text-ink")}>{task.title}</span>
+        <span className={cn("min-w-0 flex-1 truncate text-[13.5px]", task.done_at ? "text-ink-faint line-through" : "text-ink")}>{task.title}</span>
         <PriorityFlag priority={task.priority} />
         {href(task) ? <Link href={href(task)!} className="hidden md:inline-flex"><LinkChip kind={kind(task)} label={task.link_label} /></Link> : null}
-        <span className="text-ink-muted hidden w-36 truncate text-[12px] lg:inline">{task.owner}</span>
-        <span className={cn("w-24 shrink-0 text-right text-[12.5px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? formatDate(task.due_on) : "—"}</span>
+        <span className="text-ink-muted hidden w-36 truncate text-[12.5px] lg:inline">{task.owner}</span>
+        <span className={cn("w-24 shrink-0 text-right text-[13px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? formatDate(task.due_on) : "—"}</span>
       </li>)}</ul>
-      {!rows.length ? <p className="text-ink-muted px-4 py-3 text-[12.5px]">Nothing here.</p> : null}
+      {!rows.length ? <p className="text-ink-muted px-4 py-3 text-[13px]">Nothing here.</p> : null}
     </Panel>
   </PageBody>;
 }

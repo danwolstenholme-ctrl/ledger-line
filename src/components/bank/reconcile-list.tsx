@@ -60,11 +60,11 @@ const ROW = [
 ].join(" ");
 /** The column headings, shown only where every column has a place in one row. */
 const HEAD = "hidden gap-x-3 px-4 @min-[60rem]:grid @min-[60rem]:grid-cols-[1.25rem_5rem_minmax(0,1fr)_14rem_5.5rem_7rem_7.5rem] @min-[60rem]:[grid-template-areas:'check_date_desc_code_vat_amount_act']";
-const HEADING = "text-ink-faint text-[10.5px] font-semibold tracking-[0.06em] uppercase";
+const HEADING = "text-ink-faint text-[11px] font-semibold tracking-[0.06em] uppercase";
 /** What spans the account and VAT columns: a suggestion, a match, a reason. */
 const WIDE = "[grid-area:code-start/code-start/code-end/vat-end] min-w-0 self-center";
 /** A quiet select: a hairline until it is hovered or focused, so a page of them reads as a table rather than a form. */
-const QUIET = "border-hairline hover:border-hairline-strong h-7 bg-transparent pl-2 pr-6 text-[12.5px] hover:bg-surface touch:h-10";
+const QUIET = "border-hairline hover:border-hairline-strong h-7 bg-transparent pl-2 pr-6 text-[13px] hover:bg-surface touch:h-10";
 
 /**
  * The lines of one bank account still to match, each with what it most likely
@@ -91,7 +91,7 @@ export function ReconcileList({ view, lines, suggestions, documents, candidates,
   const toggle = (id: string, on: boolean) => setSelected(current => on ? [...current, id] : current.filter(item => item !== id));
   const askable = view === "to_match" && ai.available && unsure.length > 0;
   return <div className="@container">
-    {view === "to_match" && (confident.length || askable || ai.note) ? <div className="border-hairline flex flex-wrap items-center gap-x-6 gap-y-2 border-b px-4 py-2 text-[12.5px]">
+    {view === "to_match" && (confident.length || askable || ai.note) ? <div className="border-hairline flex flex-wrap items-center gap-x-6 gap-y-2 border-b px-4 py-2 text-[13px]">
       {confident.length ? <form action={action} className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <input type="hidden" name="matches" value={JSON.stringify(confident.map(line => ({ line_id: line.id, items: suggestions[line.id][0].items })))} />
         <CheckCheck aria-hidden className="text-positive size-4 shrink-0" />
@@ -104,9 +104,9 @@ export function ReconcileList({ view, lines, suggestions, documents, candidates,
         <span className="text-ink-muted">{asked.suggestions ? `AI suggested ${Object.keys(fromAi).length} of ${unsure.length}. Check each before matching.`
           : `${unsure.length} line${unsure.length === 1 ? "" : "s"} with no sure match`}</span>
         <SubmitButton size="sm" variant="outline" pendingLabel="Asking AI…"><Brain className="size-3.5" />{asked.suggestions ? "Ask again" : "Ask AI"}</SubmitButton>
-      </form> : view === "to_match" && ai.note ? <p className="text-ink-faint ml-auto text-[12px]">{ai.note}</p> : null}
-      {state.error ? <p role="alert" className="text-critical w-full text-[12px]">{state.error}</p> : null}
-      {asked.error && !asking ? <p role="alert" className="text-critical w-full text-[12px]">{asked.error}</p> : null}
+      </form> : view === "to_match" && ai.note ? <p className="text-ink-faint ml-auto text-[12.5px]">{ai.note}</p> : null}
+      {state.error ? <p role="alert" className="text-critical w-full text-[12.5px]">{state.error}</p> : null}
+      {asked.error && !asking ? <p role="alert" className="text-critical w-full text-[12.5px]">{asked.error}</p> : null}
     </div> : null}
     {selectable.length ? <BulkBar lines={selectable} chosen={chosen} suggestions={suggestions} accounts={candidates.accounts}
       onSelectAll={on => setSelected(on ? selectable.map(line => line.id) : [])} onDone={() => setSelected([])} />
@@ -132,12 +132,12 @@ function LineCells({ line }: { line: ReconcileLine }) {
   const currency = useCurrency();
   const detail = [line.counterparty, line.reference].filter(Boolean).join(" · ");
   return <>
-    <span className="text-ink-muted [grid-area:date] self-center text-[12px] whitespace-nowrap tabular-nums">{formatDate(line.txn_date)}</span>
+    <span className="text-ink-muted [grid-area:date] self-center text-[12.5px] whitespace-nowrap tabular-nums">{formatDate(line.txn_date)}</span>
     <span className="[grid-area:desc] min-w-0 self-center" title={line.description}>
-      <span className="text-ink block text-[13px] break-words @min-[40rem]:truncate">{line.description}</span>
-      {detail ? <span className="text-ink-faint block truncate text-[11.5px]">{detail}</span> : null}
+      <span className="text-ink block text-[13.5px] break-words @min-[40rem]:truncate">{line.description}</span>
+      {detail ? <span className="text-ink-faint block truncate text-[12px]">{detail}</span> : null}
     </span>
-    <span className={cn("[grid-area:amount] self-center text-right text-[13px] font-medium whitespace-nowrap tabular-nums", line.amount > 0 ? "text-positive" : "text-ink")}>{signed(line.amount, currency)}</span>
+    <span className={cn("[grid-area:amount] self-center text-right text-[13.5px] font-medium whitespace-nowrap tabular-nums", line.amount > 0 ? "text-positive" : "text-ink")}>{signed(line.amount, currency)}</span>
   </>;
 }
 
@@ -171,7 +171,7 @@ function LineToMatch({ line, suggestions, candidates, selected, onSelect }: {
 
   if (line.status === "partial") return <div className={ROW}>
     {check}<LineCells line={line} />
-    <p className={cn(WIDE, "text-caution text-[12px]")}>Partly matched: {signed(line.matched_amount, currency)} of {signed(line.amount, currency)} is explained, because something it was matched to has changed.</p>
+    <p className={cn(WIDE, "text-caution text-[12.5px]")}>Partly matched: {signed(line.matched_amount, currency)} of {signed(line.amount, currency)} is explained, because something it was matched to has changed.</p>
     <form action={unmatchLine} className="[grid-area:act] flex justify-end self-center"><input type="hidden" name="line_id" value={line.id} /><InlineSubmit>Unmatch</InlineSubmit></form>
   </div>;
 
@@ -182,8 +182,8 @@ function LineToMatch({ line, suggestions, candidates, selected, onSelect }: {
       <input type="hidden" name="items" value={JSON.stringify(items ?? [])} />
       {check}<LineCells line={line} />
       {top ? <div className={WIDE} title={top.reason}>
-        <span className="flex min-w-0 items-center gap-2"><Confidence suggestion={top} /><span className="text-ink min-w-0 truncate text-[12.5px] font-medium">{top.label}</span></span>
-        <span className="text-ink-faint block truncate text-[11.5px]">{top.reason}{others.length ? ` · ${others.length} more under the arrow` : ""}</span>
+        <span className="flex min-w-0 items-center gap-2"><Confidence suggestion={top} /><span className="text-ink min-w-0 truncate text-[13px] font-medium">{top.label}</span></span>
+        <span className="text-ink-faint block truncate text-[12px]">{top.reason}{others.length ? ` · ${others.length} more under the arrow` : ""}</span>
       </div> : <>
         <div className="[grid-area:code] min-w-0 self-center">
           <NativeSelect aria-label={moneyIn ? "Money in for" : "Spent on"} value={account} onChange={event => setAccount(event.target.value)} className={cn(QUIET, !account && "text-ink-faint")}>
@@ -204,7 +204,7 @@ function LineToMatch({ line, suggestions, candidates, selected, onSelect }: {
           <ChevronDown className={cn("size-4 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
         </button>
       </div>
-      {state.error ? <p role="alert" className="text-critical [grid-column:2/-1] text-[12px]">{state.error}</p> : null}
+      {state.error ? <p role="alert" className="text-critical [grid-column:2/-1] text-[12.5px]">{state.error}</p> : null}
     </form>
     {open ? <LineOptions line={line} candidates={candidates} others={others} /> : null}
   </>;
@@ -226,9 +226,9 @@ function LineOptions({ line, candidates, others }: { line: ReconcileLine; candid
   return <div className="border-hairline bg-surface-sunken space-y-3 border-t px-4 py-3 pl-12 @min-[40rem]:pl-[8.75rem]">
     <div role="tablist" aria-label="Ways to match this line" className="bg-muted inline-flex max-w-full flex-wrap gap-0.5 rounded-md p-0.5">
       {tabs.map(item => <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} onClick={() => setTab(item.key)}
-        className={cn("rounded px-2.5 py-1 text-[12px] transition-colors touch:min-h-10 touch:px-3.5", tab === item.key ? "bg-surface text-ink font-medium shadow-xs" : "text-ink-muted hover:text-ink")}>{item.label}</button>)}
+        className={cn("rounded px-2.5 py-1 text-[12.5px] transition-colors touch:min-h-10 touch:px-3.5", tab === item.key ? "bg-surface text-ink font-medium shadow-xs" : "text-ink-muted hover:text-ink")}>{item.label}</button>)}
     </div>
-    {tab === "suggested" ? <ul className="divide-hairline border-hairline bg-surface divide-y rounded-md border">{others.map((suggestion, index) => <li key={index} className="flex flex-wrap items-center gap-3 px-3 py-2 text-[12.5px]">
+    {tab === "suggested" ? <ul className="divide-hairline border-hairline bg-surface divide-y rounded-md border">{others.map((suggestion, index) => <li key={index} className="flex flex-wrap items-center gap-3 px-3 py-2 text-[13px]">
         <Confidence suggestion={suggestion} />
         <span className="min-w-0 flex-1"><span className="text-ink">{suggestion.label}</span><span className="text-ink-faint"> · {suggestion.reason}</span></span>
         <MatchButton lineId={line.id} items={suggestion.items} label="Use this" variant="outline" />
@@ -271,22 +271,22 @@ function DocumentPicker({ line, candidates }: { line: ReconcileLine; candidates:
   };
   return <div className="space-y-3">
     <TextInput aria-label={moneyIn ? "Search open invoices" : "Search open bills"} placeholder={moneyIn ? "Search invoice number or client" : "Search bill number or supplier"} value={query} onChange={event => setQuery(event.target.value)} />
-    {shown.length ? <ul className="divide-hairline border-hairline bg-surface divide-y rounded-md border">{shown.map(doc => <li key={doc.id} className="flex items-center gap-3 px-3 py-1.5 text-[12.5px]">
-      <span className="min-w-0 flex-1 truncate"><span className="text-ink font-mono text-[12px]">{doc.number}</span> <span className="text-ink-muted">· {doc.name}</span></span>
+    {shown.length ? <ul className="divide-hairline border-hairline bg-surface divide-y rounded-md border">{shown.map(doc => <li key={doc.id} className="flex items-center gap-3 px-3 py-1.5 text-[13px]">
+      <span className="min-w-0 flex-1 truncate"><span className="text-ink font-mono text-[12.5px]">{doc.number}</span> <span className="text-ink-muted">· {doc.name}</span></span>
       <span className="text-ink-muted tabular-nums">{formatAmount(doc.balance, currency)} owed</span>
-      <button type="button" onClick={() => add(doc)} className="text-brand text-[12px] font-medium hover:underline touch:min-h-10">Add</button>
-    </li>)}</ul> : <p className="text-ink-faint text-[12px]">{documents.length ? "Nothing else matches that search." : moneyIn ? "No invoices are open." : "No bills are open."}</p>}
+      <button type="button" onClick={() => add(doc)} className="text-brand text-[12.5px] font-medium hover:underline touch:min-h-10">Add</button>
+    </li>)}</ul> : <p className="text-ink-faint text-[12.5px]">{documents.length ? "Nothing else matches that search." : moneyIn ? "No invoices are open." : "No bills are open."}</p>}
     {chosen.length ? <div className="space-y-1.5">
-      {chosen.map((item, index) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+      {chosen.map((item, index) => <div key={item.id} className="flex flex-wrap items-center gap-2 text-[13px]">
         <span className="text-ink min-w-0 flex-1 truncate">{item.label}</span>
         <label htmlFor={`${uid}-${index}`} className="sr-only">Amount for {item.label}</label>
         <TextInput id={`${uid}-${index}`} inputMode="decimal" value={item.amount} className="w-28 text-right tabular-nums"
           onChange={event => setChosen(current => current.map(entry => entry.id === item.id ? { ...entry, amount: event.target.value } : entry))} />
         <button type="button" aria-label={`Remove ${item.label}`} onClick={() => setChosen(current => current.filter(entry => entry.id !== item.id))} className="text-ink-faint hover:text-critical grid size-8 place-items-center touch:size-10"><X className="size-3.5" /></button>
       </div>)}
-      <p className={cn("text-[12px] tabular-nums", total === target ? "text-positive" : "text-ink-muted")}>Chosen {formatAmount(total / 100, currency)} of {formatAmount(target / 100, currency)}{total < target ? ` · ${formatAmount((target - total) / 100, currency)} still to place` : ""}</p>
-      {total > target ? null : <p className="text-ink-faint text-[11.5px]">{moneyIn ? "A part payment is fine: an invoice can take less than it owes, and one payment can cover several invoices." : "A part payment is fine: a bill can take less than it owes, and one payment can cover several bills."}</p>}
-      {canCharge ? <label className="text-ink flex items-center gap-2 text-[12.5px]"><input type="checkbox" checked={charges} onChange={event => setCharges(event.target.checked)} className="size-4" />
+      <p className={cn("text-[12.5px] tabular-nums", total === target ? "text-positive" : "text-ink-muted")}>Chosen {formatAmount(total / 100, currency)} of {formatAmount(target / 100, currency)}{total < target ? ` · ${formatAmount((target - total) / 100, currency)} still to place` : ""}</p>
+      {total > target ? null : <p className="text-ink-faint text-[12px]">{moneyIn ? "A part payment is fine: an invoice can take less than it owes, and one payment can cover several invoices." : "A part payment is fine: a bill can take less than it owes, and one payment can cover several bills."}</p>}
+      {canCharge ? <label className="text-ink flex items-center gap-2 text-[13px]"><input type="checkbox" checked={charges} onChange={event => setCharges(event.target.checked)} className="size-4" />
         Record the {formatAmount(short / 100, currency)} difference as bank charges taken from the payment</label> : null}
     </div> : null}
     {chosen.length ? <MatchButton lineId={line.id} items={items} disabled={!valid} /> : null}
@@ -300,17 +300,17 @@ function RecordedPicker({ line, recorded }: { line: ReconcileLine; recorded: Rec
   const [chosen, setChosen] = useState<string[]>([]);
   const total = sameWay.filter(item => chosen.includes(item.id)).reduce((sum, item) => sum + cents(item.amount), 0);
   const items = sameWay.filter(item => chosen.includes(item.id)).map(item => ({ kind: item.kind, id: item.id }));
-  if (!sameWay.length) return <p className="text-ink-faint text-[12px]">Nothing recorded {line.amount > 0 ? "coming into" : "going out of"} this account is waiting for a statement line.</p>;
+  if (!sameWay.length) return <p className="text-ink-faint text-[12.5px]">Nothing recorded {line.amount > 0 ? "coming into" : "going out of"} this account is waiting for a statement line.</p>;
   return <div className="space-y-3">
     <ul className="divide-hairline border-hairline bg-surface divide-y rounded-md border">{sameWay.map(item => <li key={`${item.kind}-${item.id}`}>
-      <label className="flex cursor-pointer items-center gap-3 px-3 py-1.5 text-[12.5px] touch:min-h-11">
+      <label className="flex cursor-pointer items-center gap-3 px-3 py-1.5 text-[13px] touch:min-h-11">
         <input type="checkbox" className="size-4" checked={chosen.includes(item.id)} onChange={event => setChosen(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} />
         <span className="text-ink-muted w-[5.5rem] shrink-0 tabular-nums">{formatDate(item.item_date)}</span>
         <span className="text-ink min-w-0 flex-1 truncate">{item.label}{item.reference ? <span className="text-ink-faint"> · {item.reference}</span> : null}</span>
         <span className="tabular-nums">{signed(item.amount, currency)}</span>
       </label>
     </li>)}</ul>
-    <p className={cn("text-[12px] tabular-nums", total === cents(line.amount) ? "text-positive" : "text-ink-muted")}>Chosen {signed(total / 100, currency)} of {signed(line.amount, currency)}</p>
+    <p className={cn("text-[12.5px] tabular-nums", total === cents(line.amount) ? "text-positive" : "text-ink-muted")}>Chosen {signed(total / 100, currency)} of {signed(line.amount, currency)}</p>
     {items.length ? <MatchButton lineId={line.id} items={items} disabled={total !== cents(line.amount)} /> : null}
   </div>;
 }
@@ -344,11 +344,11 @@ function BulkBar({ lines, chosen, suggestions, accounts, onSelectAll, onDone }: 
   return <div className="border-hairline bg-surface-sunken sticky top-12 z-10 border-b">
     {chosen.length ? <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-1.5">
       {tick(all ? "Clear the selection" : `Select all ${lines.length} on this page`)}
-      <span className="text-ink text-[12.5px] font-medium">{chosen.length} selected</span>
+      <span className="text-ink text-[13px] font-medium">{chosen.length} selected</span>
       <form action={code} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="matches" value={JSON.stringify(account ? chosen.map(line => ({ line_id: line.id, items: codedItems(line, account, rate) })) : [])} />
-        <NativeSelect aria-label="Code the selected lines to" value={account} onChange={event => setAccount(event.target.value)} className="h-7 w-[16rem] max-w-full text-[12.5px] touch:h-10"><AccountOptions accounts={accounts} /></NativeSelect>
-        <NativeSelect aria-label="VAT rate for the selected lines" value={String(rate)} onChange={event => setRate(Number(event.target.value))} className="h-7 w-[6rem] text-[12.5px] touch:h-10">{vatRates.map(value => <option key={value} value={value}>{value}% VAT</option>)}</NativeSelect>
+        <NativeSelect aria-label="Code the selected lines to" value={account} onChange={event => setAccount(event.target.value)} className="h-7 w-[16rem] max-w-full text-[13px] touch:h-10"><AccountOptions accounts={accounts} /></NativeSelect>
+        <NativeSelect aria-label="VAT rate for the selected lines" value={String(rate)} onChange={event => setRate(Number(event.target.value))} className="h-7 w-[6rem] text-[13px] touch:h-10">{vatRates.map(value => <option key={value} value={value}>{value}% VAT</option>)}</NativeSelect>
         <SubmitButton size="sm" pendingLabel="Coding…" disabled={!account}>Code {chosen.length === 1 ? "it" : `all ${chosen.length}`}</SubmitButton>
       </form>
       {withSuggestion.length ? <form action={code}>
@@ -360,9 +360,9 @@ function BulkBar({ lines, chosen, suggestions, accounts, onSelectAll, onDone }: 
         <input type="hidden" name="reason" value="Set aside with others from the statement" />
         <SubmitButton size="sm" variant="outline" pendingLabel="Setting aside…">Set aside</SubmitButton>
       </form>
-      <button type="button" onClick={() => onSelectAll(false)} className="text-ink-muted hover:text-ink ml-auto text-[12px] touch:min-h-10">Clear</button>
+      <button type="button" onClick={() => onSelectAll(false)} className="text-ink-muted hover:text-ink ml-auto text-[12.5px] touch:min-h-10">Clear</button>
     </div> : <>
-      <label className="text-ink-muted flex items-center gap-2 px-4 py-2 text-[12.5px] @min-[60rem]:hidden touch:min-h-11">{tick(`Select all ${lines.length} on this page`)}Select all {lines.length} on this page</label>
+      <label className="text-ink-muted flex items-center gap-2 px-4 py-2 text-[13px] @min-[60rem]:hidden touch:min-h-11">{tick(`Select all ${lines.length} on this page`)}Select all {lines.length} on this page</label>
       <div className={cn(HEAD, "items-center py-1.5")}>
         <span className="[grid-area:check] leading-none">{tick(`Select all ${lines.length} on this page`)}</span>
         <span className={cn(HEADING, "[grid-area:date]")}>Date</span>
@@ -372,7 +372,7 @@ function BulkBar({ lines, chosen, suggestions, accounts, onSelectAll, onDone }: 
         <span className={cn(HEADING, "[grid-area:amount] text-right")}>Amount</span>
       </div>
     </>}
-    {coded.error || aside.error ? <p role="alert" className="text-critical px-4 pb-2 text-[12px]">{coded.error ?? aside.error}</p> : null}
+    {coded.error || aside.error ? <p role="alert" className="text-critical px-4 pb-2 text-[12.5px]">{coded.error ?? aside.error}</p> : null}
   </div>;
 }
 
@@ -389,14 +389,14 @@ function CodeIt({ line, accounts }: { line: ReconcileLine; accounts: PickerAccou
   const items: BankMatchItem[] = [{ kind: line.amount > 0 ? "receive" : "spend", contact: line.counterparty, lines: [{ description: description.trim(), account_id: account, net: net / 100, vat_rate: rate, vat_amount: (gross - net) / 100 }] }];
   return <div className="space-y-3">
     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem_6rem]">
-      <label className="text-ink-muted space-y-1 text-[11.5px]"><span className="block">Description</span>
+      <label className="text-ink-muted space-y-1 text-[12px]"><span className="block">Description</span>
         <TextInput id={`${uid}-description`} value={description} maxLength={300} onChange={event => setDescription(event.target.value)} /></label>
-      <label className="text-ink-muted space-y-1 text-[11.5px]"><span className="block">Account</span>
+      <label className="text-ink-muted space-y-1 text-[12px]"><span className="block">Account</span>
         <NativeSelect aria-label="Account" value={account} onChange={event => setAccount(event.target.value)}><AccountOptions accounts={accounts} /></NativeSelect></label>
-      <label className="text-ink-muted space-y-1 text-[11.5px]"><span className="block">VAT</span>
+      <label className="text-ink-muted space-y-1 text-[12px]"><span className="block">VAT</span>
         <NativeSelect aria-label="VAT rate" value={String(rate)} onChange={event => setRate(Number(event.target.value))}>{vatRates.map(value => <option key={value} value={value}>{value}%</option>)}</NativeSelect></label>
     </div>
-    {rate ? <p className="text-ink-muted text-[12px] tabular-nums">{formatAmount(net / 100, currency)} plus {formatAmount((gross - net) / 100, currency)} VAT</p> : null}
+    {rate ? <p className="text-ink-muted text-[12.5px] tabular-nums">{formatAmount(net / 100, currency)} plus {formatAmount((gross - net) / 100, currency)} VAT</p> : null}
     <MatchButton lineId={line.id} items={items} disabled={!account || !description.trim()} />
   </div>;
 }
@@ -404,7 +404,7 @@ function CodeIt({ line, accounts }: { line: ReconcileLine; accounts: PickerAccou
 function TransferTo({ line, banks }: { line: ReconcileLine; banks: { id: string; code: string; name: string }[] }) {
   const [bank, setBank] = useState(banks[0]?.id ?? "");
   return <div className="space-y-3">
-    <label className="text-ink-muted block max-w-sm space-y-1 text-[11.5px]"><span className="block">{line.amount < 0 ? "Moved to" : "Moved from"}</span>
+    <label className="text-ink-muted block max-w-sm space-y-1 text-[12px]"><span className="block">{line.amount < 0 ? "Moved to" : "Moved from"}</span>
       <NativeSelect aria-label={line.amount < 0 ? "Moved to" : "Moved from"} value={bank} onChange={event => setBank(event.target.value)}>
         {banks.map(item => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
       </NativeSelect></label>
@@ -417,7 +417,7 @@ function SetAside({ line }: { line: ReconcileLine }) {
   return <form action={action} className="space-y-2">
     <input type="hidden" name="line_id" value={line.id} />
     <input type="hidden" name="excluded" value="on" />
-    <label className="text-ink-muted block max-w-md space-y-1 text-[11.5px]"><span className="block">Why it is not for the books</span>
+    <label className="text-ink-muted block max-w-md space-y-1 text-[12px]"><span className="block">Why it is not for the books</span>
       <TextInput name="reason" maxLength={300} placeholder="e.g. Reversed by the bank the same day" /></label>
     <SubmitButton size="sm" variant="outline" pendingLabel="Saving…">Set aside</SubmitButton>
     <FormError message={state.error} />
@@ -428,7 +428,7 @@ function MatchedLine({ line, documents }: { line: ReconcileLine; documents: Matc
   const currency = useCurrency();
   return <div className={ROW}>
     <LineCells line={line} />
-    <div className={cn(WIDE, "space-y-0.5 text-[12px]")}>
+    <div className={cn(WIDE, "space-y-0.5 text-[12.5px]")}>
       {documents.map((document, index) => <span key={index} className="flex min-w-0 items-center gap-1.5">
         <Check aria-hidden className="text-positive size-3.5 shrink-0" />
         {document.href ? <Link href={document.href} className="text-brand min-w-0 truncate hover:underline">{document.label}</Link> : <span className="text-ink-muted min-w-0 truncate">{document.label}</span>}
@@ -443,7 +443,7 @@ function SetAsideLine({ line }: { line: ReconcileLine }) {
   const [state, action] = useActionState(setLineExcluded, idleState);
   return <div className={ROW}>
     <LineCells line={line} />
-    <p className={cn(WIDE, "text-ink-muted text-[12px]")}>{line.excluded_reason ?? "Set aside"}</p>
+    <p className={cn(WIDE, "text-ink-muted text-[12.5px]")}>{line.excluded_reason ?? "Set aside"}</p>
     <form action={action} className="[grid-area:act] flex flex-col items-end gap-1 self-center">
       <input type="hidden" name="line_id" value={line.id} />
       <input type="hidden" name="excluded" value="" />

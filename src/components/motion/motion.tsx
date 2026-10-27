@@ -42,7 +42,7 @@ export function PageEnter({ children }: { children: ReactNode }) {
 /** A row of filter links whose highlight slides to the one chosen. */
 export function SlidingTabs({ label, options }: { label: string; options: { label: string; href: string; active: boolean }[] }) {
   return <nav aria-label={label} className="flex flex-wrap items-center gap-1.5">{options.map(option => <Link key={option.label} href={option.href} aria-current={option.active ? "page" : undefined}
-    className={cn("focus-visible:ring-ring/40 relative inline-flex min-h-7 items-center rounded-md px-2.5 py-1 text-[12px] outline-none focus-visible:ring-[3px] touch:min-h-11 touch:px-3.5 touch:text-[14px]", option.active ? "text-brand font-medium" : "text-ink-muted hover:bg-muted hover:text-ink")}>
+    className={cn("focus-visible:ring-ring/40 relative inline-flex min-h-7 items-center rounded-md px-2.5 py-1 text-[12.5px] outline-none focus-visible:ring-[3px] touch:min-h-11 touch:px-3.5 touch:text-[14px]", option.active ? "text-brand font-medium" : "text-ink-muted hover:bg-muted hover:text-ink")}>
     {option.active ? <motion.span layoutId={`tabs-${label}`} className="bg-accent absolute inset-0 rounded-md" /> : null}
     <span className="relative">{option.label}</span>
   </Link>)}</nav>;

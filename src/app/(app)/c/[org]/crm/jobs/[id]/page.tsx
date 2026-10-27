@@ -48,14 +48,14 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           <div className="p-3"><AddTodo link={{ job_id: job.id }} placeholder={`Add a to-do for this ${one.toLowerCase()}…`} /></div>
           <ul className="divide-hairline border-hairline divide-y border-t">{tasks.map(task => <li key={task.id} className="flex items-center gap-3 px-4 py-2">
             <TaskCheck id={task.id} done={Boolean(task.done_at)} />
-            <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", task.done_at ? "text-ink-faint line-through" : "text-ink")}>{task.title}</span>
-            <span className="text-ink-muted hidden text-[12px] sm:inline">{task.owner}</span>
-            <span className={cn("w-20 text-right text-[12px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? formatDate(task.due_on) : ""}</span>
+            <span className={cn("min-w-0 flex-1 truncate text-[13px]", task.done_at ? "text-ink-faint line-through" : "text-ink")}>{task.title}</span>
+            <span className="text-ink-muted hidden text-[12.5px] sm:inline">{task.owner}</span>
+            <span className={cn("w-20 text-right text-[12.5px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? formatDate(task.due_on) : ""}</span>
           </li>)}</ul>
         </RecordSection>
         <RecordSection title="Activity">
           <NoteForm link={{ job_id: job.id, ...(job.customer_id ? { customer_id: job.customer_id } : {}) }} />
-          <ol className="divide-hairline border-hairline divide-y border-t">{activities.map(activity => <li key={activity.id} className="px-4 py-2.5"><span className="text-ink block text-[12.5px] whitespace-pre-line">{activity.body}</span><span className="text-ink-faint text-[11.5px]">{activity.actor} · {formatDateTime(activity.occurred_at)}</span></li>)}</ol>
+          <ol className="divide-hairline border-hairline divide-y border-t">{activities.map(activity => <li key={activity.id} className="px-4 py-2.5"><span className="text-ink block text-[13px] whitespace-pre-line">{activity.body}</span><span className="text-ink-faint text-[12px]">{activity.actor} · {formatDateTime(activity.occurred_at)}</span></li>)}</ol>
         </RecordSection>
       </div>
       <RecordSection title="Details">
@@ -69,7 +69,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           <RecordDetail label="Opened" value={<>{formatDate(job.opened_on)}{enquiry ? <> from <Link href={`/c/${org.slug}/crm/pipeline/${enquiry.id}`} className="text-brand hover:underline">{workspace.labels.deal[0].toLowerCase()} {enquiry.reference}</Link></> : null}</>} />
           <RecordDetail label="Summary" value={job.summary} />
         </dl>
-        {note ? <p className="text-ink-muted border-hairline border-t px-4 py-2.5 text-[12px] leading-relaxed">{note}</p> : null}
+        {note ? <p className="text-ink-muted border-hairline border-t px-4 py-2.5 text-[12.5px] leading-relaxed">{note}</p> : null}
         <RecordDisclosure title="Change the details">
           <JobForm job={job} fields={fields} customers={customers} people={people} labels={{ job: one, customer: workspace.labels.customer[0] }} />
         </RecordDisclosure>

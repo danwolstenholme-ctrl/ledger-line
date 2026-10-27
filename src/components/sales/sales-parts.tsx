@@ -63,9 +63,9 @@ export function DocumentLines({ lines, treatment, registered, net, total, totalL
   const itemised = isItemised(lines), discounted = lines.some(line => Number(line.discount_pct) > 0);
   const byRate = [...lines.reduce((rates, line) => Number(line.vat_rate) > 0 ? rates.set(Number(line.vat_rate), (rates.get(Number(line.vat_rate)) ?? 0) + Number(line.vat_amount)) : rates, new Map<number, number>())].sort(([a], [b]) => b - a);
   const span = 1 + (itemised ? 2 : 0) + (discounted ? 1 : 0) + (charged ? 1 : 0);
-  const cell = "px-4 py-2 text-[12.5px]", number = "text-ink-muted px-3 py-2 text-right text-[12px] tabular-nums whitespace-nowrap";
+  const cell = "px-4 py-2 text-[13px]", number = "text-ink-muted px-3 py-2 text-right text-[12.5px] tabular-nums whitespace-nowrap";
   return <div className="overflow-x-auto"><table className="w-full border-collapse">
-    <thead><tr className="border-hairline bg-surface-sunken text-ink-faint border-b text-left text-[11px] font-semibold tracking-[0.06em] uppercase">
+    <thead><tr className="border-hairline bg-surface-sunken text-ink-faint border-b text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase">
       <th scope="col" className="px-4 py-2">Description</th>
       {itemised ? <th scope="col" className="px-3 py-2 text-right">Qty</th> : null}
       {itemised ? <th scope="col" className="px-3 py-2 text-right">Unit price</th> : null}
@@ -74,14 +74,14 @@ export function DocumentLines({ lines, treatment, registered, net, total, totalL
       <th scope="col" className="px-4 py-2 text-right">{charged ? "Net" : "Amount"}</th>
     </tr></thead>
     <tbody className="divide-hairline divide-y">{lines.map(line => <tr key={line.id}>
-      <td className={cell}>{line.description}<span className="text-ink-faint block text-[11px]">{line.code} · {line.account_name}</span></td>
+      <td className={cell}>{line.description}<span className="text-ink-faint block text-[11.5px]">{line.code} · {line.account_name}</span></td>
       {itemised ? <td className={number}>{formatQuantity(line.quantity)}{line.unit ? <span className="text-ink-faint"> {line.unit}</span> : null}</td> : null}
       {itemised ? <td className={number}>{formatUnitPrice(line.unit_price ?? line.net)}</td> : null}
       {discounted ? <td className={number}>{Number(line.discount_pct) ? `${Number(line.discount_pct)}%` : ""}</td> : null}
       {charged ? <td className={number}>{Number(line.vat_rate)}%</td> : null}
       <td className={cn(cell, "text-right tabular-nums")}>{formatAmount(line.net)}</td>
     </tr>)}</tbody>
-    <tfoot className="border-hairline-strong border-t text-[12.5px]">
+    <tfoot className="border-hairline-strong border-t text-[13px]">
       <tr><td className="text-ink-muted px-4 pt-2" colSpan={span}>Subtotal</td><td className="px-4 pt-2 text-right tabular-nums">{formatAmount(net)}</td></tr>
       {charged ? byRate.map(([rate, amount]) => <tr key={rate}><td className="text-ink-muted px-4" colSpan={span}>VAT at {rate}%</td><td className="px-4 text-right tabular-nums">{formatAmount(amount)}</td></tr>)
         : <tr><td className="text-ink-muted px-4" colSpan={span}>VAT</td><td className="px-4 text-right tabular-nums">{formatAmount(0)}</td></tr>}

@@ -60,23 +60,23 @@ export function StatementImport({ bankAccountId, bankName }: { bankAccountId: st
       out: lines.filter(line => line.amount < 0).reduce((sum, line) => sum + Math.round(line.amount * 100), 0) / 100,
     };
   }, [lines]);
-  const control = "border-hairline-strong bg-surface h-8 w-full rounded-md border px-2 text-[12.5px] touch:h-11 touch:text-[16px]";
+  const control = "border-hairline-strong bg-surface h-8 w-full rounded-md border px-2 text-[13px] touch:h-11 touch:text-[16px]";
 
   return <div className="space-y-5">
     <label htmlFor={`${uid}-file`} className={cn("border-hairline-strong hover:bg-surface-sunken flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center", reading && "opacity-60")}>
       <FileUp className="text-brand size-6" />
-      <span className="text-ink text-[13px] font-medium">{fileName ?? "Choose the statement file"}</span>
-      <span className="text-ink-muted text-[12px]">CSV, CAMT.053 (XML) or OFX, exported from online banking for {bankName}</span>
+      <span className="text-ink text-[13.5px] font-medium">{fileName ?? "Choose the statement file"}</span>
+      <span className="text-ink-muted text-[12.5px]">CSV, CAMT.053 (XML) or OFX, exported from online banking for {bankName}</span>
       <input id={`${uid}-file`} type="file" accept=".csv,.txt,.xml,.ofx,.qfx,.053" className="sr-only" onChange={event => choose(event.target.files?.[0])} />
     </label>
 
     {parsed?.format === "csv" && layout ? <section aria-label="Columns" className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-ink text-[13px] font-semibold">Columns</h3>
-        <p className="text-ink-muted text-[12px]">Read from the file’s headings. Correct any it got wrong.</p>
+        <h3 className="text-ink text-[13.5px] font-semibold">Columns</h3>
+        <p className="text-ink-muted text-[12.5px]">Read from the file’s headings. Correct any it got wrong.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {CSV_ROLES.map(role => <label key={role.key} className="text-ink-muted space-y-1 text-[11.5px]">
+        {CSV_ROLES.map(role => <label key={role.key} className="text-ink-muted space-y-1 text-[12px]">
           <span className="block">{role.label}</span>
           <select className={control} value={layout.columns[role.key] ?? ""} aria-label={role.label}
             onChange={event => relayout({ ...layout, columns: { ...layout.columns, [role.key]: event.target.value === "" ? undefined : Number(event.target.value) } as Partial<Record<CsvRole, number>> })}>
@@ -84,13 +84,13 @@ export function StatementImport({ bankAccountId, bankName }: { bankAccountId: st
             {layout.headers.map((header, index) => <option key={index} value={index}>{header || `Column ${index + 1}`}</option>)}
           </select>
         </label>)}
-        <label className="text-ink-muted space-y-1 text-[11.5px]">
+        <label className="text-ink-muted space-y-1 text-[12px]">
           <span className="block">Dates are written</span>
           <select className={control} value={layout.dateOrder} aria-label="Dates are written" onChange={event => relayout({ ...layout, dateOrder: event.target.value as DateOrder })}>
             <option value="dmy">Day first — 31/12/2026</option><option value="mdy">Month first — 12/31/2026</option><option value="ymd">Year first — 2026-12-31</option>
           </select>
         </label>
-        <label className="text-ink-muted space-y-1 text-[11.5px]">
+        <label className="text-ink-muted space-y-1 text-[12px]">
           <span className="block">Amounts are written</span>
           <select className={control} value={layout.decimal} aria-label="Amounts are written" onChange={event => relayout({ ...layout, decimal: event.target.value as "." | "," })}>
             <option value=".">1,234.56</option><option value=",">1.234,56</option>
@@ -100,22 +100,22 @@ export function StatementImport({ bankAccountId, bankName }: { bankAccountId: st
     </section> : null}
 
     {parsed ? <section aria-label="What will be imported" className="space-y-3">
-      {parsed.problems.length ? <ul className="text-caution space-y-1 text-[12.5px]">{parsed.problems.map(problem => <li key={problem}>{problem}</li>)}</ul> : null}
-      {parsed.lines.length ? <label className="text-ink-muted flex flex-wrap items-center gap-2 text-[12px]">
+      {parsed.problems.length ? <ul className="text-caution space-y-1 text-[13px]">{parsed.problems.map(problem => <li key={problem}>{problem}</li>)}</ul> : null}
+      {parsed.lines.length ? <label className="text-ink-muted flex flex-wrap items-center gap-2 text-[12.5px]">
         Leave out lines before
-        <input type="date" value={from} onChange={event => setFrom(event.target.value)} className="border-hairline-strong bg-surface h-8 rounded-md border px-2 text-[12.5px] touch:h-11 touch:text-[16px]" />
+        <input type="date" value={from} onChange={event => setFrom(event.target.value)} className="border-hairline-strong bg-surface h-8 rounded-md border px-2 text-[13px] touch:h-11 touch:text-[16px]" />
         <span className="text-ink-faint">Use this when the statement starts before the books do.</span>
       </label> : null}
       {totals.count ? <>
         <dl className="border-hairline divide-hairline grid grid-cols-2 divide-x divide-y rounded-md border sm:grid-cols-4 sm:divide-y-0">
-          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">Lines</dt><dd className="text-ink text-[14px] font-medium tabular-nums">{totals.count}</dd></div>
-          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">Dates</dt><dd className="text-ink text-[13px]">{totals.from ? `${formatDate(totals.from)} – ${formatDate(totals.to!)}` : "—"}</dd></div>
-          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">In · out</dt><dd className="text-ink text-[13px] tabular-nums"><span className="text-positive">{formatAmount(totals.in, currency)}</span> · {formatAmount(Math.abs(totals.out), currency)}</dd></div>
-          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">Bank’s closing balance</dt><dd className="text-ink text-[13px] tabular-nums">{parsed.closingBalance !== null ? formatAmount(parsed.closingBalance, currency) : "Not in the file"}</dd></div>
+          <div className="px-3 py-2"><dt className="text-ink-faint text-[11.5px] uppercase tracking-[0.06em]">Lines</dt><dd className="text-ink text-[14px] font-medium tabular-nums">{totals.count}</dd></div>
+          <div className="px-3 py-2"><dt className="text-ink-faint text-[11.5px] uppercase tracking-[0.06em]">Dates</dt><dd className="text-ink text-[13.5px]">{totals.from ? `${formatDate(totals.from)} – ${formatDate(totals.to!)}` : "—"}</dd></div>
+          <div className="px-3 py-2"><dt className="text-ink-faint text-[11.5px] uppercase tracking-[0.06em]">In · out</dt><dd className="text-ink text-[13.5px] tabular-nums"><span className="text-positive">{formatAmount(totals.in, currency)}</span> · {formatAmount(Math.abs(totals.out), currency)}</dd></div>
+          <div className="px-3 py-2"><dt className="text-ink-faint text-[11.5px] uppercase tracking-[0.06em]">Bank’s closing balance</dt><dd className="text-ink text-[13.5px] tabular-nums">{parsed.closingBalance !== null ? formatAmount(parsed.closingBalance, currency) : "Not in the file"}</dd></div>
         </dl>
         <div className="border-hairline overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[560px] border-collapse text-[12.5px]">
-            <thead><tr className="border-hairline bg-surface-sunken text-ink-faint border-b text-left text-[11px] font-semibold tracking-[0.06em] uppercase">
+          <table className="w-full min-w-[560px] border-collapse text-[13px]">
+            <thead><tr className="border-hairline bg-surface-sunken text-ink-faint border-b text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase">
               <th scope="col" className="px-3 py-1.5">Date</th><th scope="col" className="px-3 py-1.5">Description</th><th scope="col" className="px-3 py-1.5 text-right">Amount</th>
             </tr></thead>
             <tbody className="divide-hairline divide-y">{lines.slice(0, 8).map(line => <tr key={line.external_id}>
@@ -124,9 +124,9 @@ export function StatementImport({ bankAccountId, bankName }: { bankAccountId: st
               <td className={cn("px-3 py-1.5 text-right whitespace-nowrap tabular-nums", line.amount > 0 ? "text-positive" : "text-ink")}>{line.amount > 0 ? "" : "−"}{formatAmount(Math.abs(line.amount), currency)}</td>
             </tr>)}</tbody>
           </table>
-          {lines.length > 8 ? <p className="text-ink-faint border-hairline border-t px-3 py-1.5 text-[11.5px]">and {lines.length - 8} more</p> : null}
+          {lines.length > 8 ? <p className="text-ink-faint border-hairline border-t px-3 py-1.5 text-[12px]">and {lines.length - 8} more</p> : null}
         </div>
-      </> : <p className="text-ink-muted text-[12.5px]">{parsed.lines.length ? "Every line is before that date." : `No lines can be read yet${parsed.format === "csv" ? " — check the columns above." : "."}`}</p>}
+      </> : <p className="text-ink-muted text-[13px]">{parsed.lines.length ? "Every line is before that date." : `No lines can be read yet${parsed.format === "csv" ? " — check the columns above." : "."}`}</p>}
     </section> : null}
 
     <form action={action} className="flex flex-wrap items-center gap-3">
@@ -135,10 +135,10 @@ export function StatementImport({ bankAccountId, bankName }: { bankAccountId: st
       <input type="hidden" name="closing_balance" value={parsed?.closingBalance ?? ""} />
       <input type="hidden" name="lines" value={JSON.stringify(lines)} />
       <SubmitButton pendingLabel="Importing…" disabled={!totals.count || totals.count > MAX_LINES}>{totals.count ? `Import ${totals.count} line${totals.count === 1 ? "" : "s"}` : "Import"}</SubmitButton>
-      <Link href={`/accounts/bank/${bankAccountId}`} className="text-ink-muted hover:text-ink text-[12.5px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
-      {totals.count > MAX_LINES ? <p className="text-critical text-[12px]">More than {MAX_LINES.toLocaleString("en-GB")} lines: import a few months at a time.</p> : null}
+      <Link href={`/accounts/bank/${bankAccountId}`} className="text-ink-muted hover:text-ink text-[13px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
+      {totals.count > MAX_LINES ? <p className="text-critical text-[12.5px]">More than {MAX_LINES.toLocaleString("en-GB")} lines: import a few months at a time.</p> : null}
     </form>
     <FormError message={state.error} />
-    <p className="text-ink-faint text-[11.5px]">Lines already imported for this account are skipped, so an overlapping statement is safe. An Excel download: open it and save it as CSV first.</p>
+    <p className="text-ink-faint text-[12px]">Lines already imported for this account are skipped, so an overlapping statement is safe. An Excel download: open it and save it as CSV first.</p>
   </div>;
 }

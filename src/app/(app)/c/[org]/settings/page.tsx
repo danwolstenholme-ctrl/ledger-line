@@ -34,7 +34,7 @@ export default async function AccountsSettingsPage() {
         </RecordSection>
         <RecordSection title="The books">
           <div className="p-4 sm:p-5"><AccountingSettingsForm settings={settings} bankAccounts={banks.rows.filter(item => item.isActive || item.id === settings.default_bank_account_id)} /></div>
-          <div className="border-hairline text-ink-muted space-y-2 border-t px-4 py-3.5 text-[12px] leading-relaxed sm:px-5">
+          <div className="border-hairline text-ink-muted space-y-2 border-t px-4 py-3.5 text-[12.5px] leading-relaxed sm:px-5">
             <p>Once a period is reported (a VAT return filed, the year’s accounts signed), lock it: nothing dated on or before the lock date can then be added, changed or removed. The check runs inside the database, on every posting.</p>
             <p>A correction after that goes in the next open period, usually as a <Link href="/accounts/journals/new" className="text-brand hover:underline">journal</Link>. Filing a VAT return in Ledgerline moves the lock date for you.</p>
           </div>
@@ -60,7 +60,7 @@ export default async function AccountsSettingsPage() {
           <div className="p-4 sm:p-5"><InvoiceDesignForm slug={org.slug} accent={org.invoice_accent} footer={org.invoice_footer} logoVersion={logo} previewHref={latest ? `/c/${org.slug}/sales/${latest.id}/pdf` : null} /></div>
         </RecordSection>
         <RecordSection title="AI in the books" hint={settings.ai_suggestions ? "On" : "Off"}>
-          <div className="text-ink-muted space-y-2 p-4 text-[12.5px] leading-relaxed sm:p-5">
+          <div className="text-ink-muted space-y-2 p-4 text-[13px] leading-relaxed sm:p-5">
             <p>When this is on, Claude is asked only when someone presses its button: to explain the figures (totals only, no names), to answer a question about the books, and to suggest what unplaced bank lines were. Every suggestion is checked against the books, and nothing is matched until someone presses Match. Nothing Claude says is stored.</p>
             <p className={aiConfigured() ? "text-positive" : "text-caution"}>{aiConfigured() ? "Connected to Claude by Anthropic." : "AI is not connected yet."}</p>
             <div className="pt-1"><AiSuggestionsForm enabled={settings.ai_suggestions} /></div>

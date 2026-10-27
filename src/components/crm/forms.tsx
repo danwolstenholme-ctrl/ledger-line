@@ -22,7 +22,7 @@ export function AddTodo({ link = {}, placeholder = "Add a to-do…" }: { link?: 
   return <form ref={ref} action={action} className="space-y-1">
     {Object.entries(link).map(([name, value]) => value ? <input key={name} type="hidden" name={name} value={value} /> : null)}
     <div className="flex gap-2">
-      <TextInput name="title" placeholder={placeholder} aria-label="New to-do" className="h-10 text-[13px]" autoComplete="off" />
+      <TextInput name="title" placeholder={placeholder} aria-label="New to-do" className="h-10 text-[13.5px]" autoComplete="off" />
       <TextInput name="due_on" type="date" aria-label="Due" className="h-10 w-40" />
     </div>
     <FormError message={state.error} />
@@ -65,7 +65,7 @@ export function StageBar({ board, id, stages, current }: { board: Board; id: str
       return <li key={stage.id} className="border-hairline min-w-[88px] flex-1 border-r last:border-r-0">
         <button type="button" disabled={pending || here} aria-current={here ? "step" : undefined}
           onClick={() => { if (board === "deal" && stage.outcome === "lost") { setAsking(stage); setReason(""); } else go(stage); }}
-          className={cn("w-full px-2 py-2 text-center text-[11.5px] transition-colors disabled:cursor-default", here ? "text-ink bg-surface-sunken font-semibold" : "text-ink-muted hover:bg-surface-sunken hover:text-ink")}>
+          className={cn("w-full px-2 py-2 text-center text-[12px] transition-colors disabled:cursor-default", here ? "text-ink bg-surface-sunken font-semibold" : "text-ink-muted hover:bg-surface-sunken hover:text-ink")}>
           <span aria-hidden className="mx-auto mb-1 block h-1 w-full rounded-full" style={{ backgroundColor: reached(stage) || here ? stageSwatch(here ? stage.outcome : at?.outcome === "won" ? "won" : stage.outcome, stage.position, open.length) : "var(--hairline)" }} />
           {stage.name}
         </button>
@@ -73,10 +73,10 @@ export function StageBar({ board, id, stages, current }: { board: Board; id: str
     })}</ol>
     {asking ? <form className="flex flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); if (reason.trim()) { go(asking, reason); setAsking(null); } }}>
       <TextInput autoFocus value={reason} onChange={event => setReason(event.target.value)} maxLength={300} placeholder={`Why it was ${asking.name.toLowerCase()} (required)`} aria-label="Reason" className="min-w-56 flex-1" />
-      <button type="submit" disabled={!reason.trim()} className="bg-critical inline-flex h-8 items-center rounded-md px-3 text-[12.5px] font-medium text-white disabled:opacity-50">Mark as {asking.name.toLowerCase()}</button>
-      <button type="button" onClick={() => setAsking(null)} className="text-ink-muted hover:text-ink px-2 text-[12.5px]">Cancel</button>
+      <button type="submit" disabled={!reason.trim()} className="bg-critical inline-flex h-8 items-center rounded-md px-3 text-[13px] font-medium text-white disabled:opacity-50">Mark as {asking.name.toLowerCase()}</button>
+      <button type="button" onClick={() => setAsking(null)} className="text-ink-muted hover:text-ink px-2 text-[13px]">Cancel</button>
     </form> : null}
-    {result?.error ? <p role="alert" className="text-critical text-[12px]">{result.error}</p> : null}
+    {result?.error ? <p role="alert" className="text-critical text-[12.5px]">{result.error}</p> : null}
   </div>;
 }
 
@@ -104,7 +104,7 @@ export function NextActionForm({ link, action: current, due }: { link: Link; act
     <div className="flex items-center gap-2">
       <TextInput name="next_action_due" type="date" defaultValue={due ?? ""} aria-label="Due" className="w-44" />
       <SubmitButton size="sm" variant="outline" pendingLabel="Saving…">Save</SubmitButton>
-      {state.ok ? <span className="text-positive text-[12px]">Saved</span> : null}
+      {state.ok ? <span className="text-positive text-[12.5px]">Saved</span> : null}
     </div>
     <FormError message={state.error} />
   </form>;
@@ -163,7 +163,7 @@ export function DealForm({ deal, fields, sources, people, label }: { deal?: Deal
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">{deal ? "Save changes" : `Record the ${label}`}</SubmitButton>
-      {deal && state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+      {deal && state.ok ? <span role="status" className="text-positive text-[13px]">Saved</span> : null}
     </div>
   </form>;
 }
@@ -194,7 +194,7 @@ export function JobForm({ job, fields, customers, people, labels, customerId }: 
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">{job ? "Save changes" : `Add the ${labels.job.toLowerCase()}`}</SubmitButton>
-      {job && state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+      {job && state.ok ? <span role="status" className="text-positive text-[13px]">Saved</span> : null}
     </div>
   </form>;
 }
@@ -213,13 +213,13 @@ export function CopyBlock({ label, text }: { label: string; text: string }) {
   const copy = async () => { try { await navigator.clipboard.writeText(text); setState("copied"); } catch { setState("failed"); } };
   return <div className="space-y-1.5">
     <div className="flex items-center justify-between gap-3">
-      <p className="text-ink text-[12.5px] font-medium">{label}</p>
-      <button type="button" onClick={copy} className="border-hairline-strong text-ink-muted hover:bg-muted inline-flex min-h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px]">
+      <p className="text-ink text-[13px] font-medium">{label}</p>
+      <button type="button" onClick={copy} className="border-hairline-strong text-ink-muted hover:bg-muted inline-flex min-h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12.5px]">
         {state === "copied" ? <Check aria-hidden className="size-3.5" /> : <Copy aria-hidden className="size-3.5" />}{state === "copied" ? "Copied" : "Copy"}
       </button>
     </div>
-    <pre className="bg-surface-sunken border-hairline text-ink max-h-80 overflow-auto rounded-md border p-3 font-mono text-[11.5px] leading-relaxed whitespace-pre">{text}</pre>
-    {state === "failed" ? <p role="alert" className="text-critical text-[11.5px]">Couldn’t copy. Select the text and copy it instead.</p> : null}
+    <pre className="bg-surface-sunken border-hairline text-ink max-h-80 overflow-auto rounded-md border p-3 font-mono text-[12px] leading-relaxed whitespace-pre">{text}</pre>
+    {state === "failed" ? <p role="alert" className="text-critical text-[12px]">Couldn’t copy. Select the text and copy it instead.</p> : null}
   </div>;
 }
 
@@ -230,8 +230,8 @@ export function FormKeyActions({ live }: { live: boolean }) {
   const [armed, setArmed] = useState(false);
   return <div className="flex flex-wrap items-center gap-2">
     <form action={issue}><SubmitButton size="sm" variant={live ? "outline" : "primary"} pendingLabel="Making…">{live ? "Make a new key" : "Turn the form on"}</SubmitButton></form>
-    {live ? armed ? <form action={stop} className="flex items-center gap-2"><span className="text-ink text-[12.5px]">Stop taking enquiries?</span><SubmitButton size="sm" variant="outline" pendingLabel="Turning off…">Yes, turn it off</SubmitButton><button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12px]">Keep it on</button></form>
-      : <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical text-[12.5px]">Turn the form off</button> : null}
-    {issued.error || stopped.error ? <p role="alert" className="text-critical text-[12px]">{issued.error ?? stopped.error}</p> : null}
+    {live ? armed ? <form action={stop} className="flex items-center gap-2"><span className="text-ink text-[13px]">Stop taking enquiries?</span><SubmitButton size="sm" variant="outline" pendingLabel="Turning off…">Yes, turn it off</SubmitButton><button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12.5px]">Keep it on</button></form>
+      : <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical text-[13px]">Turn the form off</button> : null}
+    {issued.error || stopped.error ? <p role="alert" className="text-critical text-[12.5px]">{issued.error ?? stopped.error}</p> : null}
   </div>;
 }

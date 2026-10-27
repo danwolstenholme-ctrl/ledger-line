@@ -34,35 +34,35 @@ export default async function BankPage() {
       {banks.rows.map(bank => {
         const toMatch = statements.toMatch.get(bank.id) ?? 0, imported = statements.lastImport.get(bank.id), feed = statements.feeds.get(bank.id);
         return <div key={bank.id} className={cn("ll-panel flex flex-col px-4 py-3", !bank.isActive && "opacity-60")}>
-          <span className="text-ink-faint block font-mono text-[11px]">{bank.code}</span>
-          <span className="text-ink block text-[13px] font-medium">{bank.name}</span>
+          <span className="text-ink-faint block font-mono text-[11.5px]">{bank.code}</span>
+          <span className="text-ink block text-[13.5px] font-medium">{bank.name}</span>
           <span className={cn("mt-1 block text-[18px] font-semibold", bank.balance < 0 ? "text-critical" : "text-ink")}>{formatAmount(bank.balance)}</span>
-          <span className={cn("mt-1 block text-[12px]", toMatch ? "text-caution font-medium" : "text-ink-muted")}>
+          <span className={cn("mt-1 block text-[12.5px]", toMatch ? "text-caution font-medium" : "text-ink-muted")}>
             {statements.failed ? "Statements could not be checked" : toMatch ? `${toMatch} statement line${toMatch === 1 ? "" : "s"} to match` : imported ? `All matched · last import ${formatRelative(imported)}` : "No statement imported yet"}
           </span>
-          {feed ? <span className={cn("block text-[11.5px]", feed.status === "active" ? "text-ink-faint" : "text-critical")}>
+          {feed ? <span className={cn("block text-[12px]", feed.status === "active" ? "text-ink-faint" : "text-critical")}>
             {feed.status === "active" ? `Bank feed · ${feed.last_synced_at ? `fetched ${formatAgo(feed.last_synced_at)}` : "not fetched yet"}` : feed.status === "expired" ? "Bank feed needs authorising again" : feed.status === "error" ? "Bank feed stopped: open to see why" : "Bank feed waiting for the bank"}
           </span> : null}
-          <span className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-2 text-[12px]">
+          <span className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-2 text-[12.5px]">
             <Link href={`/accounts/bank/${bank.id}`} className="text-brand font-medium hover:underline touch:inline-flex touch:min-h-10 touch:items-center">Reconcile</Link>
             <Link href={`/accounts/bank/${bank.id}/import`} className="text-brand hover:underline touch:inline-flex touch:min-h-10 touch:items-center">Import a statement</Link>
             <Link href={`/accounts/chart/${bank.id}`} className="text-ink-muted hover:text-ink hover:underline touch:inline-flex touch:min-h-10 touch:items-center">Every transaction</Link>
           </span>
         </div>;
       })}
-      <Link href="/accounts/chart/new?type=bank" className="border-hairline-strong text-ink-muted hover:text-ink hover:bg-surface-sunken grid place-items-center rounded-lg border border-dashed px-4 py-6 text-[12.5px]">Add a bank account</Link>
+      <Link href="/accounts/chart/new?type=bank" className="border-hairline-strong text-ink-muted hover:text-ink hover:bg-surface-sunken grid place-items-center rounded-lg border border-dashed px-4 py-6 text-[13px]">Add a bank account</Link>
     </section>}
     <Panel className="overflow-hidden">
       <PanelHeader title="Spent and received directly" hint="Not through an invoice or a bill" />
       {recent.failed ? <RecordFailure what="the bank transactions" /> : recent.rows.length ? <ul className="divide-hairline divide-y">{recent.rows.map(item => <li key={item.id}>
         <Link href={`/accounts/bank/transactions/${item.id}`} className="hover:bg-surface-sunken flex items-baseline gap-3 px-4 py-2.5">
-          <span className="text-ink-muted w-24 shrink-0 text-[12px] tabular-nums">{formatDate(item.txn_date)}</span>
-          <span className={cn("w-20 shrink-0 text-[12px] font-medium", KIND[item.kind].tone)}>{item.credit_note_id ? "Refunded" : KIND[item.kind].label}</span>
-          <span className="text-ink min-w-0 flex-1 truncate text-[12.5px]">{item.kind === "transfer" ? `${item.bank_account_name} → ${item.transfer_account_name}` : item.contact ?? item.description ?? item.reference ?? item.bank_account_name}</span>
-          <span className={cn("shrink-0 text-[12.5px] font-medium tabular-nums", item.kind === "receive" ? "text-positive" : "text-ink")}>{item.kind === "spend" ? "−" : ""}{formatAmount(Number(item.amount))}</span>
+          <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(item.txn_date)}</span>
+          <span className={cn("w-20 shrink-0 text-[12.5px] font-medium", KIND[item.kind].tone)}>{item.credit_note_id ? "Refunded" : KIND[item.kind].label}</span>
+          <span className="text-ink min-w-0 flex-1 truncate text-[13px]">{item.kind === "transfer" ? `${item.bank_account_name} → ${item.transfer_account_name}` : item.contact ?? item.description ?? item.reference ?? item.bank_account_name}</span>
+          <span className={cn("shrink-0 text-[13px] font-medium tabular-nums", item.kind === "receive" ? "text-positive" : "text-ink")}>{item.kind === "spend" ? "−" : ""}{formatAmount(Number(item.amount))}</span>
         </Link>
-      </li>)}</ul> : <p className="text-ink-faint px-4 py-6 text-center text-[12.5px]">Nothing yet. Card spending, bank charges and interest are recorded here.</p>}
-      {recent.rows.length === 12 && org.default_bank_account_id ? <p className="border-hairline border-t px-4 py-2.5 text-[12px]"><Link href={`/accounts/chart/${org.default_bank_account_id}`} className="text-brand font-medium hover:underline">Every transaction</Link><span className="text-ink-faint"> · the latest 12 are shown here</span></p> : null}
+      </li>)}</ul> : <p className="text-ink-faint px-4 py-6 text-center text-[13px]">Nothing yet. Card spending, bank charges and interest are recorded here.</p>}
+      {recent.rows.length === 12 && org.default_bank_account_id ? <p className="border-hairline border-t px-4 py-2.5 text-[12.5px]"><Link href={`/accounts/chart/${org.default_bank_account_id}`} className="text-brand font-medium hover:underline">Every transaction</Link><span className="text-ink-faint"> · the latest 12 are shown here</span></p> : null}
     </Panel>
   </PageBody>;
 }

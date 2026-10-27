@@ -30,7 +30,7 @@ export function MoreMenu({ items, label = "More" }: { items: MoreMenuItem[]; lab
       {items.map(item => {
         const Icon = ICONS[item.icon];
         const body = <><Icon className="text-ink-muted mt-0.5 size-3.5 shrink-0" />
-          <span className="min-w-0"><span className="text-ink block text-[12.5px] font-medium">{item.label}</span>{item.hint ? <span className="text-ink-faint block text-[11.5px] leading-snug">{item.hint}</span> : null}</span></>;
+          <span className="min-w-0"><span className="text-ink block text-[13px] font-medium">{item.label}</span>{item.hint ? <span className="text-ink-faint block text-[12px] leading-snug">{item.hint}</span> : null}</span></>;
         const style = "hover:bg-muted flex items-start gap-2.5 px-3 py-2 touch:py-3";
         return item.download ? <a key={item.href} role="menuitem" href={item.href} download onClick={() => setOpen(false)} className={style}>{body}</a>
           : <Link key={item.href} role="menuitem" href={item.href} onClick={() => setOpen(false)} className={style}>{body}</Link>;

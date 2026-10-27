@@ -16,7 +16,7 @@ export function LoadingState({ label = "Loading…", variant = "panel", classNam
   className?: string;
 }) {
   return <div data-slot="loading-state" className={cn("min-w-0 space-y-4", className)}>
-    <p role="status" className="text-ink-muted flex items-center gap-2 text-[12.5px]">
+    <p role="status" className="text-ink-muted flex items-center gap-2 text-[13px]">
       <LoadingSpinner />{label}
     </p>
     <div aria-hidden className="min-w-0 space-y-4">

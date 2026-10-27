@@ -47,7 +47,7 @@ export function ItemForm({ item, accounts, defaultAccount }: { item?: ItemRow; a
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">{item ? "Save changes" : "Add the product"}</SubmitButton>
-      {state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+      {state.ok ? <span role="status" className="text-positive text-[13px]">Saved</span> : null}
     </div>
   </form>;
 }

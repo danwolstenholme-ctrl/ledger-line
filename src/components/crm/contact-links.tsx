@@ -33,7 +33,7 @@ export function vCard({ name, company, email, phone, role }: { name: string; com
     ...(phone ? [`TEL;TYPE=CELL:${phone.replace(/\s+/g, " ").trim()}`] : []), "END:VCARD"].join("\r\n");
 }
 
-const chip = "border-hairline-strong text-ink hover:bg-muted inline-flex min-h-7 items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] touch:min-h-10 touch:px-3";
+const chip = "border-hairline-strong text-ink hover:bg-muted inline-flex min-h-7 items-center gap-1.5 rounded-md border px-2 py-1 text-[12.5px] touch:min-h-10 touch:px-3";
 
 export function ContactLinks({ name, email, phone, company, role, message, country = "CY", className }: {
   name: string; email?: string | null; phone?: string | null; company?: string | null; role?: string | null; message?: string; country?: string; className?: string;

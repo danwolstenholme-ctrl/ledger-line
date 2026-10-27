@@ -31,33 +31,33 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         {open ? <Link href={`/accounts/quotes/${id}/edit`} className={recordOutlineButton}><Pencil className="size-3.5" />Edit</Link> : null}
       </>} />
 
-    {quote.status === "accepted" && quote.invoice_id ? <p role="status" className="border-positive-line bg-positive-soft text-positive rounded-lg border px-4 py-2.5 text-[12.5px]">
+    {quote.status === "accepted" && quote.invoice_id ? <p role="status" className="border-positive-line bg-positive-soft text-positive rounded-lg border px-4 py-2.5 text-[13px]">
       Accepted{quote.accepted_on ? ` on ${formatDate(quote.accepted_on)}` : ""} and invoiced as <Link href={`/invoices/${quote.invoice_id}`} className="font-mono font-medium underline">{quote.invoice_number}</Link>.
     </p> : null}
     {open ? <section className="ll-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <p className="text-ink text-[12.5px]"><span className="font-medium">Has {quote.client_name} accepted?</span> <span className="text-ink-muted">The invoice is raised with these lines, numbered and dated today.</span></p>
+      <p className="text-ink text-[13px]"><span className="font-medium">Has {quote.client_name} accepted?</span> <span className="text-ink-muted">The invoice is raised with these lines, numbered and dated today.</span></p>
       <QuoteActions id={id} status={quote.status} />
     </section> : quote.status === "declined" ? <section className="ll-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <p className="text-ink-muted text-[12.5px]">Declined. Reopen it if the customer comes back.</p><QuoteActions id={id} status={quote.status} />
+      <p className="text-ink-muted text-[13px]">Declined. Reopen it if the customer comes back.</p><QuoteActions id={id} status={quote.status} />
     </section> : null}
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <RecordSection title="Quote" hint={TREATMENT_LABELS[quote.vat_treatment]}>
         <div className="grid gap-4 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="min-w-0 text-[12.5px] leading-relaxed">
+          <div className="min-w-0 text-[13px] leading-relaxed">
             <p className="ll-eyebrow mb-1">Prepared for</p>
-            <Link href={`/accounts/customers/${quote.customer_id}`} className="text-ink hover:text-brand text-[13.5px] font-semibold">{quote.client_name}</Link>
+            <Link href={`/accounts/customers/${quote.customer_id}`} className="text-ink hover:text-brand text-[14px] font-semibold">{quote.client_name}</Link>
             {customer?.address ? <p className="text-ink-muted whitespace-pre-line">{customer.address}</p> : null}
             {customer && customer.country !== "CY" ? <p className="text-ink-muted">{countryName(customer.country)}</p> : null}
-            {quote.client_vat_number ? <p className="text-ink-muted font-mono text-[12px]">VAT {quote.client_vat_number}</p> : null}
+            {quote.client_vat_number ? <p className="text-ink-muted font-mono text-[12.5px]">VAT {quote.client_vat_number}</p> : null}
           </div>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-1 self-start text-[12.5px] sm:grid-cols-1 sm:text-right">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-1 self-start text-[13px] sm:grid-cols-1 sm:text-right">
             <div><dt className="ll-eyebrow">Date</dt><dd className="text-ink">{formatDate(quote.issued_on)}</dd></div>
             <div><dt className="ll-eyebrow">Valid until</dt><dd className={cn(quote.expired && open ? "text-caution font-medium" : "text-ink")}>{quote.valid_until ? formatDate(quote.valid_until) : "No end date"}</dd></div>
           </dl>
         </div>
         <DocumentLines lines={lines} treatment={quote.vat_treatment} registered={org.vat_registered} net={Number(quote.net)} total={Number(quote.total)} />
-        {quote.notes ? <p className="border-hairline text-ink-muted border-t px-4 py-3 text-[12.5px] whitespace-pre-line">{quote.notes}</p> : null}
+        {quote.notes ? <p className="border-hairline text-ink-muted border-t px-4 py-3 text-[13px] whitespace-pre-line">{quote.notes}</p> : null}
       </RecordSection>
       <RecordSection title="Details">
         <dl className="divide-hairline divide-y px-4">

@@ -48,7 +48,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
         <form action="/accounts/bills" className="flex items-center gap-2">
           {view !== "to_pay" ? <input type="hidden" name="view" value={view} /> : null}
           <input name="q" defaultValue={q} aria-label="Search bills" placeholder="Search supplier, number or reference"
-            className="border-hairline-strong bg-surface h-8 w-64 max-w-full rounded-md border px-3 text-[12.5px] touch:h-11 touch:text-[16px]" />
+            className="border-hairline-strong bg-surface h-8 w-64 max-w-full rounded-md border px-3 text-[13px] touch:h-11 touch:text-[16px]" />
         </form>
       </div>
       {bills.failed ? <RecordFailure what="the bills" /> : !bills.rows.length ? <RecordEmpty title={q ? "No bills match" : view === "to_pay" ? "Nothing to pay" : "No bills here"}>

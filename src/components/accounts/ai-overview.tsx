@@ -35,32 +35,32 @@ export function AiOverview({ unavailable }: { unavailable: string | null }) {
 
   return <section aria-label="AI overview" className="ll-panel overflow-hidden">
     <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-      <span className="text-ink flex shrink-0 items-center gap-1.5 text-[13px] font-semibold"><Brain aria-hidden className="text-brand size-4" />AI</span>
+      <span className="text-ink flex shrink-0 items-center gap-1.5 text-[13.5px] font-semibold"><Brain aria-hidden className="text-brand size-4" />AI</span>
       <form action={ask} className="flex min-w-0 flex-1 basis-64 items-center gap-2">
         <label htmlFor="books-question" className="sr-only">Ask the books</label>
         <input id="books-question" name="question" maxLength={BOOKS_QUESTION_MAX} required disabled={Boolean(reason) || asking} autoComplete="off"
           placeholder={reason ? "AI is off" : "Ask the books — what did we spend on rent this year against last?"}
-          className="border-hairline-strong bg-surface placeholder:text-ink-faint focus-visible:ring-ring/40 h-8 min-w-0 flex-1 rounded-md border px-2.5 text-[13px] outline-none focus-visible:ring-[3px] disabled:opacity-60 touch:h-11 touch:text-[16px]" />
+          className="border-hairline-strong bg-surface placeholder:text-ink-faint focus-visible:ring-ring/40 h-8 min-w-0 flex-1 rounded-md border px-2.5 text-[13.5px] outline-none focus-visible:ring-[3px] disabled:opacity-60 touch:h-11 touch:text-[16px]" />
         <SubmitButton variant="outline" size="sm" pendingLabel="Looking…" disabled={Boolean(reason)}><CornerDownLeft className="size-3.5" />Ask</SubmitButton>
       </form>
       <form action={explain}>
         <SubmitButton size="sm" pendingLabel="Reading…" disabled={Boolean(reason)}><Brain className="size-3.5" />{overviewState.overview ? "Explain again" : "Explain the figures"}</SubmitButton>
       </form>
     </div>
-    {reason ? <p className="border-hairline text-ink-faint border-t px-3 py-1.5 text-[11.5px]">{reason}</p> : null}
+    {reason ? <p className="border-hairline text-ink-faint border-t px-3 py-1.5 text-[12px]">{reason}</p> : null}
 
     {explaining || asking ? <div aria-live="polite" className="border-hairline flex items-center gap-3 border-t px-4 py-3">
       <ThinkingBars />
-      <p className="ll-ai-sheen text-[12.5px] font-medium">{explaining ? "Claude is reading the books" : "Claude is looking through the books"}</p>
+      <p className="ll-ai-sheen text-[13px] font-medium">{explaining ? "Claude is reading the books" : "Claude is looking through the books"}</p>
     </div> : null}
 
-    {!explaining && !asking && shown === "overview" && overviewState.error && overviewState.available ? <p role="alert" className="border-hairline text-critical border-t px-4 py-2.5 text-[12.5px]">{overviewState.error}</p> : null}
-    {!explaining && !asking && shown === "answer" && answer.error && answer.available ? <p role="alert" className="border-hairline text-critical border-t px-4 py-2.5 text-[12.5px]">{answer.error}</p> : null}
+    {!explaining && !asking && shown === "overview" && overviewState.error && overviewState.available ? <p role="alert" className="border-hairline text-critical border-t px-4 py-2.5 text-[13px]">{overviewState.error}</p> : null}
+    {!explaining && !asking && shown === "answer" && answer.error && answer.available ? <p role="alert" className="border-hairline text-critical border-t px-4 py-2.5 text-[13px]">{answer.error}</p> : null}
 
     {!asking && shown === "answer" && answer.answer ? <div aria-live="polite" className="ll-ai-enter border-hairline border-t px-4 py-3">
       <Fold onClose={() => setShown(null)}>{answer.question}</Fold>
-      <div className="text-ink mt-1.5 text-[13px] leading-relaxed whitespace-pre-wrap">{answer.answer}</div>
-      {answer.looked.length ? <p className="text-ink-faint mt-1.5 text-[11.5px]">Looked at: {answer.looked.join(" · ")}</p> : null}
+      <div className="text-ink mt-1.5 text-[13.5px] leading-relaxed whitespace-pre-wrap">{answer.answer}</div>
+      {answer.looked.length ? <p className="text-ink-faint mt-1.5 text-[12px]">Looked at: {answer.looked.join(" · ")}</p> : null}
     </div> : null}
 
     {!explaining && shown === "overview" && overview ? <div aria-live="polite" className="ll-ai-enter border-hairline border-t">
@@ -73,8 +73,8 @@ export function AiOverview({ unavailable }: { unavailable: string | null }) {
             return <li key={point.title} className="flex gap-3 px-4 py-2.5">
               <tone.icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", tone.className)} />
               <span className="min-w-0">
-                <span className="block text-[13px]"><span className="text-ink font-semibold">{point.title}</span><span className={cn("ml-2 text-[11px] font-semibold tracking-[0.06em] uppercase", tone.className)}>{tone.label}</span></span>
-                <span className="text-ink-muted mt-0.5 block text-[12.5px] leading-relaxed">{point.detail}</span>
+                <span className="block text-[13.5px]"><span className="text-ink font-semibold">{point.title}</span><span className={cn("ml-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase", tone.className)}>{tone.label}</span></span>
+                <span className="text-ink-muted mt-0.5 block text-[13px] leading-relaxed">{point.detail}</span>
               </span>
             </li>;
           })}
@@ -82,11 +82,11 @@ export function AiOverview({ unavailable }: { unavailable: string | null }) {
         <div className="border-hairline space-y-3 border-t px-4 py-3 lg:border-t-0">
           {overview.actions.length ? <div>
             <p className="ll-eyebrow">Next steps</p>
-            <ol className="text-ink mt-1.5 list-decimal space-y-1 pl-4 text-[12.5px] leading-relaxed">{overview.actions.map(item => <li key={item}>{item}</li>)}</ol>
+            <ol className="text-ink mt-1.5 list-decimal space-y-1 pl-4 text-[13px] leading-relaxed">{overview.actions.map(item => <li key={item}>{item}</li>)}</ol>
           </div> : null}
           {overview.questions.length ? <div>
             <p className="ll-eyebrow">To ask the accountant</p>
-            <ul className="text-ink mt-1.5 list-disc space-y-1 pl-4 text-[12.5px] leading-relaxed">{overview.questions.map(item => <li key={item}>{item}</li>)}</ul>
+            <ul className="text-ink mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-relaxed">{overview.questions.map(item => <li key={item}>{item}</li>)}</ul>
           </div> : null}
         </div>
       </div>
@@ -103,8 +103,8 @@ function Fold({ children, onClose }: { children: React.ReactNode; onClose: () =>
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return <div className="flex items-start gap-3">
-    <p className="text-ink-muted min-w-0 flex-1 text-[12px]">{children}</p>
-    <button type="button" onClick={onClose} className="text-ink-muted hover:text-ink inline-flex shrink-0 items-center gap-1 text-[12px] touch:min-h-10"><ChevronUp className="size-3.5" />Hide</button>
+    <p className="text-ink-muted min-w-0 flex-1 text-[12.5px]">{children}</p>
+    <button type="button" onClick={onClose} className="text-ink-muted hover:text-ink inline-flex shrink-0 items-center gap-1 text-[12.5px] touch:min-h-10"><ChevronUp className="size-3.5" />Hide</button>
   </div>;
 }
 

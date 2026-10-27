@@ -60,16 +60,16 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
         ? `Drag a card onto ${won.name} to set it up as a ${workspace.labels.customer[0].toLowerCase()}${uses(workspace, "jobs") ? ` with its first ${workspace.labels.job[0].toLowerCase()}` : ""}, or onto ${lost.name}. Closed ones are kept in the list.`
         : `Drag a card onto ${won.name} or ${lost.name} to close it. Closed ones are kept in the list.`} />
       : <Panel className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
-          <thead className="border-hairline bg-surface-sunken border-b"><tr className="text-ink-faint text-left text-[11px] font-semibold tracking-[0.06em] uppercase">
+        <table className="w-full min-w-[900px] border-collapse text-[13px]">
+          <thead className="border-hairline bg-surface-sunken border-b"><tr className="text-ink-faint text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase">
             <th className="px-3 py-2">{one}</th><th className="px-3 py-2">Stage</th><th className="px-3 py-2">Next action</th><th className="px-3 py-2">Owner</th><th className="px-3 py-2">Source</th>
             {fields.map(field => <th key={field.key} className="px-3 py-2">{field.label}</th>)}
             <th className="px-3 py-2">Expected</th><th className="px-3 py-2 text-right">Value</th>
           </tr></thead>
           <tbody className="divide-hairline divide-y">{rows.map(row => <tr key={row.id} className="hover:bg-surface-sunken">
-            <td className="px-3 py-2"><Link href={`${base}/${row.id}`} className="text-ink hover:text-brand font-medium">{row.company || row.full_name}</Link><span className="text-ink-faint block text-[11.5px]">{row.company ? `${row.full_name} · ` : ""}{row.service ?? row.reference}</span></td>
-            <td className="px-3 py-2"><span className="flex items-center gap-1.5"><StageBadge name={row.stage_name} outcome={row.outcome} position={row.stage_position} openCount={stages.length} /><PriorityFlag priority={row.priority} /></span>{row.outcome === "lost" && row.lost_reason ? <span className="text-ink-faint block text-[11.5px]">{row.lost_reason}</span> : null}</td>
-            <td className={cn("px-3 py-2", dueTone(row.next_action_due, today))}>{row.next_action ?? "—"}{row.next_action_due ? <span className="block text-[11.5px]">{formatDate(row.next_action_due)}</span> : null}</td>
+            <td className="px-3 py-2"><Link href={`${base}/${row.id}`} className="text-ink hover:text-brand font-medium">{row.company || row.full_name}</Link><span className="text-ink-faint block text-[12px]">{row.company ? `${row.full_name} · ` : ""}{row.service ?? row.reference}</span></td>
+            <td className="px-3 py-2"><span className="flex items-center gap-1.5"><StageBadge name={row.stage_name} outcome={row.outcome} position={row.stage_position} openCount={stages.length} /><PriorityFlag priority={row.priority} /></span>{row.outcome === "lost" && row.lost_reason ? <span className="text-ink-faint block text-[12px]">{row.lost_reason}</span> : null}</td>
+            <td className={cn("px-3 py-2", dueTone(row.next_action_due, today))}>{row.next_action ?? "—"}{row.next_action_due ? <span className="block text-[12px]">{formatDate(row.next_action_due)}</span> : null}</td>
             <td className="text-ink-muted px-3 py-2">{row.owner}</td><td className="text-ink-muted px-3 py-2">{row.source}</td>
             {fields.map(field => <td key={field.key} className="text-ink-muted px-3 py-2">{showFieldValue(field, row.extra[field.key], amount => formatAmount(amount), formatDate) ?? "—"}</td>)}
             <td className="text-ink-muted px-3 py-2 whitespace-nowrap">{row.expected_on ? formatDate(row.expected_on) : "—"}</td>

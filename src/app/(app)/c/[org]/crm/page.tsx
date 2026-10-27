@@ -30,28 +30,28 @@ export default async function MyWorkPage() {
       action={uses(workspace, "pipeline") ? <Link href={`/c/${org.slug}/crm/pipeline/new`} className={recordButton}>New {labels.deal[0].toLowerCase()}</Link> : null} />
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
       <Panel className="overflow-hidden">
-        <PanelHeader title="My to-dos" hint="Everything assigned, whatever it is about" action={<Link href={`/c/${org.slug}/crm/tasks`} className="text-brand text-[12.5px]">All tasks</Link>} />
+        <PanelHeader title="My to-dos" hint="Everything assigned, whatever it is about" action={<Link href={`/c/${org.slug}/crm/tasks`} className="text-brand text-[13px]">All tasks</Link>} />
         <div className="p-4"><AddTodo /></div>
         {[["Overdue", overdue, "critical"], ["Today", dueToday], ["Next 7 days", soon], ["Later", later]].map(([title, list, tone]) =>
           <TaskGroupLinks key={String(title)} title={String(title)} tasks={list as CrmTask[]} today={today} tone={tone as "critical" | undefined} slug={org.slug} labels={labels} />)}
-        {!tasks.length ? <p className="text-ink-muted px-4 pb-4 text-[12.5px]">Nothing to do. Add a to-do above.</p> : null}
+        {!tasks.length ? <p className="text-ink-muted px-4 pb-4 text-[13px]">Nothing to do. Add a to-do above.</p> : null}
       </Panel>
       <div className="space-y-4">
         {uses(workspace, "pipeline") ? <Panel className="overflow-hidden">
-          <PanelHeader title={`Open ${labels.deal[1].toLowerCase()}`} count={deals.length} action={<Link href={`/c/${org.slug}/crm/pipeline`} className="text-brand text-[12.5px]">Board</Link>} />
+          <PanelHeader title={`Open ${labels.deal[1].toLowerCase()}`} count={deals.length} action={<Link href={`/c/${org.slug}/crm/pipeline`} className="text-brand text-[13px]">Board</Link>} />
           <ul className="divide-hairline divide-y">{deals.map(enquiry => <li key={enquiry.id}>
             <Link href={`/c/${org.slug}/crm/pipeline/${enquiry.id}`} className="hover:bg-surface-sunken block px-4 py-2.5">
-              <span className="flex items-baseline justify-between gap-2"><span className="text-ink truncate text-[13px] font-medium">{enquiry.full_name}{enquiry.company ? <span className="text-ink-faint font-normal"> · {enquiry.company}</span> : null}</span><StageBadge name={enquiry.stage_name} outcome={enquiry.outcome} position={enquiry.stage_position} openCount={workspace.stages.deal.filter(stage => stage.outcome === "open").length} /></span>
-              <span className={cn("block truncate text-[12px]", enquiry.next_action ? dueTone(enquiry.next_action_due, today) : "text-caution")}>{enquiry.next_action ? `${enquiry.next_action}${enquiry.next_action_due ? ` · ${formatDate(enquiry.next_action_due)}` : ""}` : "No next action"}</span>
+              <span className="flex items-baseline justify-between gap-2"><span className="text-ink truncate text-[13.5px] font-medium">{enquiry.full_name}{enquiry.company ? <span className="text-ink-faint font-normal"> · {enquiry.company}</span> : null}</span><StageBadge name={enquiry.stage_name} outcome={enquiry.outcome} position={enquiry.stage_position} openCount={workspace.stages.deal.filter(stage => stage.outcome === "open").length} /></span>
+              <span className={cn("block truncate text-[12.5px]", enquiry.next_action ? dueTone(enquiry.next_action_due, today) : "text-caution")}>{enquiry.next_action ? `${enquiry.next_action}${enquiry.next_action_due ? ` · ${formatDate(enquiry.next_action_due)}` : ""}` : "No next action"}</span>
             </Link>
           </li>)}</ul>
         </Panel> : null}
         {uses(workspace, "jobs") ? <Panel className="overflow-hidden">
-          <PanelHeader title={`${labels.job[1]} in hand`} count={jobs.length} action={<Link href={`/c/${org.slug}/crm/jobs`} className="text-brand text-[12.5px]">Board</Link>} />
+          <PanelHeader title={`${labels.job[1]} in hand`} count={jobs.length} action={<Link href={`/c/${org.slug}/crm/jobs`} className="text-brand text-[13px]">Board</Link>} />
           <ul className="divide-hairline divide-y">{jobs.map(matter => <li key={matter.id}>
             <Link href={`/c/${org.slug}/crm/jobs/${matter.id}`} className="hover:bg-surface-sunken block px-4 py-2.5">
-              <span className="text-ink block truncate text-[13px] font-medium">{matter.customer_name ?? "—"}<span className="text-ink-faint font-normal"> · {matter.title}</span></span>
-              <span className={cn("block truncate text-[12px]", dueTone(matter.next_action_due, today))}>{matter.next_action ?? "No next action"}{matter.next_action_due ? ` · ${formatDate(matter.next_action_due)}` : ""}{matter.value ? <span className="text-ink-faint"> · {formatAmount(matter.value)}</span> : null}</span>
+              <span className="text-ink block truncate text-[13.5px] font-medium">{matter.customer_name ?? "—"}<span className="text-ink-faint font-normal"> · {matter.title}</span></span>
+              <span className={cn("block truncate text-[12.5px]", dueTone(matter.next_action_due, today))}>{matter.next_action ?? "No next action"}{matter.next_action_due ? ` · ${formatDate(matter.next_action_due)}` : ""}{matter.value ? <span className="text-ink-faint"> · {formatAmount(matter.value)}</span> : null}</span>
             </Link>
           </li>)}</ul>
         </Panel> : null}
@@ -67,13 +67,13 @@ function TaskGroupInner({ title, tasks, today, tone, slug, labels }: { title: st
   if (!tasks.length) return null;
   const href = (task: CrmTask) => task.enquiry_id ? `/c/${slug}/crm/pipeline/${task.enquiry_id}` : task.job_id ? `/c/${slug}/crm/jobs/${task.job_id}` : task.customer_id ? `/c/${slug}/customers/${task.customer_id}` : null;
   return <div>
-    <p className={cn("border-hairline bg-surface-sunken border-y px-4 py-1.5 text-[11px] font-semibold tracking-[0.08em] uppercase", tone === "critical" ? "text-critical" : "text-ink-muted")}>{title} <span className="text-ink-faint ml-1">{tasks.length}</span></p>
+    <p className={cn("border-hairline bg-surface-sunken border-y px-4 py-1.5 text-[11.5px] font-semibold tracking-[0.08em] uppercase", tone === "critical" ? "text-critical" : "text-ink-muted")}>{title} <span className="text-ink-faint ml-1">{tasks.length}</span></p>
     <ul className="divide-hairline divide-y">{tasks.map(task => <li key={task.id} className="flex items-center gap-3 px-4 py-2.5">
       <TaskCheck id={task.id} done={false} />
-      <span className="text-ink min-w-0 flex-1 truncate text-[13px]">{task.title}</span>
+      <span className="text-ink min-w-0 flex-1 truncate text-[13.5px]">{task.title}</span>
       <PriorityFlag priority={task.priority} />
       {href(task) ? <Link href={href(task)!} className="hidden md:inline-flex"><LinkChip kind={task.link_kind ? labels[task.link_kind][0] : null} label={task.link_label} /></Link> : null}
-      <span className={cn("w-16 shrink-0 text-right text-[12.5px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? short(task.due_on) : "—"}</span>
+      <span className={cn("w-16 shrink-0 text-right text-[13px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? short(task.due_on) : "—"}</span>
     </li>)}</ul>
   </div>;
 }

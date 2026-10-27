@@ -23,9 +23,9 @@ export function InvoiceDesignForm({ slug, accent, footer, logoVersion, previewHr
       <div className="flex flex-wrap items-center gap-3">
         <span className="border-hairline bg-surface-sunken grid h-14 w-40 place-items-center overflow-hidden rounded border">
           {/* eslint-disable-next-line @next/next/no-img-element -- the company's own logo, served by the app */}
-          {preview || logoVersion ? <img src={preview ?? `/c/${slug}/logo?v=${logoVersion}`} alt="Logo" className="max-h-12 max-w-36 object-contain" /> : <span className="text-ink-faint text-[11px]">No logo: the name is printed</span>}
+          {preview || logoVersion ? <img src={preview ?? `/c/${slug}/logo?v=${logoVersion}`} alt="Logo" className="max-h-12 max-w-36 object-contain" /> : <span className="text-ink-faint text-[11.5px]">No logo: the name is printed</span>}
         </span>
-        <input id="design-logo" name="logo" type="file" accept="image/png,image/jpeg" className="text-ink-muted text-[12px] file:mr-3 file:rounded-md file:border file:border-hairline-strong file:bg-surface file:px-3 file:py-1.5 file:text-[12.5px] file:font-medium file:text-ink"
+        <input id="design-logo" name="logo" type="file" accept="image/png,image/jpeg" className="text-ink-muted text-[12.5px] file:mr-3 file:rounded-md file:border file:border-hairline-strong file:bg-surface file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-ink"
           onChange={event => { const file = event.target.files?.[0]; setPreview(file ? URL.createObjectURL(file) : null); }} />
       </div>
     </Field>
@@ -44,7 +44,7 @@ export function InvoiceDesignForm({ slug, accent, footer, logoVersion, previewHr
     <div className="flex flex-wrap items-center gap-3">
       <SubmitButton pendingLabel="Saving…">Save the design</SubmitButton>
       {previewHref ? <a href={previewHref} target="_blank" rel="noopener" className={recordOutlineButton}><FileText className="size-3.5" />See it on an invoice</a> : null}
-      {state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+      {state.ok ? <span role="status" className="text-positive text-[13px]">Saved</span> : null}
     </div>
   </form>;
 }

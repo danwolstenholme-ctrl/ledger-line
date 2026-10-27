@@ -44,20 +44,20 @@ export function ReminderPanel({ data }: { data: ReminderData }) {
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={recordOutlineButton}><Mail className="size-3.5" />Send a reminder</button>;
   return <section aria-label="Payment reminder" className="ll-panel basis-full space-y-3 px-4 py-3.5">
     <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <h3 className="text-ink text-[13px] font-semibold">Payment reminder</h3>
-      {data.lastSent ? <p className="text-ink-faint text-[11.5px]">Last reminder sent {formatAgo(data.lastSent)}</p> : null}
+      <h3 className="text-ink text-[13.5px] font-semibold">Payment reminder</h3>
+      {data.lastSent ? <p className="text-ink-faint text-[12px]">Last reminder sent {formatAgo(data.lastSent)}</p> : null}
     </div>
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="To" htmlFor="reminder-to"><TextInput id="reminder-to" type="email" value={to} onChange={event => setTo(event.target.value)} placeholder="accounts@customer.example" /></Field>
       <Field label="Subject" htmlFor="reminder-subject"><TextInput id="reminder-subject" value={subject} onChange={event => setSubject(event.target.value)} /></Field>
     </div>
-    <Field label="Message" htmlFor="reminder-body"><TextArea id="reminder-body" rows={12} value={body} onChange={event => setBody(event.target.value)} className="font-mono text-[12px]" /></Field>
+    <Field label="Message" htmlFor="reminder-body"><TextArea id="reminder-body" rows={12} value={body} onChange={event => setBody(event.target.value)} className="font-mono text-[12.5px]" /></Field>
     <div className="flex flex-wrap items-center gap-2">
       <a href={`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`} onClick={record} className={recordButton}><Mail className="size-3.5" />Open in email</a>
       <a href={`${data.statementHref}?download=1`} className={recordOutlineButton}><FileDown className="size-3.5" />Download the statement</a>
       <button type="button" className={recordOutlineButton} onClick={() => { void navigator.clipboard?.writeText(`${subject}\n\n${body}`).then(() => setCopied(true)); record(); }}><Copy className="size-3.5" />{copied ? "Copied" : "Copy the message"}</button>
-      <button type="button" onClick={() => setOpen(false)} className="text-ink-muted hover:text-ink px-2 text-[12.5px]">Close</button>
+      <button type="button" onClick={() => setOpen(false)} className="text-ink-muted hover:text-ink px-2 text-[13px]">Close</button>
     </div>
-    <p className="text-ink-faint text-[11.5px]">{logged ? "Logged on the customer's timeline." : "Opens your email app with this message: attach the statement before you send it. The reminder is logged on the customer's timeline."}</p>
+    <p className="text-ink-faint text-[12px]">{logged ? "Logged on the customer's timeline." : "Opens your email app with this message: attach the statement before you send it. The reminder is logged on the customer's timeline."}</p>
   </section>;
 }

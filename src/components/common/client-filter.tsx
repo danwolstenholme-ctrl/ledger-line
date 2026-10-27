@@ -14,7 +14,7 @@ export function ClientFilter({ label, options }: { label: string; options: { lab
   const router = useRouter();
   if (options.length <= 16) return <RecordFilterLinks label={label} options={options} />;
   const current = options.find(option => option.active) ?? options[0];
-  return <label className="text-ink-muted flex items-center gap-2 text-[12.5px]">
+  return <label className="text-ink-muted flex items-center gap-2 text-[13px]">
     {label}
     <NativeSelect aria-label={label} value={current.href} onChange={event => router.push(event.target.value)} className="w-64">
       {options.map(option => <option key={option.href} value={option.href}>{option.label}</option>)}

@@ -11,7 +11,7 @@ import { CreateRecordLink, RecordEmpty, RecordFailure, RecordHeader, recordOutli
 
 export const metadata: Metadata = { title: "Suppliers" };
 
-const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
+const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
 
 export default async function SuppliersPage() {
   const org = await requireOrg();
@@ -32,10 +32,10 @@ export default async function SuppliersPage() {
         <tbody className="divide-hairline divide-y">{suppliers.rows.map(supplier => {
           const debt = owed.get(supplier.id);
           return <tr key={supplier.id} className={cn("hover:bg-surface-sunken", !supplier.is_active && "opacity-60")}>
-            <td className="px-3 py-2 text-[12.5px]"><Link href={`/accounts/suppliers/${supplier.id}`} className="text-ink hover:text-brand font-medium hover:underline touch:inline-flex touch:min-h-10 touch:items-center">{supplier.name}</Link>{!supplier.is_active ? <span className="text-ink-faint ml-2 text-[11px]">Inactive</span> : null}</td>
-            <td className="text-ink-muted hidden px-3 py-2 text-[12.5px] md:table-cell">{supplier.email ?? "—"}</td>
-            <td className="text-ink-muted hidden px-3 py-2 font-mono text-[12px] sm:table-cell">{supplier.vat_number ?? "—"}</td>
-            <td className={cn("px-3 py-2 text-right text-[12.5px] tabular-nums", debt && debt.oldest > 0 ? "text-critical font-medium" : "text-ink")}>{debt ? formatAmount(debt.total) : "—"}</td>
+            <td className="px-3 py-2 text-[13px]"><Link href={`/accounts/suppliers/${supplier.id}`} className="text-ink hover:text-brand font-medium hover:underline touch:inline-flex touch:min-h-10 touch:items-center">{supplier.name}</Link>{!supplier.is_active ? <span className="text-ink-faint ml-2 text-[11.5px]">Inactive</span> : null}</td>
+            <td className="text-ink-muted hidden px-3 py-2 text-[13px] md:table-cell">{supplier.email ?? "—"}</td>
+            <td className="text-ink-muted hidden px-3 py-2 font-mono text-[12.5px] sm:table-cell">{supplier.vat_number ?? "—"}</td>
+            <td className={cn("px-3 py-2 text-right text-[13px] tabular-nums", debt && debt.oldest > 0 ? "text-critical font-medium" : "text-ink")}>{debt ? formatAmount(debt.total) : "—"}</td>
           </tr>;
         })}</tbody>
       </table></div>}

@@ -44,28 +44,28 @@ export function OwnerInvites({ rows, practice, from, choose }: { rows: OwnerLine
     {state.ok && state.sent ? <InvitesMade state={state} practice={practice} from={from} /> : null}
     {/* Sent by hand, not as the form's action: React resets a form after its action, and the boxes would no longer show what is chosen. */}
     <form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); startTransition(() => action(data)); }}>
-      <div className="overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-[12.5px]">
+      <div className="overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-[13px]">
         <thead><tr className="border-hairline bg-surface-sunken border-b text-left">
           <th scope="col" className="w-10 px-4 py-2"><input type="checkbox" aria-label="Choose every company on this page" checked={every} disabled={!open.length}
             onChange={event => setChosen(current => { const next = new Set(current); for (const row of open) { if (event.target.checked) next.add(row.id); else next.delete(row.id); } return next; })} className="accent-brand size-3.5" /></th>
-          {["Company", "Who runs it", "On Ledgerline"].map(label => <th key={label} scope="col" className="text-ink-faint px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase">{label}</th>)}
+          {["Company", "Who runs it", "On Ledgerline"].map(label => <th key={label} scope="col" className="text-ink-faint px-4 py-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase">{label}</th>)}
         </tr></thead>
         <tbody className="divide-hairline divide-y">{rows.map(row => {
           const can = row.status !== "joined" && Boolean(row.email);
           return <tr key={row.id} className={cn(chosen.has(row.id) && can ? "bg-brand-50/50" : undefined)}>
             <td className="px-4 py-2.5">{can ? <input type="checkbox" name="organisation_id" value={row.id} checked={chosen.has(row.id)} onChange={event => toggle(row.id, event.target.checked)}
               aria-label={`Invite ${row.contact ?? "the owner"} of ${row.name}`} className="accent-brand size-3.5" /> : null}</td>
-            <td className="px-4 py-2.5"><span className="text-ink font-medium">{row.name}</span>{row.he ? <span className="text-ink-faint block text-[11.5px]">{row.he}</span> : null}</td>
+            <td className="px-4 py-2.5"><span className="text-ink font-medium">{row.name}</span>{row.he ? <span className="text-ink-faint block text-[12px]">{row.he}</span> : null}</td>
             <td className="px-4 py-2.5"><span className="text-ink">{row.contact ?? "No contact"}</span>
-              <span className="text-ink-faint block text-[11.5px]">{row.email ?? (row.fileId ? <Link href={`/clients/${row.fileId}`} className="text-brand hover:underline">No email: add one to the client file</Link> : "No email")}</span></td>
-            <td className="px-4 py-2.5"><RecordBadge tone={STATUS[row.status].tone}>{STATUS[row.status].label}</RecordBadge>{row.detail ? <span className="text-ink-faint block pt-0.5 text-[11.5px]">{row.detail}</span> : null}</td>
+              <span className="text-ink-faint block text-[12px]">{row.email ?? (row.fileId ? <Link href={`/clients/${row.fileId}`} className="text-brand hover:underline">No email: add one to the client file</Link> : "No email")}</span></td>
+            <td className="px-4 py-2.5"><RecordBadge tone={STATUS[row.status].tone}>{STATUS[row.status].label}</RecordBadge>{row.detail ? <span className="text-ink-faint block pt-0.5 text-[12px]">{row.detail}</span> : null}</td>
           </tr>;
         })}</tbody>
       </table></div>
       <div className="border-hairline flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3">
         <SubmitButton disabled={!count || pending}><UserPlus className="size-3.5" />{pending ? "Making the links…" : !count ? "Choose who to invite"
           : renewing ? `New links for ${count} compan${count === 1 ? "y" : "ies"}` : `Invite ${count} owner${count === 1 ? "" : "s"}`}</SubmitButton>
-        <p className="text-ink-faint min-w-0 flex-1 text-[11.5px]">Ledgerline makes a link for each person, and you send it from your own email. Someone who runs several of these companies gets one link for them all. A new link replaces one sent before.</p>
+        <p className="text-ink-faint min-w-0 flex-1 text-[12px]">Ledgerline makes a link for each person, and you send it from your own email. Someone who runs several of these companies gets one link for them all. A new link replaces one sent before.</p>
       </div>
       <div className="px-4 pb-3"><FormError message={state.error} /></div>
     </form>
@@ -84,23 +84,23 @@ function InvitesMade({ state, practice, from }: { state: OwnerInvitesState; prac
   const companies = sent.reduce((sum, person) => sum + person.companies.length, 0);
   return <div role="status" className="border-positive-line bg-positive-soft space-y-3 rounded-lg border p-4">
     <div>
-      <p className="text-positive text-[13px] font-semibold">{sent.length} {sent.length === 1 ? "person" : "people"} invited, for {companies} compan{companies === 1 ? "y" : "ies"}.</p>
-      <p className="text-ink-muted text-[12.5px]">Send each their link from your own email: the links are shown only now, and work until {until}. For many at once, download them for a mail merge in Outlook, Word or Gmail: the file has each person’s message ready.</p>
+      <p className="text-positive text-[13.5px] font-semibold">{sent.length} {sent.length === 1 ? "person" : "people"} invited, for {companies} compan{companies === 1 ? "y" : "ies"}.</p>
+      <p className="text-ink-muted text-[13px]">Send each their link from your own email: the links are shown only now, and work until {until}. For many at once, download them for a mail merge in Outlook, Word or Gmail: the file has each person’s message ready.</p>
     </div>
     <div className="flex flex-wrap gap-2">
       <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(`﻿${csv}`)}`} download="owner invitations.csv" className={recordButton}><FileDown className="size-3.5" />Download for a mail merge</a>
     </div>
-    <ul className="border-hairline divide-hairline bg-surface divide-y rounded-md border">{sent.map(person => <li key={person.email} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2 text-[12.5px]">
+    <ul className="border-hairline divide-hairline bg-surface divide-y rounded-md border">{sent.map(person => <li key={person.email} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2 text-[13px]">
       <span className="min-w-0 flex-1"><span className="text-ink font-medium">{person.name}</span><span className="text-ink-faint"> · {person.email}</span>
-        <span className="text-ink-muted block truncate text-[11.5px]">{listed(person.companies)}</span></span>
+        <span className="text-ink-muted block truncate text-[12px]">{listed(person.companies)}</span></span>
       <span className="flex items-center gap-2">
         <CopyLink link={person.link} name={person.name} />
         <a href={`mailto:${encodeURIComponent(person.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message(person))}`} className={recordOutlineButton} aria-label={`Email ${person.name} their link`}><Mail className="size-3.5" />Open in email</a>
       </span>
     </li>)}</ul>
-    {sent[0] ? <details className="text-[12.5px]"><summary className="text-brand cursor-pointer font-medium">The message each person gets</summary>
+    {sent[0] ? <details className="text-[13px]"><summary className="text-brand cursor-pointer font-medium">The message each person gets</summary>
       <div className="pt-2"><CopyBlock label={subject} text={message(sent[0])} /></div></details> : null}
-    {skipped.length ? <div className="text-[12.5px]"><p className="text-ink font-medium">Not invited ({skipped.length})</p>
+    {skipped.length ? <div className="text-[13px]"><p className="text-ink font-medium">Not invited ({skipped.length})</p>
       <ul className="text-ink-muted list-disc pl-5">{skipped.map(item => <li key={item.company}>{item.company}: {item.why}</li>)}</ul></div> : null}
   </div>;
 }

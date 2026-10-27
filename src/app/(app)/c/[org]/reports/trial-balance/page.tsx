@@ -20,8 +20,8 @@ export default async function TrialBalancePage({ searchParams }: { searchParams:
   const balances = await getLedgerBalances(period.yearFrom, period.asAt);
   const tb = trialBalance(balances.rows);
   const query = new URLSearchParams({ range: period.range, from: period.from, to: period.to });
-  const head = "text-ink-faint px-4 py-2 text-left text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
-  const cell = "px-4 py-1.5 text-[12.5px] tabular-nums";
+  const head = "text-ink-faint px-4 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase";
+  const cell = "px-4 py-1.5 text-[13px] tabular-nums";
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title="Trial balance" back={{ href: "/accounts/reports", label: "Reports" }} />
     <AccountsNav current="/accounts/reports" />
@@ -33,13 +33,13 @@ export default async function TrialBalancePage({ searchParams }: { searchParams:
         <th scope="col" className={cn(head, "text-right")}>Debit</th><th scope="col" className={cn(head, "text-right")}>Credit</th>
       </tr></thead>
       <tbody className="divide-hairline divide-y">{tb.lines.map(line => <tr key={line.accountId} className="hover:bg-surface-sunken">
-        <td className="px-4 py-1.5 text-[12.5px]"><Link href={`/accounts/chart/${line.accountId}?range=custom&from=${period.yearFrom}&to=${period.asAt}`} className="text-ink hover:text-brand hover:underline touch:inline-flex touch:min-h-10 touch:items-center"><span className="text-ink-faint mr-2 font-mono text-[11.5px]">{line.code}</span>{line.name}</Link></td>
-        <td className="text-ink-muted hidden px-4 py-1.5 text-[12px] sm:table-cell">{ACCOUNT_TYPES[line.type].label}</td>
+        <td className="px-4 py-1.5 text-[13px]"><Link href={`/accounts/chart/${line.accountId}?range=custom&from=${period.yearFrom}&to=${period.asAt}`} className="text-ink hover:text-brand hover:underline touch:inline-flex touch:min-h-10 touch:items-center"><span className="text-ink-faint mr-2 font-mono text-[12px]">{line.code}</span>{line.name}</Link></td>
+        <td className="text-ink-muted hidden px-4 py-1.5 text-[12.5px] sm:table-cell">{ACCOUNT_TYPES[line.type].label}</td>
         <td className={cn(cell, "text-right")}>{line.debit ? formatAmount(line.debit) : ""}</td>
         <td className={cn(cell, "text-right")}>{line.credit ? formatAmount(line.credit) : ""}</td>
       </tr>)}</tbody>
       <tfoot className="border-ink bg-surface-sunken border-t"><tr>
-        <th scope="row" colSpan={2} className="text-ink px-4 py-2.5 text-left text-[13px] font-semibold">{tb.balanced ? "Total" : "Total — the columns do not agree"}</th>
+        <th scope="row" colSpan={2} className="text-ink px-4 py-2.5 text-left text-[13.5px] font-semibold">{tb.balanced ? "Total" : "Total — the columns do not agree"}</th>
         <td className={cn(cell, "py-2.5 text-right font-semibold", !tb.balanced && "text-critical")}>{formatAmount(tb.debit)}</td>
         <td className={cn(cell, "py-2.5 text-right font-semibold", !tb.balanced && "text-critical")}>{formatAmount(tb.credit)}</td>
       </tr></tfoot>

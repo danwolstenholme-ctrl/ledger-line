@@ -60,10 +60,10 @@ export default async function YearEndPage({ searchParams }: { searchParams: Prom
               return <li key={step.key} className="flex items-start gap-3 px-4 py-2.5">
                 {step.doneOn ? <CheckCircle2 aria-label="Done" className="text-positive mt-0.5 size-4 shrink-0" /> : late ? <AlertTriangle aria-label="Late" className="text-critical mt-0.5 size-4 shrink-0" /> : <Circle aria-label="To do" className="text-ink-faint mt-0.5 size-4 shrink-0" />}
                 <div className="min-w-0 flex-1">
-                  <p className="text-ink text-[12.5px] font-medium">{step.label}{step.key === "report_signed_on" && data.row?.opinion ? <span className="text-ink-muted font-normal"> · {OPINIONS[data.row.opinion]}</span> : null}</p>
-                  <p className="text-ink-muted text-[11.5px] leading-snug">{step.why}</p>
+                  <p className="text-ink text-[13px] font-medium">{step.label}{step.key === "report_signed_on" && data.row?.opinion ? <span className="text-ink-muted font-normal"> · {OPINIONS[data.row.opinion]}</span> : null}</p>
+                  <p className="text-ink-muted text-[12px] leading-snug">{step.why}</p>
                 </div>
-                <p className={cn("shrink-0 text-right text-[12px] whitespace-nowrap tabular-nums", step.doneOn ? "text-ink-muted" : late ? "text-critical font-medium" : "text-ink")}>
+                <p className={cn("shrink-0 text-right text-[12.5px] whitespace-nowrap tabular-nums", step.doneOn ? "text-ink-muted" : late ? "text-critical font-medium" : "text-ink")}>
                   {step.doneOn ? formatDate(step.doneOn) : step.due ? `${late ? "Was due" : "Due"} ${formatDate(step.due)}` : step.key === "books_closed" && finished ? <Link href={`${base}/settings`} className="text-brand hover:underline">Lock the books</Link> : ""}
                 </p>
               </li>;
@@ -79,13 +79,13 @@ export default async function YearEndPage({ searchParams }: { searchParams: Prom
           <ul className="divide-hairline divide-y">
             {list.map(item => <li key={item.action} className="flex items-center gap-3 px-4 py-2.5">
               {item.ok ? <CheckCircle2 aria-label="Fine" className="text-positive size-4 shrink-0" /> : <AlertTriangle aria-label="To look at" className="text-caution size-4 shrink-0" />}
-              <p className="text-ink min-w-0 flex-1 text-[12.5px]">{item.text}</p>
-              <Link href={item.href} className="text-brand shrink-0 text-[12px] hover:underline">{item.action}</Link>
+              <p className="text-ink min-w-0 flex-1 text-[13px]">{item.text}</p>
+              <Link href={item.href} className="text-brand shrink-0 text-[12.5px] hover:underline">{item.action}</Link>
             </li>)}
           </ul>
           {checks.flagged.length ? <RecordDisclosure title={`The ${checks.flagged.length} journal${checks.flagged.length === 1 ? "" : "s"} to explain`}>
             <ul className="space-y-2.5">
-              {checks.flagged.map(entry => <li key={entry.id} className="text-[12.5px]">
+              {checks.flagged.map(entry => <li key={entry.id} className="text-[13px]">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                   <Link href={`${base}/journals/${entry.id}`} className="text-ink font-medium hover:underline">{formatDate(entry.entry_date)} · {entry.narration}</Link>
                   <span className="text-ink tabular-nums">{formatAmount(entry.total)}</span>
@@ -93,7 +93,7 @@ export default async function YearEndPage({ searchParams }: { searchParams: Prom
                 <div className="mt-1 flex flex-wrap gap-1.5">{entry.flags.map(flag => <RecordBadge key={flag} tone="caution">{JOURNAL_FLAGS[flag]}</RecordBadge>)}</div>
               </li>)}
             </ul>
-            <p className="text-ink-muted mt-3 text-[11.5px] leading-relaxed">Entries posted by hand carry the risk an auditor must test for under ISA 240: posted after the year end, at a weekend, in round amounts or with little explanation. Opening balances are agreed to the year before’s signed accounts. Each needs its support to hand.</p>
+            <p className="text-ink-muted mt-3 text-[12px] leading-relaxed">Entries posted by hand carry the risk an auditor must test for under ISA 240: posted after the year end, at a weekend, in round amounts or with little explanation. Opening balances are agreed to the year before’s signed accounts. Each needs its support to hand.</p>
           </RecordDisclosure> : null}
         </RecordSection>
       </div>
@@ -101,8 +101,8 @@ export default async function YearEndPage({ searchParams }: { searchParams: Prom
       <div className="min-w-0 space-y-4">
         <RecordSection title={uk ? "Audit or exemption" : "Audit or review"} hint={uk ? "Companies Act 2006: small companies" : "Companies Law, s.152A"}>
           <div className="space-y-3 px-4 py-3.5">
-            <p className="text-ink text-[13px] font-semibold">{verdict}</p>
-            <ul className="text-ink-muted list-disc space-y-1 pl-4 text-[12px] leading-relaxed">{data.review.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+            <p className="text-ink text-[13.5px] font-semibold">{verdict}</p>
+            <ul className="text-ink-muted list-disc space-y-1 pl-4 text-[12.5px] leading-relaxed">{data.review.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
             <dl className="divide-hairline border-hairline divide-y border-t">
               <RecordDetail label="This year" value={<>Turnover {figure(data.year.turnover)} · total assets {figure(data.year.assets)}</>} />
               {uk ? <RecordDetail label="Small company" value={<>Within at least two of: turnover {whole(limits.turnover)}, total assets {whole(limits.assets)}, {limits.employees} employees on average{data.yearStart < "2025-04-06" ? " (£15m and £7.5m for years beginning on or after 6 April 2025)" : ""}</>} />
@@ -124,7 +124,7 @@ export default async function YearEndPage({ searchParams }: { searchParams: Prom
         <RecordSection title="Size and framework">
           <dl className="divide-hairline divide-y px-4">
             {uk ? <RecordDetail label="Size" value={data.review.allowed === true ? "Small" : data.review.allowed === false ? "Larger than small" : "Not known until the year’s turnover is"} />
-              : <RecordDetail label="Size" value={data.size ? <>{SIZE_LABELS[data.size.size]}{data.size.certain ? "" : ", subject to the average number of employees"}<span className="text-ink-muted block text-[11.5px]">Companies Law, s.141A: within at least two of the three limits (assets, turnover, employees), two years running to change size.</span></> : "Not known until the year’s turnover is"} />}
+              : <RecordDetail label="Size" value={data.size ? <>{SIZE_LABELS[data.size.size]}{data.size.certain ? "" : ", subject to the average number of employees"}<span className="text-ink-muted block text-[12px]">Companies Law, s.141A: within at least two of the three limits (assets, turnover, employees), two years running to change size.</span></> : "Not known until the year’s turnover is"} />}
             <RecordDetail label="Framework" value={uk ? UK_FRAMEWORK_NOTE : FRAMEWORK_NOTE} />
           </dl>
         </RecordSection>
@@ -134,8 +134,8 @@ export default async function YearEndPage({ searchParams }: { searchParams: Prom
             <RecordDetail label={review ? "Reviewer" : "Auditor"} value={org.auditor_name ? <>{org.auditor_name}{org.auditor_is_practice ? <span className="text-ink-muted"> · the practice itself</span> : null}</> : null} />
             <RecordDetail label="Incorporated" value={org.incorporated_on ? formatDate(org.incorporated_on) : null} />
           </dl>
-          {org.auditor_is_practice ? <p className="border-caution-line bg-caution-soft text-ink mx-4 mb-3 rounded-md border px-3 py-2 text-[12px] leading-relaxed">{INDEPENDENCE_NOTE}</p> : null}
-          <p className="text-ink-muted border-hairline border-t px-4 py-3 text-[12px] leading-relaxed">
+          {org.auditor_is_practice ? <p className="border-caution-line bg-caution-soft text-ink mx-4 mb-3 rounded-md border px-3 py-2 text-[12.5px] leading-relaxed">{INDEPENDENCE_NOTE}</p> : null}
+          <p className="text-ink-muted border-hairline border-t px-4 py-3 text-[12.5px] leading-relaxed">
             The auditor can work in Ledgerline itself, reading the books but never changing them: <Link href={`${base}/settings/people`} className="text-brand hover:underline">invite them as the auditor</Link>.
           </p>
           {data.practice ? <RecordDisclosure title="The company’s details for the year end">

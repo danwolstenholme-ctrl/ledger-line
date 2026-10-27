@@ -26,7 +26,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     <RecordSection title={item.is_active ? "Stop selling it" : "Sell it again"}>
       <form action={setItemActive} className="flex flex-wrap items-center gap-3 px-4 py-3">
         <input type="hidden" name="id" value={item.id} /><input type="hidden" name="active" value={item.is_active ? "false" : "true"} />
-        <p className="text-ink-muted min-w-0 flex-1 text-[12.5px]">{item.is_active ? "It leaves the list offered on new invoices. Invoices that have it keep it." : "It is offered on new invoices and quotes again."}</p>
+        <p className="text-ink-muted min-w-0 flex-1 text-[13px]">{item.is_active ? "It leaves the list offered on new invoices. Invoices that have it keep it." : "It is offered on new invoices and quotes again."}</p>
         <SubmitButton size="sm" variant="outline" pendingLabel="Saving…">{item.is_active ? "Stop selling it" : "Sell it again"}</SubmitButton>
       </form>
     </RecordSection>

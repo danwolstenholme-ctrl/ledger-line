@@ -20,14 +20,14 @@ export function BusinessTypeForm({ current, types }: { current: string; types: P
         {types.map(type => <option key={type.key} value={type.key}>{type.label}</option>)}
       </NativeSelect>
     </FieldRow>
-    {choice !== current ? <p className="text-ink-muted text-[12px] leading-relaxed">Its names, parts and fields replace these. Stages change only on a board nothing is in yet; nothing recorded is lost.</p> : null}
+    {choice !== current ? <p className="text-ink-muted text-[12.5px] leading-relaxed">Its names, parts and fields replace these. Stages change only on a board nothing is in yet; nothing recorded is lost.</p> : null}
   </ActionForm>;
 }
 
 export function NamesForm({ labels }: { labels: Labels }) {
   const uid = useId();
   const row = (key: "customer" | "deal" | "job", what: string) => <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-    <p className="text-ink-muted pb-2 text-[12.5px]">{what}</p>
+    <p className="text-ink-muted pb-2 text-[13px]">{what}</p>
     <FieldRow label="One" htmlFor={`${uid}-${key}-one`}><TextInput id={`${uid}-${key}-one`} name={`${key}_one`} defaultValue={labels[key][0]} maxLength={30} /></FieldRow>
     <FieldRow label="Several" htmlFor={`${uid}-${key}-many`}><TextInput id={`${uid}-${key}-many`} name={`${key}_many`} defaultValue={labels[key][1]} maxLength={30} /></FieldRow>
   </div>;
@@ -52,10 +52,10 @@ export function ModulesForm({ modules, labels, country }: { modules: Module[]; l
     <div className="grid gap-2 sm:grid-cols-2">
       {PARTS.filter(part => part.module !== "payroll" || country === "CY").map(part => <div key={part.module}>
         <Checkbox name={`module_${part.module}`} defaultChecked={modules.includes(part.module)} label={part.label(labels)} />
-        <p className="text-ink-faint pl-5.5 text-[11.5px]">{part.hint}</p>
+        <p className="text-ink-faint pl-5.5 text-[12px]">{part.hint}</p>
       </div>)}
     </div>
-    <p className="text-ink-faint text-[11.5px]">Customers, invoices and the books are always there. A part turned off keeps what was recorded in it.</p>
+    <p className="text-ink-faint text-[12px]">Customers, invoices and the books are always there. A part turned off keeps what was recorded in it.</p>
   </ActionForm>;
 }
 
@@ -74,28 +74,28 @@ export function StageEditor({ board, stages, counts, closingNames }: { board: Bo
     return [...list, ...current.filter(row => row.outcome !== "open")];
   });
   const line = (row: Row, index: number, editable: boolean) => <li key={row.key} className="flex flex-wrap items-center gap-2 py-1.5">
-    <span className="text-ink-faint w-5 text-right text-[11.5px] tabular-nums">{index + 1}</span>
+    <span className="text-ink-faint w-5 text-right text-[12px] tabular-nums">{index + 1}</span>
     <TextInput aria-label={`Stage ${index + 1}`} value={row.name} onChange={event => update(row.key, { name: event.target.value })} maxLength={40} className="min-w-40 flex-1" />
     {board === "deal" && row.outcome === "open" ? <span className="flex items-center gap-1">
       <TextInput aria-label={`${row.name || "Stage"} probability`} inputMode="numeric" value={row.probability === null ? "" : String(row.probability)} onChange={event => update(row.key, { probability: event.target.value === "" ? null : Number(event.target.value.replace(/[^\d]/g, "")) })} className="w-16 text-right tabular-nums" />
-      <span className="text-ink-faint text-[11.5px]">% likely</span>
+      <span className="text-ink-faint text-[12px]">% likely</span>
     </span> : null}
-    {row.outcome !== "open" ? <span className={row.outcome === "won" ? "text-positive text-[11.5px] font-medium" : "text-critical text-[11.5px] font-medium"}>{row.outcome === "won" ? closingNames.won : closingNames.lost}</span> : null}
+    {row.outcome !== "open" ? <span className={row.outcome === "won" ? "text-positive text-[12px] font-medium" : "text-critical text-[12px] font-medium"}>{row.outcome === "won" ? closingNames.won : closingNames.lost}</span> : null}
     {editable ? <span className="flex items-center gap-0.5">
       <button type="button" onClick={() => shift(row.key, -1)} aria-label={`Move ${row.name} up`} className="text-ink-faint hover:text-ink grid size-7 place-items-center rounded"><ArrowUp className="size-3.5" /></button>
       <button type="button" onClick={() => shift(row.key, 1)} aria-label={`Move ${row.name} down`} className="text-ink-faint hover:text-ink grid size-7 place-items-center rounded"><ArrowDown className="size-3.5" /></button>
-      {row.id && counts[row.id] ? <span className="text-ink-faint w-16 text-[11px]">{counts[row.id]} in it</span>
+      {row.id && counts[row.id] ? <span className="text-ink-faint w-16 text-[11.5px]">{counts[row.id]} in it</span>
         : <button type="button" onClick={() => setRows(current => current.filter(item => item.key !== row.key))} aria-label={`Remove ${row.name}`} className="text-ink-faint hover:text-critical grid size-7 place-items-center rounded"><X className="size-3.5" /></button>}
-    </span> : <span className="text-ink-faint w-[86px] text-[11px]">{row.id && counts[row.id] ? `${counts[row.id]} in it` : ""}</span>}
+    </span> : <span className="text-ink-faint w-[86px] text-[11.5px]">{row.id && counts[row.id] ? `${counts[row.id]} in it` : ""}</span>}
   </li>;
   return <ActionForm action={saveStages} label="Save the stages">
     <input type="hidden" name="board" value={board} />
     <input type="hidden" name="stages" value={JSON.stringify([...open, ...closing].map(row => ({ id: row.id, name: row.name, probability: row.probability, outcome: row.outcome })))} />
     <ol>{open.map((row, index) => line(row, index, true))}</ol>
     <button type="button" onClick={() => setRows(current => [...current.filter(row => row.outcome === "open"), { key: `new-${Date.now()}`, name: "", probability: null, outcome: "open" }, ...current.filter(row => row.outcome !== "open")])}
-      className="text-brand inline-flex items-center gap-1 text-[12.5px] font-medium hover:underline"><Plus className="size-3.5" />Add a stage</button>
+      className="text-brand inline-flex items-center gap-1 text-[13px] font-medium hover:underline"><Plus className="size-3.5" />Add a stage</button>
     <div className="border-hairline border-t pt-2">
-      <p className="text-ink-faint mb-1 text-[11.5px]">Where a record closes: rename them, but each board keeps both.</p>
+      <p className="text-ink-faint mb-1 text-[12px]">Where a record closes: rename them, but each board keeps both.</p>
       <ol>{closing.map((row, index) => line(row, open.length + index, false))}</ol>
     </div>
   </ActionForm>;
@@ -115,7 +115,7 @@ export function FieldEditor({ field }: { field: Field }) {
     </ActionForm>
     <ActionForm action={archiveField} label="Stop using it" variant="outline">
       <input type="hidden" name="id" value={field.id} />
-      <p className="text-ink-faint text-[11.5px]">What was recorded in it is kept, and shows again if it is added back.</p>
+      <p className="text-ink-faint text-[12px]">What was recorded in it is kept, and shows again if it is added back.</p>
     </ActionForm>
   </div>;
 }

@@ -34,7 +34,7 @@ export function InviteForm({ organisationId, roles, mlco = false, from, defaults
       <SubmitButton pendingLabel="Inviting…"><UserPlus className="size-3.5" />Invite</SubmitButton>
     </form>
     {state.ok && state.link ? <div role="status" className="border-positive-line bg-positive-soft space-y-2 rounded-md border p-3">
-      <p className="text-positive text-[12.5px] font-medium">{state.name} is invited. Send them this link: it is shown only now.</p>
+      <p className="text-positive text-[13px] font-medium">{state.name} is invited. Send them this link: it is shown only now.</p>
       <CopyBlock label={`For ${state.email}, valid for 14 days`} text={state.link} />
       <a href={`mailto:${encodeURIComponent(state.email ?? "")}?subject=${encodeURIComponent(`You're invited to ${state.scope} on Ledgerline`)}&body=${encodeURIComponent(body)}`} className={recordButton}><Mail className="size-3.5" />Open in email</a>
     </div> : null}
@@ -75,7 +75,7 @@ export function PasswordLinkForm() {
   return <form action={action} className="space-y-2" noValidate>
     <Field label="Your email" htmlFor="reset-email"><TextInput id="reset-email" name="email" type="email" autoComplete="email" /></Field>
     <FormError message={state.error} />
-    {state.ok ? <p role="status" className="text-positive text-[12px]">{state.notice}</p> : null}
+    {state.ok ? <p role="status" className="text-positive text-[12.5px]">{state.notice}</p> : null}
     <SubmitButton size="sm" variant="outline" pendingLabel="Sending…">Email me a link</SubmitButton>
   </form>;
 }

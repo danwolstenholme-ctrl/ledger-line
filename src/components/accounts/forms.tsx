@@ -29,7 +29,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const keep = (event: React.FormEvent) => event.preventDefault();
 
 function Saved({ state, message }: { state: ActionState; message: string }) {
-  return state.ok ? <p role="status" className="text-positive text-[12px]">{message}</p> : null;
+  return state.ok ? <p role="status" className="text-positive text-[12.5px]">{message}</p> : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ export function ReverseChargeField({ checked, onChange, what, kind }: { checked:
   const { country } = useRegime();
   const uid = useId();
   const [chosen, setChosen] = useState(kind ?? "services");
-  const note = <p className="text-ink-muted text-[12px] leading-relaxed">The VAT on the lines is the company’s to account for: it goes on the return as both due and reclaimed, so it costs nothing.</p>;
+  const note = <p className="text-ink-muted text-[12.5px] leading-relaxed">The VAT on the lines is the company’s to account for: it goes on the return as both due and reclaimed, so it costs nothing.</p>;
   if (country === "GB") return <div className="space-y-1">
     <Field label="Reverse charge" htmlFor={`${uid}-rc`}>
       <NativeSelect id={`${uid}-rc`} name="reverse_charge_kind" value={checked ? chosen : ""} onChange={event => { onChange(Boolean(event.target.value)); if (event.target.value) setChosen(event.target.value); }}>
@@ -117,7 +117,7 @@ export function BillForm({ bill, defaultSupplierId, suppliers, accounts, today }
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">{bill ? "Save bill" : "Record bill"}</SubmitButton>
-      <Link href={bill ? `/accounts/bills/${bill.id}` : "/accounts/bills"} className="text-ink-muted hover:text-ink text-[12.5px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
+      <Link href={bill ? `/accounts/bills/${bill.id}` : "/accounts/bills"} className="text-ink-muted hover:text-ink text-[13px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
     </div>
   </form>;
 }
@@ -160,7 +160,7 @@ export function VoidBillForm({ id, isVoid }: { id: string; isVoid: boolean }) {
   return <form action={action} className="space-y-2">
     <input type="hidden" name="id" value={id} />
     <input type="hidden" name="void" value={isVoid ? "" : "on"} />
-    <p className="text-ink-muted text-[12px]">{isVoid ? "Bring this bill back into the books." : "A void bill stays on record with its number but leaves the books and cannot be paid."}</p>
+    <p className="text-ink-muted text-[12.5px]">{isVoid ? "Bring this bill back into the books." : "A void bill stays on record with its number but leaves the books and cannot be paid."}</p>
     <FormError message={state.error} />
     <SubmitButton variant="outline" size="sm" pendingLabel="Saving…">{isVoid ? "Restore this bill" : "Void this bill"}</SubmitButton>
   </form>;
@@ -224,7 +224,7 @@ export function BankTransactionForm({ transaction, initialKind = "spend", bankAc
     <div role="radiogroup" aria-label="Type of transaction" className="border-hairline-strong inline-flex overflow-hidden rounded-md border">
       {(Object.keys(KIND_LABELS) as BankTransactionKind[]).map((value, index) => (
         <button key={value} type="button" role="radio" aria-checked={kind === value} onClick={() => setKind(value)}
-          className={cn("h-8 px-3 text-[12.5px] font-medium touch:h-11 touch:px-4", index > 0 && "border-hairline-strong border-l", kind === value ? "bg-accent text-brand" : "text-ink-muted hover:bg-muted")}>
+          className={cn("h-8 px-3 text-[13px] font-medium touch:h-11 touch:px-4", index > 0 && "border-hairline-strong border-l", kind === value ? "bg-accent text-brand" : "text-ink-muted hover:bg-muted")}>
           {KIND_LABELS[value]}
         </button>
       ))}
@@ -257,7 +257,7 @@ export function BankTransactionForm({ transaction, initialKind = "spend", bankAc
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
-      <Link href="/accounts/bank" className="text-ink-muted hover:text-ink text-[12.5px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
+      <Link href="/accounts/bank" className="text-ink-muted hover:text-ink text-[13px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
     </div>
   </form>;
 }
@@ -269,10 +269,10 @@ export function RemoveForm({ kind, id, label }: { kind: "bank" | "journal"; id: 
   return <form action={action} className="space-y-2">
     <input type="hidden" name="id" value={id} />
     {armed ? <div className="flex flex-wrap items-center gap-2">
-      <span className="text-ink text-[12.5px]">Remove it from the books?</span>
+      <span className="text-ink text-[13px]">Remove it from the books?</span>
       <SubmitButton variant="outline" size="sm" pendingLabel="Removing…">Yes, remove</SubmitButton>
-      <button type="button" onClick={() => setArmed(false)} className="text-ink-muted hover:text-ink text-[12px]">Keep it</button>
-    </div> : <button type="button" onClick={() => setArmed(true)} className="text-critical text-[12.5px] font-medium hover:underline touch:min-h-10">{label}</button>}
+      <button type="button" onClick={() => setArmed(false)} className="text-ink-muted hover:text-ink text-[12.5px]">Keep it</button>
+    </div> : <button type="button" onClick={() => setArmed(true)} className="text-critical text-[13px] font-medium hover:underline touch:min-h-10">{label}</button>}
     <FormError message={state.error} />
   </form>;
 }
@@ -283,7 +283,7 @@ export function RemoveForm({ kind, id, label }: { kind: "bank" | "journal"; id: 
 
 type JournalLine = { key: number; account_id: string; description: string; debit: string; credit: string };
 const JOURNAL_ROW = "lg:grid-cols-[14rem_minmax(0,1fr)_7rem_7rem_2.25rem] lg:gap-3";
-const JOURNAL_LABEL = "text-ink-muted block text-[11.5px] lg:hidden";
+const JOURNAL_LABEL = "text-ink-muted block text-[12px] lg:hidden";
 export type JournalValues = { id: string; entry_date: string; reference: string | null; narration: string; lines: Omit<JournalLine, "key">[] };
 
 /** Opening balances and adjustments: debits on the left, credits on the right, equal before it saves. */
@@ -311,7 +311,7 @@ export function JournalForm({ journal, prefill, accounts, today }: { journal?: J
       <Field label="Narration" htmlFor={`${uid}-narration`} required error={errors.narration}><TextInput id={`${uid}-narration`} name="narration" defaultValue={start?.narration ?? ""} maxLength={300} placeholder="e.g. Accrued electricity for September" /></Field>
       <Field label="Reference" htmlFor={`${uid}-reference`} hint="optional"><TextInput id={`${uid}-reference`} name="reference" defaultValue={start?.reference ?? ""} maxLength={120} /></Field>
     </div>
-    <div aria-hidden className={cn("text-ink-faint hidden text-[11px] font-semibold tracking-[0.06em] uppercase lg:grid", JOURNAL_ROW)}>
+    <div aria-hidden className={cn("text-ink-faint hidden text-[11.5px] font-semibold tracking-[0.06em] uppercase lg:grid", JOURNAL_ROW)}>
       <span>Account</span><span>Description</span><span className="text-right">Debit {symbol}</span><span className="text-right">Credit {symbol}</span><span />
     </div>
     <ol className="space-y-3">{lines.map((line, index) => <li key={line.key} className={cn("border-hairline grid gap-2 border-b pb-3 last:border-b-0 last:pb-0 lg:items-start lg:border-b-0 lg:pb-0", JOURNAL_ROW)}>
@@ -328,17 +328,17 @@ export function JournalForm({ journal, prefill, accounts, today }: { journal?: J
           className="text-ink-faint hover:text-critical inline-grid size-9 place-items-center self-end rounded disabled:opacity-30 touch:size-11 lg:self-start"><X className="size-3.5" /></button>
       </div>
     </li>)}</ol>
-    <div className={cn("border-hairline-strong grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-4 border-t pt-2 text-[12.5px] font-semibold lg:grid", JOURNAL_ROW)}>
+    <div className={cn("border-hairline-strong grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-4 border-t pt-2 text-[13px] font-semibold lg:grid", JOURNAL_ROW)}>
       <span className="lg:col-span-2 lg:text-right">{debit !== credit ? <span className="text-critical font-normal">Out by {formatAmount(Math.abs(debit - credit) / 100, currency)}</span> : debit ? <span className="text-positive font-normal">Balanced</span> : null}</span>
       <span className="text-right tabular-nums"><span className="text-ink-muted mr-1 font-normal lg:sr-only">Debits</span>{formatAmount(debit / 100, currency)}</span>
       <span className="text-right tabular-nums"><span className="text-ink-muted mr-1 font-normal lg:sr-only">Credits</span>{formatAmount(credit / 100, currency)}</span>
     </div>
-    <button type="button" onClick={() => { nextKey.current += 1; setLines(current => [...current, blank(nextKey.current)]); }} className="text-brand inline-flex items-center gap-1 text-[12.5px] font-medium hover:underline touch:min-h-10"><Plus className="size-3.5" />Add a line</button>
-    {errors.lines ? <p role="alert" className="text-critical text-[12px]">{errors.lines}</p> : null}
+    <button type="button" onClick={() => { nextKey.current += 1; setLines(current => [...current, blank(nextKey.current)]); }} className="text-brand inline-flex items-center gap-1 text-[13px] font-medium hover:underline touch:min-h-10"><Plus className="size-3.5" />Add a line</button>
+    {errors.lines ? <p role="alert" className="text-critical text-[12.5px]">{errors.lines}</p> : null}
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…" disabled={debit !== credit || debit === 0}>{journal ? "Save journal" : "Post journal"}</SubmitButton>
-      <Link href={journal ? `/accounts/journals/${journal.id}` : "/accounts/journals"} className="text-ink-muted hover:text-ink text-[12.5px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
+      <Link href={journal ? `/accounts/journals/${journal.id}` : "/accounts/journals"} className="text-ink-muted hover:text-ink text-[13px] touch:inline-flex touch:min-h-11 touch:items-center">Cancel</Link>
     </div>
   </form>;
 }
@@ -451,7 +451,7 @@ export function VatSchemeForm({ values }: { values: { vat_period: string; vat_qu
     </div>
     <Checkbox name="vat_cash_accounting" defaultChecked={values.vat_cash_accounting}
       label={flat ? "Work out the flat-rate turnover on payments received (the scheme’s cash-based method)" : "Cash accounting: VAT when customers pay and suppliers are paid"} />
-    <p className="text-ink-muted text-[12px] leading-relaxed">The Flat Rate Scheme can’t be combined with the Cash Accounting Scheme, but has its own cash-based turnover; either can be combined with annual accounting. A return and its payment are due 1 month and 7 days after each period, or 2 months after an annual one.</p>
+    <p className="text-ink-muted text-[12.5px] leading-relaxed">The Flat Rate Scheme can’t be combined with the Cash Accounting Scheme, but has its own cash-based turnover; either can be combined with annual accounting. A return and its payment are due 1 month and 7 days after each period, or 2 months after an annual one.</p>
     <FormError message={state.error} />
     <Saved state={state} message="VAT settings saved." />
     <SubmitButton pendingLabel="Saving…">Save VAT settings</SubmitButton>

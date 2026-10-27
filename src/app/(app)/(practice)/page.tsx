@@ -43,8 +43,8 @@ export default async function PracticeDashboard({ searchParams }: { searchParams
     if (term) params.set("q", query.q!.trim());
     return `/${params.size ? `?${params}` : ""}`;
   };
-  const head = "text-ink-faint px-3 py-2 text-left text-[10.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
-  const cell = "px-3 py-2.5 align-top text-[12.5px]";
+  const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
+  const cell = "px-3 py-2.5 align-top text-[13px]";
   return <PageBody className="space-y-4">
     <RecordHeader eyebrow={formatDate(today)}
       title={`${greeting()}. ${totals.clients} clients, ${totals.vatDueSoon ? `${totals.vatDueSoon} VAT return${totals.vatDueSoon === 1 ? "" : "s"} due within 30 days` : "no VAT return due within 30 days"}.`}
@@ -60,8 +60,8 @@ export default async function PracticeDashboard({ searchParams }: { searchParams
     </section>
 
     {files.onboarding.length ? <section aria-label="Taking on" className="ll-panel overflow-hidden">
-      <header className="border-hairline flex items-center justify-between border-b px-4 py-2"><h2 className="text-ink text-[13px] font-semibold">Taking on</h2><Link href="/clients" className="text-brand text-[12px] hover:underline">Client files</Link></header>
-      <ul className="divide-hairline divide-y">{files.onboarding.map(file => <li key={file.id}><Link href={`/clients/${file.id}`} className="hover:bg-surface-sunken flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-4 py-2.5 text-[12.5px]">
+      <header className="border-hairline flex items-center justify-between border-b px-4 py-2"><h2 className="text-ink text-[13.5px] font-semibold">Taking on</h2><Link href="/clients" className="text-brand text-[12.5px] hover:underline">Client files</Link></header>
+      <ul className="divide-hairline divide-y">{files.onboarding.map(file => <li key={file.id}><Link href={`/clients/${file.id}`} className="hover:bg-surface-sunken flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-4 py-2.5 text-[13px]">
         <span className="text-ink font-medium">{file.company_name}<span className="text-ink-faint font-normal"> · {file.done} of {file.steps.length} steps</span></span>
         <span className={file.ready ? "text-positive font-medium" : "text-ink-muted"}>{file.ready ? "Ready: open the books" : file.next ? `Next: ${inSentence(file.next.todo)}` : ""}</span>
       </Link></li>)}</ul>
@@ -72,7 +72,7 @@ export default async function PracticeDashboard({ searchParams }: { searchParams
         { label: `Yours · ${mine.length}`, href: href({ view: "mine" }), active: view === "mine" }, { label: `All · ${matching.length}`, href: href({ view: "all" }), active: view === "all" }]} />
       <NavigationForm action="/" method="get" className="border-hairline-strong bg-surface flex h-8 w-full items-center gap-2 rounded-md border px-2.5 sm:w-72">
         {view !== "all" ? <input type="hidden" name="view" value={view} /> : null}
-        <input name="q" defaultValue={query.q ?? ""} placeholder="Find a client: name, HE or VAT number" aria-label="Find a client" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
+        <input name="q" defaultValue={query.q ?? ""} placeholder="Find a client: name, HE or VAT number" aria-label="Find a client" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
       </NavigationForm>
     </div>
 
@@ -92,16 +92,16 @@ export default async function PracticeDashboard({ searchParams }: { searchParams
         <tbody className="divide-hairline divide-y">
           {shown.map(({ org, vat, bankLines, bankAccountId, toReview, overdue, overdueCount, lastActivity }) => <tr key={org.id} className="hover:bg-surface-sunken group">
             <td className={cell}>
-              <Link href={`/c/${org.slug}`} className="text-ink group-hover:text-brand flex items-center gap-1.5 text-[13px] font-medium">{org.name}<ArrowRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" /></Link>
-              <span className="text-ink-faint block text-[11.5px]">{org.industry} · {org.he_number}</span>
+              <Link href={`/c/${org.slug}`} className="text-ink group-hover:text-brand flex items-center gap-1.5 text-[13.5px] font-medium">{org.name}<ArrowRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" /></Link>
+              <span className="text-ink-faint block text-[12px]">{org.industry} · {org.he_number}</span>
             </td>
             <td className={cell}>
               {!vat ? <span className="text-ink-faint">Not registered for VAT</span> : <Link href={`/c/${org.slug}/reports/vat?range=custom&from=${vat.from}&to=${vat.to}`} className="block hover:underline">
-                <span className={cn("inline-flex items-center gap-1 text-[12.5px] font-medium", vat.state === "open" ? "text-ink" : vat.daysLeft <= 30 ? "text-critical" : "text-caution")}>
+                <span className={cn("inline-flex items-center gap-1 text-[13px] font-medium", vat.state === "open" ? "text-ink" : vat.daysLeft <= 30 ? "text-critical" : "text-caution")}>
                   {vat.state === "open" ? null : <AlertTriangle className="size-3.5" />}
                   {quarterLabel(vat.from, vat.to)} · due {formatDate(vat.due)}
                 </span>
-                <span className="text-ink-faint block text-[11.5px]">
+                <span className="text-ink-faint block text-[12px]">
                   {vat.state === "open" ? "Quarter running" : vat.state === "overdue" ? `${-vat.daysLeft} days overdue` : `${vat.daysLeft} days left, not filed`} · {(vatToPay.get(org.id) ?? 0) >= 0 ? `${formatAmount(vatToPay.get(org.id) ?? 0, org.currency)} to pay` : `${formatAmount(-(vatToPay.get(org.id) ?? 0), org.currency)} to reclaim`}
                   {vat.lastFiled ? ` · last filed ${formatDate(vat.lastFiled.filed_on)}` : ""}
                 </span>
@@ -114,15 +114,15 @@ export default async function PracticeDashboard({ searchParams }: { searchParams
             <td className={cn(cell, "text-right tabular-nums")}>{toReview ? <Link href="/capture" className="text-brand font-medium hover:underline">{toReview}</Link> : <span className="text-ink-faint">—</span>}</td>
             <td className={cn(cell, "text-right tabular-nums")}>
               {overdue ? <Link href={`/c/${org.slug}/reports/aged-receivables`} className="text-critical font-medium hover:underline">{formatAmount(overdue, org.currency)}</Link> : <span className="text-ink-faint">—</span>}
-              {overdueCount ? <span className="text-ink-faint block text-[11.5px]">{overdueCount} invoice{overdueCount === 1 ? "" : "s"}</span> : null}
+              {overdueCount ? <span className="text-ink-faint block text-[12px]">{overdueCount} invoice{overdueCount === 1 ? "" : "s"}</span> : null}
             </td>
-            <td className={cell}>{org.lock_date ? <span className="text-ink-muted inline-flex items-center gap-1"><Lock className="size-3" />{formatDate(org.lock_date)}</span> : <span className="text-ink-faint">Not locked</span>}</td>
+            <td className={cell}>{org.lock_date ? <span className="text-ink-muted inline-flex items-center gap-1 whitespace-nowrap"><Lock className="size-3" />{formatDate(org.lock_date)}</span> : <span className="text-ink-faint">Not locked</span>}</td>
             <td className={cn(cell, "text-ink-muted whitespace-nowrap")}>{lastActivity ? formatRelative(lastActivity) : "—"}</td>
           </tr>)}
         </tbody>
       </table> : <RecordEmpty title={term ? `No client matches “${query.q}”` : view === "mine" ? "None of your clients needs anything" : "Nothing needs doing"}>{term ? "Try part of the name, or the HE or VAT number." : "Every client is up to date."}</RecordEmpty>}
       {listed.length > PAGE_SIZE ? <RecordPagination page={page} total={listed.length} pageSize={PAGE_SIZE} href={href({})} /> : null}
     </section>
-    <p className="text-ink-faint text-[11.5px]">Each company keeps its own double-entry ledger. A document can only post to its own company&apos;s accounts: the database enforces it.</p>
+    <p className="text-ink-faint text-[12px]">Each company keeps its own double-entry ledger. A document can only post to its own company&apos;s accounts: the database enforces it.</p>
   </PageBody>;
 }

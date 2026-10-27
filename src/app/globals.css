@@ -97,10 +97,10 @@
   --color-chart-age-5: #8a2400;
 
   /* Type ------------------------------------------------------------------ */
-  --font-sans: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-roboto-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   --font-display: Georgia, "Iowan Old Style", "Times New Roman", serif;
-  --font-heading: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
   /* Radii ------------------------------------------------------------------ */
   --radius-sm: calc(var(--radius) * 0.6);
@@ -175,8 +175,8 @@
   --sidebar-border: var(--hairline);
   --sidebar-ring: var(--brand-400);
 
-  /* Tight corners: a bookkeeping tool. Every rounded-* except rounded-full derives from this. */
-  --radius: 0.125rem;
+  /* Every rounded-* except rounded-full derives from this: soft enough to feel current, tight enough for tables. */
+  --radius: 0.5rem;
 }
 
 /* Dark surface treatment, defined so no component can land in an undefined state. */
@@ -294,7 +294,7 @@
   /* A single flat panel. Panels do not nest: a subdivision inside a panel is
      a section separated by a hairline, never another bordered box. */
   .ll-panel {
-    @apply rounded-lg border border-hairline bg-surface;
+    @apply rounded-xl border border-hairline bg-surface shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.03)];
   }
 
   /* Small uppercase section label, used in place of a second heading level so

@@ -49,7 +49,7 @@ export function EmployeeForm({ employee, year }: { employee?: Employee; year: nu
     <Checkbox name="thirteenth_salary" defaultChecked={employee?.thirteenth_salary ?? true} label="Paid a 13th salary in December" />
 
     <fieldset className="space-y-3">
-      <legend className="text-ink text-[12.5px] font-semibold">For the Tax Department and Social Insurance Services</legend>
+      <legend className="text-ink text-[13px] font-semibold">For the Tax Department and Social Insurance Services</legend>
       <div className="grid gap-4 sm:grid-cols-2">
         {text("tic", "Tax identification code (TIC)", { max: 20, mono: true })}
         {text("social_insurance_no", "Social insurance number", { max: 20, mono: true })}
@@ -60,8 +60,8 @@ export function EmployeeForm({ employee, year }: { employee?: Employee; year: nu
     </fieldset>
 
     <fieldset className="space-y-3">
-      <legend className="text-ink text-[12.5px] font-semibold">Declared on form TD59 <span className="text-ink-muted font-normal">for the tax year</span></legend>
-      <p className="text-ink-muted -mt-1 text-[12px] leading-relaxed">What they claim for the year: children, the interest or rent on their home, insurance. Exempt pay is any part of their pay the law exempts, such as the 50% for some who moved to Cyprus to work.</p>
+      <legend className="text-ink text-[13px] font-semibold">Declared on form TD59 <span className="text-ink-muted font-normal">for the tax year</span></legend>
+      <p className="text-ink-muted -mt-1 text-[12.5px] leading-relaxed">What they claim for the year: children, the interest or rent on their home, insurance. Exempt pay is any part of their pay the law exempts, such as the 50% for some who moved to Cyprus to work.</p>
       <div className="grid gap-4 sm:grid-cols-2">
         {money("annual_deductions", "Deductions")}
         {money("annual_exemption", "Exempt pay")}
@@ -69,7 +69,7 @@ export function EmployeeForm({ employee, year }: { employee?: Employee; year: nu
     </fieldset>
 
     <fieldset className="space-y-3">
-      <legend className="text-ink text-[12.5px] font-semibold">The year so far, before Ledgerline <span className="text-ink-muted font-normal">from the previous payroll, so this year’s tax is right from the first run</span></legend>
+      <legend className="text-ink text-[13px] font-semibold">The year so far, before Ledgerline <span className="text-ink-muted font-normal">from the previous payroll, so this year’s tax is right from the first run</span></legend>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Tax year" htmlFor={`${uid}-ytd_year`} error={errors.ytd_year}>
           <TextInput id={`${uid}-ytd_year`} name="ytd_year" inputMode="numeric" maxLength={4} defaultValue={String(brought)} className="tabular-nums" />

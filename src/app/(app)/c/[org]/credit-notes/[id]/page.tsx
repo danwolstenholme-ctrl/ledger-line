@@ -41,32 +41,32 @@ export default async function CreditNotePage({ params, searchParams }: { params:
         {issued ? <MoreMenu items={[{ href: `/c/${org.slug}/credit-notes/${id}/ubl`, label: "E-invoice (XML)", hint: "UBL credit note, EN 16931 and Peppol BIS 3.0", icon: "xml", download: true }]} /> : null}
       </>} />
 
-    {query.issued && issued ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[12.5px]">
+    {query.issued && issued ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]">
       <CheckCircle2 className="size-4 shrink-0" /><span><span className="font-medium">Issued and in the books.</span> {allocations.length ? `${formatAmount(credit.amount_allocated)} came off invoice ${allocations.map(item => item.number).join(", ")}.` : "The credit is kept for this customer."}{remaining > 0 ? ` ${formatAmount(remaining)} is left to use or refund.` : ""}</span>
     </p> : null}
-    {credit.status === "draft" ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-lg border px-4 py-2.5 text-[12.5px]">A draft: nothing is in the books until it is issued.</p> : null}
+    {credit.status === "draft" ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-lg border px-4 py-2.5 text-[13px]">A draft: nothing is in the books until it is issued.</p> : null}
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-4">
         <RecordSection title="Credit note" hint={TREATMENT_LABELS[credit.vat_treatment]}>
           <div className="grid gap-4 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="min-w-0 text-[12.5px] leading-relaxed">
+            <div className="min-w-0 text-[13px] leading-relaxed">
               <p className="ll-eyebrow mb-1">Credited to</p>
-              <Link href={`/accounts/customers/${credit.customer_id}`} className="text-ink hover:text-brand text-[13.5px] font-semibold">{credit.client_name}</Link>
+              <Link href={`/accounts/customers/${credit.customer_id}`} className="text-ink hover:text-brand text-[14px] font-semibold">{credit.client_name}</Link>
               {customer?.address ? <p className="text-ink-muted whitespace-pre-line">{customer.address}</p> : null}
               {customer && customer.country !== "CY" ? <p className="text-ink-muted">{countryName(customer.country)}</p> : null}
-              {credit.client_vat_number ? <p className="text-ink-muted font-mono text-[12px]">VAT {credit.client_vat_number}</p> : null}
+              {credit.client_vat_number ? <p className="text-ink-muted font-mono text-[12.5px]">VAT {credit.client_vat_number}</p> : null}
             </div>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-1 self-start text-[12.5px] sm:grid-cols-1 sm:text-right">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-1 self-start text-[13px] sm:grid-cols-1 sm:text-right">
               <div><dt className="ll-eyebrow">Date</dt><dd className="text-ink">{formatDate(credit.issued_on)}</dd></div>
               {credit.invoice_id ? <div><dt className="ll-eyebrow">Credits invoice</dt><dd><Link href={`/invoices/${credit.invoice_id}`} className="text-brand font-mono hover:underline">{credit.invoice_number}</Link></dd></div> : null}
             </dl>
           </div>
           <DocumentLines lines={lines} treatment={credit.vat_treatment} registered={org.vat_registered} net={Number(credit.net)} total={Number(credit.total)} totalLabel="Total credit" />
-          {credit.notes ? <p className="border-hairline text-ink-muted border-t px-4 py-3 text-[12.5px] whitespace-pre-line">{credit.notes}</p> : null}
+          {credit.notes ? <p className="border-hairline text-ink-muted border-t px-4 py-3 text-[13px] whitespace-pre-line">{credit.notes}</p> : null}
         </RecordSection>
         {credit.status !== "draft" ? <details className="group">
-          <summary className="text-ink-muted hover:text-brand cursor-pointer px-1 text-[12.5px] font-medium">How it posted to the books</summary>
+          <summary className="text-ink-muted hover:text-brand cursor-pointer px-1 text-[13px] font-medium">How it posted to the books</summary>
           <div className="mt-2"><Postings entries={postings.entries} empty={credit.status === "void" ? "A void credit note is not in the books." : "Nothing posted."} /></div>
         </details> : null}
       </div>
@@ -75,30 +75,30 @@ export default async function CreditNotePage({ params, searchParams }: { params:
         {issued ? <RecordSection title={remaining > 0 ? "Credit to use" : "Credit used"}>
           <div className="px-4 py-3.5">
             <p className="text-ink text-[22px] leading-tight font-semibold tabular-nums">{formatAmount(remaining)}</p>
-            <p className="text-ink-muted mt-0.5 text-[12px]">left of {formatAmount(credit.total)}{Number(credit.amount_allocated) ? ` · ${formatAmount(credit.amount_allocated)} set against invoices` : ""}{Number(credit.amount_refunded) ? ` · ${formatAmount(credit.amount_refunded)} refunded` : ""}</p>
+            <p className="text-ink-muted mt-0.5 text-[12.5px]">left of {formatAmount(credit.total)}{Number(credit.amount_allocated) ? ` · ${formatAmount(credit.amount_allocated)} set against invoices` : ""}{Number(credit.amount_refunded) ? ` · ${formatAmount(credit.amount_refunded)} refunded` : ""}</p>
           </div>
           {allocations.length || refunds.length ? <ul aria-label="Where the credit went" className="divide-hairline border-hairline divide-y border-t">
             {allocations.map(item => <li key={item.id} className="flex items-baseline gap-3 px-4 py-2">
-              <span className="text-ink-muted w-24 shrink-0 text-[12px] tabular-nums">{formatDate(item.allocated_on)}</span>
-              <span className="min-w-0 flex-1 truncate text-[12px]">Against <Link href={`/invoices/${item.invoice_id}`} className="text-brand font-mono hover:underline">{item.number}</Link></span>
-              <span className="text-ink shrink-0 text-[12.5px] font-medium tabular-nums">{formatAmount(item.amount)}</span>
+              <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(item.allocated_on)}</span>
+              <span className="min-w-0 flex-1 truncate text-[12.5px]">Against <Link href={`/invoices/${item.invoice_id}`} className="text-brand font-mono hover:underline">{item.number}</Link></span>
+              <span className="text-ink shrink-0 text-[13px] font-medium tabular-nums">{formatAmount(item.amount)}</span>
               <form action={removeAllocation}><input type="hidden" name="id" value={item.id} /><InlineSubmit destructive title="Take the credit off this invoice">Remove</InlineSubmit></form>
             </li>)}
             {refunds.map(item => <li key={item.id} className="flex items-baseline gap-3 px-4 py-2">
-              <span className="text-ink-muted w-24 shrink-0 text-[12px] tabular-nums">{formatDate(item.txn_date)}</span>
-              <span className="text-ink-muted min-w-0 flex-1 truncate text-[12px]">Refunded from {item.bank_name}</span>
-              <span className="text-ink shrink-0 text-[12.5px] font-medium tabular-nums">{formatAmount(item.amount)}</span>
-              {item.matched ? <span className="text-positive text-[11px]">Reconciled</span>
+              <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(item.txn_date)}</span>
+              <span className="text-ink-muted min-w-0 flex-1 truncate text-[12.5px]">Refunded from {item.bank_name}</span>
+              <span className="text-ink shrink-0 text-[13px] font-medium tabular-nums">{formatAmount(item.amount)}</span>
+              {item.matched ? <span className="text-positive text-[11.5px]">Reconciled</span>
                 : <form action={removeRefund}><input type="hidden" name="id" value={item.id} /><InlineSubmit destructive title="Remove this refund">Remove</InlineSubmit></form>}
             </li>)}
           </ul> : null}
           {remaining > 0 ? <>
             <div className="border-hairline border-t px-4 py-3.5">
-              <p className="text-ink mb-2.5 text-[13px] font-semibold">Use it against an invoice</p>
+              <p className="text-ink mb-2.5 text-[13.5px] font-semibold">Use it against an invoice</p>
               <AllocateCreditForm creditNoteId={id} remaining={remaining} invoices={openInvoices.map(item => ({ ...item, balance: Number(item.balance) }))} />
             </div>
             <div className="border-hairline border-t px-4 py-3.5">
-              <p className="text-ink mb-2.5 text-[13px] font-semibold">Or refund it</p>
+              <p className="text-ink mb-2.5 text-[13.5px] font-semibold">Or refund it</p>
               <RefundCreditForm creditNoteId={id} remaining={remaining} banks={banks} defaultBank={org.default_bank_account_id} today={today} />
             </div>
           </> : null}

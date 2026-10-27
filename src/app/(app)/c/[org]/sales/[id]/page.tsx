@@ -61,16 +61,16 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
         {invoice.status === "void" ? <RestoreInvoiceButton id={id} /> : null}
       </>} />
 
-    {query.issued ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[12.5px]">
+    {query.issued ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]">
       <CheckCircle2 className="size-4 shrink-0" /><span><span className="font-medium">Issued and in the books.</span> {invoice.client_name} owes {formatAmount(invoice.balance)}{invoice.due_on ? ` by ${formatDate(invoice.due_on)}` : ""}.{invoice.sent_at || Number(invoice.balance) === 0 ? "" : " Send it below."}</span>
     </p> : null}
-    {invoice.status === "draft" ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-lg border px-4 py-2.5 text-[12.5px]">A draft: nothing is in the books until it is issued.</p> : null}
+    {invoice.status === "draft" ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-lg border px-4 py-2.5 text-[13px]">A draft: nothing is in the books until it is issued.</p> : null}
     {send && !invoice.sent_at && open ? <div className="flex flex-wrap items-center gap-3">
-      <p className="text-ink-muted text-[12.5px]">Not sent to {invoice.client_name} yet.</p>
+      <p className="text-ink-muted text-[13px]">Not sent to {invoice.client_name} yet.</p>
       <SendInvoicePanel data={send} primary />
     </div> : null}
     {late && reminder && reminder.overdue.length ? <div className="flex flex-wrap items-center gap-3">
-      <p className="text-critical text-[12.5px] font-medium">{invoice.days_overdue} days overdue.</p>
+      <p className="text-critical text-[13px] font-medium">{invoice.days_overdue} days overdue.</p>
       <ReminderPanel data={{ customerId: invoice.customer_id, customerName: reminder.customer.name, to: reminder.to, greeting: reminder.greeting, company: org.name, sender: reminder.sender,
         overdue: reminder.overdue.map(item => ({ ...item, balance: Number(item.balance) })), bank: reminder.bank, statementHref: `/c/${org.slug}/customers/${invoice.customer_id}/statement`, lastSent: reminder.lastSent }} />
     </div> : null}
@@ -79,16 +79,16 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
       <div className="min-w-0 space-y-4">
         <RecordSection title="Invoice" hint={TREATMENT_LABELS[invoice.vat_treatment]}>
           <div className="grid gap-4 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="min-w-0 text-[12.5px] leading-relaxed">
+            <div className="min-w-0 text-[13px] leading-relaxed">
               <p className="ll-eyebrow mb-1">Billed to</p>
-              <Link href={`/accounts/customers/${invoice.customer_id}`} className="text-ink hover:text-brand text-[13.5px] font-semibold">{invoice.client_name}</Link>
+              <Link href={`/accounts/customers/${invoice.customer_id}`} className="text-ink hover:text-brand text-[14px] font-semibold">{invoice.client_name}</Link>
               {customer?.address ? <p className="text-ink-muted whitespace-pre-line">{customer.address}</p> : null}
               {customer && customer.country !== "CY" ? <p className="text-ink-muted">{countryName(customer.country)}</p> : null}
-              {invoice.client_vat_number ? <p className="text-ink-muted font-mono text-[12px]">VAT {invoice.client_vat_number}</p> : null}
+              {invoice.client_vat_number ? <p className="text-ink-muted font-mono text-[12.5px]">VAT {invoice.client_vat_number}</p> : null}
             </div>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-1 self-start text-[12.5px] sm:grid-cols-1 sm:text-right">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-1 self-start text-[13px] sm:grid-cols-1 sm:text-right">
               <div><dt className="ll-eyebrow">Date</dt><dd className="text-ink">{formatDate(invoice.issued_on)}</dd></div>
-              {invoice.reference ? <div><dt className="ll-eyebrow">Their reference</dt><dd className="text-ink font-mono text-[12px]">{invoice.reference}</dd></div> : null}
+              {invoice.reference ? <div><dt className="ll-eyebrow">Their reference</dt><dd className="text-ink font-mono text-[12.5px]">{invoice.reference}</dd></div> : null}
               <div><dt className="ll-eyebrow">Due</dt><dd className={cn(late ? "text-critical font-medium" : "text-ink")}>{invoice.due_on ? formatDate(invoice.due_on) : "On receipt"}</dd></div>
             </dl>
           </div>
@@ -97,10 +97,10 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
             <VatCheckButton vat={invoice.client_vat_number} country={invoice.client_country} organisationId={org.id} expectName={invoice.client_name} kept={answerView(vat ? checks.get(vat) : null, invoice.client_name)} />
           </div> : null}
           <DocumentLines lines={lines} treatment={invoice.vat_treatment} registered={org.vat_registered} net={Number(invoice.net)} total={Number(invoice.total)} />
-          {invoice.notes ? <p className="border-hairline text-ink-muted border-t px-4 py-3 text-[12.5px] whitespace-pre-line">{invoice.notes}</p> : null}
+          {invoice.notes ? <p className="border-hairline text-ink-muted border-t px-4 py-3 text-[13px] whitespace-pre-line">{invoice.notes}</p> : null}
         </RecordSection>
         {invoice.status !== "draft" ? <details className="group">
-          <summary className="text-ink-muted hover:text-brand cursor-pointer px-1 text-[12.5px] font-medium">How it posted to the books</summary>
+          <summary className="text-ink-muted hover:text-brand cursor-pointer px-1 text-[13px] font-medium">How it posted to the books</summary>
           <div className="mt-2"><Postings entries={postings.entries} empty={invoice.status === "void" ? "A void invoice is not in the books." : "Nothing posted."} /></div>
         </details> : null}
       </div>
@@ -109,23 +109,23 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
         {invoice.status !== "draft" && invoice.status !== "void" ? <RecordSection title={open ? "To collect" : credited >= Number(invoice.total) ? "Credited in full" : "Paid in full"}>
           <div className="px-4 py-3.5">
             <p className={cn("text-[22px] leading-tight font-semibold tabular-nums", late ? "text-critical" : "text-ink")}>{formatAmount(open ? balance : invoice.total)}</p>
-            <p className="text-ink-muted mt-0.5 text-[12px]">{open ? `${formatAmount(paid)} received${credited ? `, ${formatAmount(credited)} credited` : ""} of ${formatAmount(invoice.total)}${late ? ` · ${invoice.days_overdue} days overdue` : ""}`
+            <p className="text-ink-muted mt-0.5 text-[12.5px]">{open ? `${formatAmount(paid)} received${credited ? `, ${formatAmount(credited)} credited` : ""} of ${formatAmount(invoice.total)}${late ? ` · ${invoice.days_overdue} days overdue` : ""}`
               : credited >= Number(invoice.total) ? "Credited in full" : payments.length ? `Received ${payments.length === 1 ? `on ${formatDate(payments[0].received_on)}` : `in ${payments.length} payments`}${credited ? `, and ${formatAmount(credited)} credited` : ""}` : `${formatAmount(credited)} credited`}</p>
           </div>
           {credits.length ? <ul aria-label="Credit notes" className="divide-hairline border-hairline divide-y border-t">{credits.map(item => <li key={`${item.credit_note_id}-${item.id ?? "raised"}`} className="flex items-baseline gap-3 px-4 py-2">
-            <span className="text-ink-muted w-24 shrink-0 text-[12px] tabular-nums">{formatDate(item.issued_on)}</span>
-            <span className="min-w-0 flex-1 truncate text-[12px]">Credit note <Link href={`/accounts/credit-notes/${item.credit_note_id}`} className="text-brand font-mono hover:underline">{item.number}</Link>{item.status !== "issued" ? <span className="text-ink-faint"> · {item.status}</span> : item.amount === null ? <span className="text-ink-faint"> · kept as credit</span> : null}</span>
-            {item.amount !== null ? <span className="text-ink shrink-0 text-[12.5px] font-medium tabular-nums">{formatAmount(item.amount)}</span> : null}
+            <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(item.issued_on)}</span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px]">Credit note <Link href={`/accounts/credit-notes/${item.credit_note_id}`} className="text-brand font-mono hover:underline">{item.number}</Link>{item.status !== "issued" ? <span className="text-ink-faint"> · {item.status}</span> : item.amount === null ? <span className="text-ink-faint"> · kept as credit</span> : null}</span>
+            {item.amount !== null ? <span className="text-ink shrink-0 text-[13px] font-medium tabular-nums">{formatAmount(item.amount)}</span> : null}
           </li>)}</ul> : null}
           {payments.length ? <ul aria-label="Payments received" className="divide-hairline border-hairline divide-y border-t">{payments.map(payment => <li key={payment.id} className="flex items-baseline gap-3 px-4 py-2">
-            <span className="text-ink-muted w-24 shrink-0 text-[12px] tabular-nums">{formatDate(payment.received_on)}</span>
-            <span className="text-ink-muted min-w-0 flex-1 truncate text-[12px]">{payment.bank_name}{payment.reference ? ` · ${payment.reference}` : ""}</span>
-            <span className="text-ink shrink-0 text-[12.5px] font-medium tabular-nums">{formatAmount(payment.amount)}</span>
-            {payment.matched ? <span className="text-positive text-[11px]" title="Matched to a bank statement line">Reconciled</span>
+            <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(payment.received_on)}</span>
+            <span className="text-ink-muted min-w-0 flex-1 truncate text-[12.5px]">{payment.bank_name}{payment.reference ? ` · ${payment.reference}` : ""}</span>
+            <span className="text-ink shrink-0 text-[13px] font-medium tabular-nums">{formatAmount(payment.amount)}</span>
+            {payment.matched ? <span className="text-positive text-[11.5px]" title="Matched to a bank statement line">Reconciled</span>
               : <form action={removeInvoicePayment}><input type="hidden" name="id" value={payment.id} /><InlineSubmit destructive title="Remove this payment">Remove</InlineSubmit></form>}
           </li>)}</ul> : null}
           {open ? <div className="border-hairline border-t px-4 py-3.5">
-            <p className="text-ink mb-2.5 text-[13px] font-semibold">Record a payment</p>
+            <p className="text-ink mb-2.5 text-[13.5px] font-semibold">Record a payment</p>
             <RecordPaymentForm invoiceId={id} balance={balance} banks={banks} defaultBank={org.default_bank_account_id} today={today} />
           </div> : null}
         </RecordSection> : null}

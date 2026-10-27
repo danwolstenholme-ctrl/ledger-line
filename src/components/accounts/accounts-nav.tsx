@@ -36,7 +36,7 @@ export function AccountsNav(props: { current: (typeof ACCOUNTS_SECTIONS)[number]
 export function SubNav({ label, sections, current }: { label: string; sections: readonly { href: string; label: string }[]; current: string }) {
   return <nav aria-label={label} className="flex flex-wrap items-center gap-1.5">
     {sections.map(section => <Link key={section.href} href={section.href} aria-current={current === section.href ? "page" : undefined}
-      className={cn("focus-visible:ring-ring/40 inline-flex min-h-7 items-center rounded-md px-2.5 py-1 text-[12.5px] outline-none focus-visible:ring-[3px] touch:min-h-11 touch:px-3.5 touch:text-[14px]",
+      className={cn("focus-visible:ring-ring/40 inline-flex min-h-7 items-center rounded-md px-2.5 py-1 text-[13px] outline-none focus-visible:ring-[3px] touch:min-h-11 touch:px-3.5 touch:text-[14px]",
         current === section.href ? "bg-accent text-brand font-medium" : "text-ink-muted hover:bg-muted hover:text-ink")}>
       {section.label}
     </Link>)}

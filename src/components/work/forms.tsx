@@ -44,7 +44,7 @@ export function AddTimeForm({ people, user, today }: { people: string[]; user: s
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton size="sm" pendingLabel="Saving…" disabled={!companies}>Add the time</SubmitButton>
-      {state.ok ? <span role="status" className="text-positive text-[12px]">Added</span> : null}
+      {state.ok ? <span role="status" className="text-positive text-[12.5px]">Added</span> : null}
     </div>
   </form>;
 }
@@ -55,21 +55,21 @@ export function ClientFeeForm({ organisationId, fee, rate, app }: { organisation
   const uid = useId();
   return <form action={action} className="flex flex-wrap items-end gap-2">
     <input type="hidden" name="organisation_id" value={organisationId} />
-    <label className="space-y-1 text-[11.5px]" htmlFor={`${uid}-fee`}><span className="text-ink-muted block">Monthly fee €</span>
+    <label className="space-y-1 text-[12px]" htmlFor={`${uid}-fee`}><span className="text-ink-muted block">Monthly fee €</span>
       <TextInput id={`${uid}-fee`} name="monthly_fee" defaultValue={fee.toFixed(2)} inputMode="decimal" className="w-28 text-right tabular-nums" /></label>
-    <label className="space-y-1 text-[11.5px]" htmlFor={`${uid}-rate`}><span className="text-ink-muted block">Extra work €/hour</span>
+    <label className="space-y-1 text-[12px]" htmlFor={`${uid}-rate`}><span className="text-ink-muted block">Extra work €/hour</span>
       <TextInput id={`${uid}-rate`} name="hourly_rate" defaultValue={rate.toFixed(2)} inputMode="decimal" className="w-28 text-right tabular-nums" /></label>
-    <label className="space-y-1 text-[11.5px]" htmlFor={`${uid}-app`}><span className="text-ink-muted block">App, a month €</span>
+    <label className="space-y-1 text-[12px]" htmlFor={`${uid}-app`}><span className="text-ink-muted block">App, a month €</span>
       <TextInput id={`${uid}-app`} name="app_fee" defaultValue={app.toFixed(2)} inputMode="decimal" className="w-24 text-right tabular-nums" /></label>
     <SubmitButton size="sm" variant="outline" pendingLabel="Saving…">Save</SubmitButton>
-    {state.ok ? <span role="status" className="text-positive text-[12px]">Saved</span> : null}
-    {state.error ? <span role="alert" className="text-critical text-[12px]">{state.error}</span> : null}
+    {state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+    {state.error ? <span role="alert" className="text-critical text-[12.5px]">{state.error}</span> : null}
   </form>;
 }
 
 export function FeeFloorForm({ floor }: { floor: number }) {
   const [state, action] = useActionState(saveFeeFloor, idleState);
-  return <form action={action} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+  return <form action={action} className="flex flex-wrap items-center gap-2 text-[13px]">
     <label htmlFor="fee-floor" className="text-ink-muted">Flag clients earning less than €</label>
     <TextInput id="fee-floor" name="fee_floor" defaultValue={floor.toFixed(0)} inputMode="decimal" className="h-7 w-16 text-right tabular-nums" />
     <span className="text-ink-muted">an hour</span>
@@ -84,7 +84,7 @@ export function RaiseFeesButton({ period, month, count, net }: { period: string;
   return <form action={action} className="flex flex-col items-end gap-1">
     <input type="hidden" name="period" value={period} />
     <SubmitButton pendingLabel="Raising the invoices…"><Coins className="size-4" />Raise {month}’s fees · {formatAmount(net)}</SubmitButton>
-    <span className="text-ink-faint text-[11.5px]">{count} invoice{count === 1 ? "" : "s"}, plus 19% VAT, from the firm’s own books</span>
-    {state.error ? <span role="alert" className="text-critical text-[12px]">{state.error}</span> : null}
+    <span className="text-ink-faint text-[12px]">{count} invoice{count === 1 ? "" : "s"}, plus 19% VAT, from the firm’s own books</span>
+    {state.error ? <span role="alert" className="text-critical text-[12.5px]">{state.error}</span> : null}
   </form>;
 }

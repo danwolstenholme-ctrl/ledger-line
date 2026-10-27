@@ -19,7 +19,7 @@ export default async function CompanyLayout({ children, params }: { children: Re
   return <RegimeProvider country={company.country}>
     {shell ? <CompanyShellSync company={shell} /> : null}
     {role === "viewer" || role === "auditor" ? <div className="mx-auto w-full max-w-[1440px] px-3 pt-3 sm:px-5 sm:pt-5">
-      <p role="note" className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px] leading-relaxed">
+      <p role="note" className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12.5px] leading-relaxed">
         {role === "auditor" ? `You’re here as ${company.name}’s auditor` : `You can look at ${company.name}’s books`}: read anything and download any report or the audit file. Nothing can be changed from this account.
       </p>
     </div> : null}

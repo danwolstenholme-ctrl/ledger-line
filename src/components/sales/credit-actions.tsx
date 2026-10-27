@@ -14,7 +14,7 @@ export function IssueCreditNoteButton({ id }: { id: string }) {
   const [state, action] = useActionState(issueCreditNote, idleState);
   return <form action={action} className="inline-flex flex-col gap-1"><input type="hidden" name="id" value={id} />
     <SubmitButton size="sm" pendingLabel="Issuing…"><Send className="size-3.5" />Issue</SubmitButton>
-    {state.error ? <span role="alert" className="text-critical text-[11.5px]">{state.error}</span> : null}
+    {state.error ? <span role="alert" className="text-critical text-[12px]">{state.error}</span> : null}
   </form>;
 }
 
@@ -22,14 +22,14 @@ export function IssueCreditNoteButton({ id }: { id: string }) {
 export function CreditNoteVoidButton({ id, isVoid }: { id: string; isVoid: boolean }) {
   const [state, action] = useActionState(setCreditNoteVoid, idleState);
   const [armed, setArmed] = useState(false);
-  if (!isVoid && !armed) return <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical inline-flex items-center gap-1.5 text-[12.5px]"><Ban className="size-3.5" />Void this credit note</button>;
+  if (!isVoid && !armed) return <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical inline-flex items-center gap-1.5 text-[13px]"><Ban className="size-3.5" />Void this credit note</button>;
   return <form action={action} className="inline-flex flex-col gap-1">
     <input type="hidden" name="id" value={id} /><input type="hidden" name="void" value={isVoid ? "false" : "true"} />
     {isVoid ? <SubmitButton size="sm" variant="outline" pendingLabel="Restoring…"><RotateCcw className="size-3.5" />Restore</SubmitButton>
-      : <span className="flex flex-wrap items-center gap-2 text-[12.5px]">Void it? The invoices it was set against will be owed again.
+      : <span className="flex flex-wrap items-center gap-2 text-[13px]">Void it? The invoices it was set against will be owed again.
         <SubmitButton size="sm" variant="outline" pendingLabel="Voiding…">Yes, void it</SubmitButton>
-        <button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12px]">Keep it</button></span>}
-    {state.error ? <span role="alert" className="text-critical text-[11.5px]">{state.error}</span> : null}
+        <button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12.5px]">Keep it</button></span>}
+    {state.error ? <span role="alert" className="text-critical text-[12px]">{state.error}</span> : null}
   </form>;
 }
 
@@ -40,7 +40,7 @@ export function AllocateCreditForm({ creditNoteId, remaining, invoices }: { cred
   const [invoiceId, setInvoiceId] = useState(invoices[0]?.id ?? "");
   const invoice = invoices.find(item => item.id === invoiceId);
   const errors = state.fieldErrors ?? {};
-  if (!invoices.length) return <p className="text-ink-muted text-[12px]">No open invoices to set it against.</p>;
+  if (!invoices.length) return <p className="text-ink-muted text-[12.5px]">No open invoices to set it against.</p>;
   return <form action={action} className="space-y-3" key={`${remaining}-${invoices.length}`}>
     <input type="hidden" name="credit_note_id" value={creditNoteId} />
     <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3">

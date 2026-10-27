@@ -19,13 +19,13 @@ const METHODS: Record<(typeof INVOICE_PAYMENT_METHODS)[number], string> = { bank
 export function InvoiceStatusButton({ id, to }: { id: string; to: "issued" | "void" }) {
   const [state, action] = useActionState(setInvoiceStatus, idleState);
   const [armed, setArmed] = useState(false);
-  if (to === "void" && !armed) return <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical inline-flex items-center gap-1.5 text-[12.5px]"><Ban className="size-3.5" />Void</button>;
+  if (to === "void" && !armed) return <button type="button" onClick={() => setArmed(true)} className="text-ink-muted hover:text-critical inline-flex items-center gap-1.5 text-[13px]"><Ban className="size-3.5" />Void</button>;
   return <form action={action} className="inline-flex flex-col gap-1">
     <input type="hidden" name="id" value={id} /><input type="hidden" name="to" value={to} />
-    {to === "void" ? <span className="flex items-center gap-2 text-[12.5px]">Void this invoice?<SubmitButton size="sm" variant="outline" pendingLabel="Voiding…">Yes, void it</SubmitButton>
-      <button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12px]">Keep it</button></span>
+    {to === "void" ? <span className="flex items-center gap-2 text-[13px]">Void this invoice?<SubmitButton size="sm" variant="outline" pendingLabel="Voiding…">Yes, void it</SubmitButton>
+      <button type="button" onClick={() => setArmed(false)} className="text-ink-muted text-[12.5px]">Keep it</button></span>
       : <SubmitButton size="sm" pendingLabel="Issuing…"><Send className="size-3.5" />Issue</SubmitButton>}
-    {state.error ? <span role="alert" className="text-critical text-[11.5px]">{state.error}</span> : null}
+    {state.error ? <span role="alert" className="text-critical text-[12px]">{state.error}</span> : null}
   </form>;
 }
 
@@ -33,7 +33,7 @@ export function RestoreInvoiceButton({ id }: { id: string }) {
   const [state, action] = useActionState(setInvoiceStatus, idleState);
   return <form action={action}><input type="hidden" name="id" value={id} /><input type="hidden" name="to" value="issued" />
     <SubmitButton size="sm" variant="outline" pendingLabel="Restoring…"><RotateCcw className="size-3.5" />Restore</SubmitButton>
-    {state.error ? <span role="alert" className="text-critical ml-2 text-[11.5px]">{state.error}</span> : null}
+    {state.error ? <span role="alert" className="text-critical ml-2 text-[12px]">{state.error}</span> : null}
   </form>;
 }
 
@@ -65,7 +65,7 @@ export function QuoteActions({ id, status }: { id: string; status: "draft" | "se
     {status === "draft" ? <form action={change}><input type="hidden" name="id" value={id} /><input type="hidden" name="to" value="sent" /><SubmitButton variant="outline" pendingLabel="Saving…"><Send className="size-3.5" />Mark as sent</SubmitButton></form> : null}
     {status === "sent" ? <form action={change}><input type="hidden" name="id" value={id} /><input type="hidden" name="to" value="declined" /><SubmitButton variant="outline" pendingLabel="Saving…"><X className="size-3.5" />Declined</SubmitButton></form> : null}
     {status === "declined" ? <form action={change}><input type="hidden" name="id" value={id} /><input type="hidden" name="to" value="sent" /><SubmitButton variant="outline" pendingLabel="Saving…"><RotateCcw className="size-3.5" />Reopen</SubmitButton></form> : null}
-    {accepted.error || changed.error ? <span role="alert" className="text-critical w-full text-[12px]">{accepted.error ?? changed.error}</span> : null}
+    {accepted.error || changed.error ? <span role="alert" className="text-critical w-full text-[12.5px]">{accepted.error ?? changed.error}</span> : null}
   </div>;
 }
 
@@ -92,7 +92,7 @@ export function CustomerForm({ customer, companyTerms }: { customer?: Pick<Custo
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">{customer ? "Save customer" : "Add customer"}</SubmitButton>
-      {state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+      {state.ok ? <span role="status" className="text-positive text-[13px]">Saved</span> : null}
     </div>
   </form>;
 }
@@ -111,11 +111,11 @@ export function InvoiceSettingsForm({ prefix, terms, year, next }: { prefix: str
         <TextInput name="payment_terms_days" type="number" min={0} max={365} defaultValue={String(terms)} className="tabular-nums" />
       </Field>
     </div>
-    <p className="text-ink-faint text-[11.5px]">Invoices run {value.toUpperCase() || "…"}{year}-0001 upwards each year, quotes {value.toUpperCase() || "…"}Q-001. A new invoice is due this many days after its date.</p>
+    <p className="text-ink-faint text-[12px]">Invoices run {value.toUpperCase() || "…"}{year}-0001 upwards each year, quotes {value.toUpperCase() || "…"}Q-001. A new invoice is due this many days after its date.</p>
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
-      {state.ok ? <span role="status" className="text-positive text-[12.5px]">Saved</span> : null}
+      {state.ok ? <span role="status" className="text-positive text-[13px]">Saved</span> : null}
     </div>
   </form>;
 }

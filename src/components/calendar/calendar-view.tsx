@@ -36,8 +36,8 @@ function Row({ item, today, everyone, showDate = false }: { item: CalendarItem; 
   return <li className="flex items-start gap-3 px-4 py-2.5">
     <span aria-hidden className={cn("mt-[7px] size-2 shrink-0 rounded-full", DOT[item.kind])} />
     <div className="min-w-0 flex-1">
-      <Link href={item.href} className={cn("text-[12.5px] font-medium hover:underline", tone(item))}>{item.title}</Link>
-      <p className="text-ink-muted text-[11.5px] leading-snug">
+      <Link href={item.href} className={cn("text-[13px] font-medium hover:underline", tone(item))}>{item.title}</Link>
+      <p className="text-ink-muted text-[12px] leading-snug">
         {showDate ? <>{formatDate(item.date)} · </> : null}
         {everyone && item.company.slug ? <><Link href={`/c/${item.company.slug}`} className="text-ink hover:text-brand hover:underline">{calendarCompanyLabel(item.company.name)}</Link> · </> : null}
         {CALENDAR_KIND_LABEL[item.kind]}{item.detail ? ` · ${item.detail}` : ""}
@@ -50,7 +50,7 @@ function Row({ item, today, everyone, showDate = false }: { item: CalendarItem; 
 function Chip({ item, everyone }: { item: CalendarItem; everyone: boolean }) {
   const company = calendarCompanyLabel(item.company.name);
   return <Link href={item.href} title={`${item.title}${everyone && company ? ` · ${company}` : ""}${item.detail ? ` · ${item.detail}` : ""}`}
-    className={cn("hover:bg-muted flex min-w-0 items-center gap-1.5 rounded px-1 py-[3px] text-[11.5px] leading-tight", item.kind === "deadline" && "font-medium", tone(item))}>
+    className={cn("hover:bg-muted flex min-w-0 items-center gap-1.5 rounded px-1 py-[3px] text-[12px] leading-tight", item.kind === "deadline" && "font-medium", tone(item))}>
     <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[item.kind])} />
     <span className="truncate">{everyone && company ? <span className="text-ink-muted">{company.split(" ")[0]} · </span> : null}{item.title}</span>
   </Link>;
@@ -107,20 +107,20 @@ export async function CalendarView({ query, company }: { query: Record<string, s
       <RecordFilterLinks label="Show" options={[{ label: "Everything", href: href({ kind: everyone ? "all" : null }), active: !kind },
         ...(Object.keys(CALENDAR_KINDS) as CalendarKind[]).map(key => ({ label: CALENDAR_KINDS[key], href: href({ kind: key }), active: kind === key }))]} />
     </div>
-    {overdue.length && view !== "agenda" ? <p className="border-critical-line bg-critical-soft text-critical rounded-md border px-3 py-2 text-[12.5px]">
+    {overdue.length && view !== "agenda" ? <p className="border-critical-line bg-critical-soft text-critical rounded-md border px-3 py-2 text-[13px]">
       {overdue.length} overdue, still open. <Link href={href({ view: "agenda", date: null })} className="font-medium underline-offset-2 hover:underline">See them in the agenda</Link>
     </p> : null}
 
     {view === "month" ? <>
       <section aria-label={range.label} className="ll-panel hidden overflow-hidden md:block">
-        <div className="border-hairline bg-surface-sunken grid grid-cols-7 border-b">{WEEKDAYS.map(day => <p key={day} className="text-ink-faint px-2 py-1.5 text-[11px] font-semibold tracking-[0.06em] uppercase">{day}</p>)}</div>
+        <div className="border-hairline bg-surface-sunken grid grid-cols-7 border-b">{WEEKDAYS.map(day => <p key={day} className="text-ink-faint px-2 py-1.5 text-[11.5px] font-semibold tracking-[0.06em] uppercase">{day}</p>)}</div>
         <div className="grid grid-cols-7">
           {days.map((day, index) => {
             const items = byDay.get(day) ?? [], outside = day.slice(0, 7) !== range.month;
             return <div key={day} className={cn("border-hairline min-h-[7.5rem] min-w-0 border-b p-1.5", index % 7 !== 6 && "border-r", outside && "bg-surface-sunken/60")}>
-              <p className="mb-1 flex"><span className={cn("grid size-6 place-items-center rounded-full text-[11.5px] tabular-nums", day === today ? "bg-brand font-semibold text-white" : outside ? "text-ink-faint" : "text-ink-muted")}>{Number(day.slice(8))}</span></p>
+              <p className="mb-1 flex"><span className={cn("grid size-6 place-items-center rounded-full text-[12px] tabular-nums", day === today ? "bg-brand font-semibold text-white" : outside ? "text-ink-faint" : "text-ink-muted")}>{Number(day.slice(8))}</span></p>
               <ul className="space-y-px">{items.slice(0, MONTH_CAP).map(item => <li key={item.key}><Chip item={item} everyone={everyone} /></li>)}</ul>
-              {items.length > MONTH_CAP ? <Link href={href({ view: "week", date: day })} className="text-ink-muted hover:text-brand mt-0.5 block px-1 text-[11px]">{items.length - MONTH_CAP} more</Link> : null}
+              {items.length > MONTH_CAP ? <Link href={href({ view: "week", date: day })} className="text-ink-muted hover:text-brand mt-0.5 block px-1 text-[11.5px]">{items.length - MONTH_CAP} more</Link> : null}
             </div>;
           })}
         </div>
@@ -132,34 +132,34 @@ export async function CalendarView({ query, company }: { query: Record<string, s
       {days.map((day, index) => {
         const items = byDay.get(day) ?? [];
         return <div key={day} className={cn("border-hairline min-w-0 border-b md:min-h-[18rem] md:border-b-0", index % 7 !== 6 && "md:border-r", !items.length && "max-md:hidden")}>
-          <p className={cn("border-hairline flex items-baseline gap-1.5 border-b px-2.5 py-2 text-[12px]", day === today ? "text-brand font-semibold" : "text-ink-muted")}>
+          <p className={cn("border-hairline flex items-baseline gap-1.5 border-b px-2.5 py-2 text-[12.5px]", day === today ? "text-brand font-semibold" : "text-ink-muted")}>
             <span className="tracking-[0.06em] uppercase">{WEEKDAYS[index]}</span><span className="tabular-nums">{Number(day.slice(8))}</span>
           </p>
           <ul className="divide-hairline divide-y">{items.map(item => <li key={item.key} className="px-2.5 py-2">
-            <Link href={item.href} className={cn("text-[12px] leading-snug font-medium hover:underline", tone(item))}>{item.title}</Link>
-            <p className="text-ink-muted mt-0.5 text-[11px] leading-snug">{everyone && item.company.name ? `${calendarCompanyLabel(item.company.name)} · ` : ""}{item.detail ?? CALENDAR_KIND_LABEL[item.kind]}</p>
+            <Link href={item.href} className={cn("text-[12.5px] leading-snug font-medium hover:underline", tone(item))}>{item.title}</Link>
+            <p className="text-ink-muted mt-0.5 text-[11.5px] leading-snug">{everyone && item.company.name ? `${calendarCompanyLabel(item.company.name)} · ` : ""}{item.detail ?? CALENDAR_KIND_LABEL[item.kind]}</p>
           </li>)}</ul>
         </div>;
       })}
-      {!data.items.length ? <p className="text-ink-muted px-4 py-4 text-[12.5px] md:col-span-7">Nothing due this week.</p> : null}
+      {!data.items.length ? <p className="text-ink-muted px-4 py-4 text-[13px] md:col-span-7">Nothing due this week.</p> : null}
     </section> : null}
 
     {view === "agenda" ? <section aria-label={range.label} className="ll-panel overflow-hidden">
       {overdue.length ? <div>
-        <h3 className="border-hairline bg-critical-soft text-critical border-b px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase">Overdue</h3>
+        <h3 className="border-hairline bg-critical-soft text-critical border-b px-4 py-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase">Overdue</h3>
         <ul className="divide-hairline divide-y">{overdue.map(item => <Row key={item.key} item={item} today={today} everyone={everyone} showDate />)}</ul>
       </div> : null}
       {shown.map(day => <div key={day}>
-        <h3 className={cn("border-hairline bg-surface-sunken border-y px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase", day === today ? "text-brand" : "text-ink-faint")}>{day === today ? `Today, ${dayHeading(day)}` : dayHeading(day)}</h3>
+        <h3 className={cn("border-hairline bg-surface-sunken border-y px-4 py-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase", day === today ? "text-brand" : "text-ink-faint")}>{day === today ? `Today, ${dayHeading(day)}` : dayHeading(day)}</h3>
         <ul className="divide-hairline divide-y">{(byDay.get(day) ?? []).map(item => <Row key={item.key} item={item} today={today} everyone={everyone} />)}</ul>
       </div>)}
-      {!shown.length ? <p className="text-ink-muted px-4 py-4 text-[12.5px]">Nothing due between {formatDate(range.from)} and {formatDate(range.to)}.</p> : null}
+      {!shown.length ? <p className="text-ink-muted px-4 py-4 text-[13px]">Nothing due between {formatDate(range.from)} and {formatDate(range.to)}.</p> : null}
     </section> : null}
 
     <div id="subscribe" className="scroll-mt-20">
       <RecordSection title="Subscribe in Google, Outlook or Apple Calendar" hint={company ? company.name : "Every client you can see"}>
         <div className="space-y-3 p-4">
-          <p className="text-ink-muted max-w-[75ch] text-[12.5px] leading-relaxed">Your calendar app reads what is still open from a private link and keeps it up to date: two months back to a year ahead. Anyone with the link can read it, so keep it to yourself; make a new one and the old one stops.</p>
+          <p className="text-ink-muted max-w-[75ch] text-[13px] leading-relaxed">Your calendar app reads what is still open from a private link and keeps it up to date: two months back to a year ahead. Anyone with the link can read it, so keep it to yourself; make a new one and the old one stops.</p>
           <SubscribeCalendar organisationId={company?.id ?? null} kind={kind} showing={kind ? CALENDAR_KINDS[kind].toLowerCase() : "everything"}
             live={live ? { id: live.id, made: formatDate(live.created_at), used: live.last_used_at ? formatDate(live.last_used_at) : null, showing: live.kind ? CALENDAR_KINDS[live.kind as CalendarKind].toLowerCase() : "everything" } : null} />
         </div>
@@ -171,10 +171,10 @@ export async function CalendarView({ query, company }: { query: Record<string, s
 function MonthList({ days, byDay, today, everyone, empty, className }: { days: string[]; byDay: Map<string, CalendarItem[]>; today: string; everyone: boolean; empty: string; className?: string }) {
   return <section className={cn("ll-panel overflow-hidden", className)}>
     {days.map(day => <div key={day}>
-      <h3 className={cn("border-hairline bg-surface-sunken border-y px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase first:border-t-0", day === today ? "text-brand" : "text-ink-faint")}>{dayHeading(day)}</h3>
+      <h3 className={cn("border-hairline bg-surface-sunken border-y px-4 py-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase first:border-t-0", day === today ? "text-brand" : "text-ink-faint")}>{dayHeading(day)}</h3>
       <ul className="divide-hairline divide-y">{(byDay.get(day) ?? []).map(item => <Row key={item.key} item={item} today={today} everyone={everyone} />)}</ul>
     </div>)}
-    {!days.length ? <p className="text-ink-muted px-4 py-4 text-[12.5px]">{empty}</p> : null}
+    {!days.length ? <p className="text-ink-muted px-4 py-4 text-[13px]">{empty}</p> : null}
   </section>;
 }
 

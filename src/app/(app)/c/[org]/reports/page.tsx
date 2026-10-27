@@ -37,16 +37,16 @@ export default async function ReportsPage() {
   return <PageBody className="space-y-4">
     <RecordHeader title="Reports" description="Every figure comes from the same ledger, so the statements always agree." />
     <Link href="/accounts/reports/overview" className="ll-panel border-brand-200 bg-brand-50 hover:bg-brand-100 block px-4 py-3.5 transition-colors">
-      <span className="text-brand block text-[13.5px] font-semibold">Business overview</span>
-      <span className="text-ink-muted mt-0.5 block text-[12px] leading-relaxed">Cash, what is owed each way, the year against the last, twelve months of charts, the books health checks, and an AI read of all of it on request.</span>
+      <span className="text-brand block text-[14px] font-semibold">Business overview</span>
+      <span className="text-ink-muted mt-0.5 block text-[12.5px] leading-relaxed">Cash, what is owed each way, the year against the last, twelve months of charts, the books health checks, and an AI read of all of it on request.</span>
     </Link>
     <div className="grid items-start gap-4 lg:grid-cols-3">
       {forCountry(org.country).map(group => <section key={group.group} aria-label={group.group} className="ll-panel overflow-hidden">
-        <h3 className="text-ink-faint border-hairline border-b px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase">{group.group}</h3>
+        <h3 className="text-ink-faint border-hairline border-b px-4 py-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase">{group.group}</h3>
         <ul className="divide-hairline divide-y">{group.items.map(item => <li key={item.href}>
           <Link href={item.href} className="hover:bg-surface-sunken block px-4 py-3">
-            <span className="text-brand block text-[13px] font-medium">{item.title}</span>
-            <span className="text-ink-muted mt-0.5 block text-[12px] leading-relaxed">{item.text}</span>
+            <span className="text-brand block text-[13.5px] font-medium">{item.title}</span>
+            <span className="text-ink-muted mt-0.5 block text-[12.5px] leading-relaxed">{item.text}</span>
           </Link>
         </li>)}</ul>
       </section>)}

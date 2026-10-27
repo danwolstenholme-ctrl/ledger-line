@@ -31,7 +31,7 @@ export default async function BankTransactionPage({ params }: { params: Promise<
   if (refund) return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title={title} description={`${formatDate(item.txn_date)} · ${item.bank_account_name} · ${formatAmount(Number(item.amount))}`} back={{ href: "/accounts/bank", label: "Bank" }} />
     <RecordSection title={refund.title}>
-      <p className="text-ink-muted px-4 py-3.5 text-[12.5px] leading-relaxed sm:px-5">{refund.body}
+      <p className="text-ink-muted px-4 py-3.5 text-[13px] leading-relaxed sm:px-5">{refund.body}
         {" "}<Link href={refund.href} className="text-brand font-medium hover:underline">Open the credit note</Link> to change or remove it.</p>
     </RecordSection>
     <Postings entries={postings.entries} empty="Not posted yet." />
