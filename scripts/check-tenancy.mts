@@ -109,6 +109,18 @@ expect("Nikos does not see the firm's AML file on Pixelforge", await count(nikos
 expect("Nikos does not see the firm's fee, time or staff", await count(nikos, "select (select count(*) from client_fees) + (select count(*) from time_entries) + (select count(*) from practice_staff) as n"), is(0));
 expect("Nikos sees whose practice it is, for its name and colours", await count(nikos, "select count(*) as n from practices"), is(1));
 expect("Nikos can raise Pixelforge's own records", await count(nikos, "insert into customers (organisation_id, name) values ($1, 'New Client GmbH') returning id", [pixelforge]), is(1));
+// A caller who is not signed in at all (Supabase's anon, as any role outside `authenticated`): no function of Ledgerline's
+// is theirs to call. The audit trail above all, which only the database's own triggers write.
+// It sees the schema, as Supabase lets it.
+await conn.query("do $$ begin if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if; end $$");
+await conn.query("grant usage on schema public to anon");
+const stranger = async (text: string) => {
+  try { await conn.transaction(async tx => { await tx.query("select set_config('role', 'anon', true)"); await tx.query(text); }); return "allowed"; }
+  catch (error) { return String((error as { message?: string }).message ?? error); }
+};
+expect("A stranger cannot write to the audit trail", await stranger("select audit_append(null, 'forged', 'invoice', null, '{}'::jsonb)"), refused);
+expect("Nor ask whose companies are whose", await stranger("select visible_companies()"), refused);
+
 // The language someone reads Ledgerline in is theirs to choose, and nobody else's.
 expect("A person sets their own language (Nikos)", await count(nikos, "update app_users set locale = 'el' where id = app_user_id() returning id"), is(1));
 expect("But not Sofia's at Kalamies", await count(nikos, "update app_users set locale = 'en' where email = 'sofia@kalamiesdental.example' returning id"), is(0));

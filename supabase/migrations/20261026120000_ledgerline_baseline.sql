@@ -3494,3 +3494,10 @@ alter view v_invoice_directory set (security_invoker = true);
 alter view v_journal_lines set (security_invoker = true);
 alter view v_quote_directory set (security_invoker = true);
 alter view v_supplier_credit_directory set (security_invoker = true);
+
+-- Functions are for the person signed in (and for the database's own triggers), never for anyone at all: none
+-- is open to PUBLIC, of which an anonymous caller is part, and nor is any made later.
+revoke execute on all functions in schema public from public;
+grant execute on all functions in schema public to authenticated;
+alter default privileges in schema public revoke execute on functions from public;
+alter default privileges in schema public grant execute on functions to authenticated;
