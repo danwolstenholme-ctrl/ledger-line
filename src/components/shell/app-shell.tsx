@@ -44,7 +44,8 @@ type NavGroup = { label: string | null; items: NavItem[]; more?: boolean };
  * under More.
  */
 /** `member`: one of the practice's people. A client company's own people get their company's menu only: none of the practice's pages. */
-type ShellProps = { practice: ShellPractice; initialCompany: ShellCompany | null; companyCount: number; user: ShellUser; member: boolean; toReview: number; timer: TimerRunning | null; children: ReactNode };
+/** `publicDemo`: the hosted demo anyone may open, said on every page (lib/auth/config). */
+type ShellProps = { practice: ShellPractice; initialCompany: ShellCompany | null; companyCount: number; user: ShellUser; member: boolean; toReview: number; timer: TimerRunning | null; publicDemo?: boolean; children: ReactNode };
 
 export function AppShell(props: ShellProps) {
   return <NavigationProvider><Motion><NavigationProgress /><WorkspaceShell {...props} /></Motion></NavigationProvider>;
@@ -207,7 +208,7 @@ function CompanySwitcher({ current, count, pathname, onNavigate, member }: { cur
   </div>;
 }
 
-function WorkspaceShell({ practice, initialCompany, companyCount, user, member, toReview, timer, children }: ShellProps) {
+function WorkspaceShell({ practice, initialCompany, companyCount, user, member, toReview, timer, publicDemo = false, children }: ShellProps) {
   const pathname = usePathname() ?? "/";
   const slug = slugFromPath(pathname);
   const client = useCurrentCompany(initialCompany, slug);
@@ -354,6 +355,10 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
         <UserMenu user={client?.role ? { ...user, role: client.role } : user} />
       </header>
       <OfflineBanner />
+      {publicDemo ? <p role="note" className="border-hairline bg-surface-sunken text-ink-muted border-b px-4 py-1.5 text-center text-[12.5px] print:hidden">
+        {t("A public demo: the practice and its clients are made up, and it starts again from time to time. Please don’t put anything real in it.")}{" "}
+        <Link href="/sign-in" className="text-brand font-medium hover:underline">{t("Be someone else")}</Link>
+      </p> : null}
       <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0 print:pb-0"><NavigationContent scope="page" label={t("Loading…")} variant="page">{children}</NavigationContent></main>
     </div>
     {client || member ? <MobileBar tabs={mobileTabs} actions={quickAdd} snap={snap} pathname={pathname} onMenu={() => setOpen(true)} /> : null}

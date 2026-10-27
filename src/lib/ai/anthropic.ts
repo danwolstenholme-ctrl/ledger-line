@@ -4,6 +4,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 
+import { HOSTED_DEMO } from "@/lib/auth/config";
+
 /**
  * The one door to the model. Server-only, so the key never reaches a browser,
  * and nothing here logs what it is asked or answers: the prompts carry
@@ -16,7 +18,8 @@ import type { z } from "zod";
 const DEFAULT_MODEL = "claude-opus-5-5";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
-export function aiConfigured() { return Boolean(process.env.ANTHROPIC_API_KEY); }
+/** Claude is asked only with a key, and never by the public hosted demo, which anyone may try (lib/auth/config). */
+export function aiConfigured() { return Boolean(process.env.ANTHROPIC_API_KEY) && !HOSTED_DEMO; }
 
 let client: Anthropic | null = null;
 function anthropic() {

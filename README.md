@@ -619,6 +619,17 @@ Sources (GOV.UK): [How to fill in your VAT Return (VAT Notice 700/12)](https://w
 [confirmation statement](https://www.gov.uk/guidance/confirmation-statement-guidance);
 [audit exemptions](https://www.gov.uk/audit-exemptions-for-private-limited-companies).
 
+## The public demo
+
+Every push to main deploys to Vercel: https://ledger-line-vert.vercel.app.
+With no database of its own it runs the embedded one in the server's
+temporary folder, so its data is made up, built afresh on each new server (a
+few seconds on the first visit) and kept only while that server runs. Every
+page says so. Documents are read from the demo files' recordings only, and
+Claude is never asked, so it costs nothing however many people try it
+(`HOSTED_DEMO` in `src/lib/auth/config.ts`). Once the variables below are set
+on Vercel, the same deployment is the live one.
+
 ## Going live on Supabase
 
 Live, Ledgerline runs on Supabase's Postgres in the EU (Frankfurt), with the

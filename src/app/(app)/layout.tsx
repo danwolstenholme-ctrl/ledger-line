@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
-import { AUTH_MODE } from "@/lib/auth/config";
+import { AUTH_MODE, HOSTED_DEMO } from "@/lib/auth/config";
 import { one, sql } from "@/lib/db";
 import { headers } from "next/headers";
 import { ORG_HEADER, getCurrentUser, getMembership, getPractice } from "@/lib/org";
@@ -48,7 +48,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppShell practice={{ name: practice.name, initials: practice.initials, brand_color: practice.brand_color, tagline: practice.tagline }}
       user={{ name: user.name, initials: user.initials, email: user.email, role, demo: AUTH_MODE === "demo" }} member={membership.practice} toReview={toReview}
       timer={running ? { company: running.company, slug: running.slug, work: running.work, started_at: running.started_at } : null}
-      initialCompany={initialCompany} companyCount={Number(count?.count ?? 0)}>
+      initialCompany={initialCompany} companyCount={Number(count?.count ?? 0)} publicDemo={HOSTED_DEMO}>
       {children}
     </AppShell>
   </LocaleProvider>;

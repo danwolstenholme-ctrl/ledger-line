@@ -216,6 +216,9 @@ export const GREEK: Record<string, string> = {
   "Nothing on it looked like an invoice or a receipt.": "Τίποτα σε αυτό δεν έμοιαζε με τιμολόγιο ή απόδειξη.",
   "Open receipts": "Άνοιγμα αποδείξεων",
   "You’re offline. Anything you do now is sent as soon as the connection is back.": "Είστε εκτός σύνδεσης. Ό,τι κάνετε τώρα θα σταλεί μόλις επανέλθει η σύνδεση.",
+  "A public demo: the practice and its clients are made up, and it starts again from time to time. Please don’t put anything real in it.": "Δημόσιο demo: το γραφείο και οι πελάτες του είναι φανταστικοί, και ξεκινά από την αρχή κάθε τόσο. Παρακαλούμε μη βάζετε τίποτα πραγματικό.",
+  "Be someone else": "Αλλαγή προσώπου",
+  "The public demo reads its sample documents only. Claude reads your own once Ledgerline is set up for your practice.": "Το δημόσιο demo διαβάζει μόνο τα δείγματά του. Το Claude διαβάζει τα δικά σας μόλις το Ledgerline στηθεί για το γραφείο σας.",
 
   // ------------------------------------------------------------- Shared forms
   "Saving": "Αποθήκευση",

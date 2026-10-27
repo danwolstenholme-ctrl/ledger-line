@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { signInAs } from "@/lib/actions/auth";
-import { AUTH_MODE, safeNext } from "@/lib/auth/config";
+import { AUTH_MODE, HOSTED_DEMO, safeNext } from "@/lib/auth/config";
 import { asService, sql } from "@/lib/db";
 import { PasswordLinkForm, PasswordSignInForm } from "@/components/people/forms";
 
@@ -41,6 +41,9 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   return <div className="ll-panel space-y-5 p-6">
     <div><h1 className="text-ink text-[18px] font-semibold">Sign in</h1>
       <p className="text-ink-muted mt-1 text-[13px]">This is the demo: choose who to be. Each sees only what they may: the firm sees every client; a client’s owner, their own company.</p></div>
+    {HOSTED_DEMO ? <p role="note" className="border-caution-line bg-caution-soft text-caution rounded-md border px-3 py-2 text-[12.5px] leading-relaxed">
+      A public demo: Saltlake Accounting and its clients are made up, anyone with this address can open it, and it starts again from time to time. Please don’t put anything real in it.
+    </p> : null}
     {query.problem ? <p role="alert" className="text-critical text-[13px]">That person isn’t in the demo any more.</p> : null}
     {list("Saltlake Accounting", firm)}
     {list("Clients’ own people", clients)}

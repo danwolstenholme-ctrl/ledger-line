@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { one, sql } from "@/lib/db";
 import { aiConfigured } from "@/lib/ai/anthropic";
+import { HOSTED_DEMO } from "@/lib/auth/config";
 import { CAPTURE_ANSWER, readInvoiceDocument, type CaptureClient, type CapturedInvoice } from "@/lib/ai/capture";
 import { nameWords } from "@/lib/domain/bank-statements";
 import { firmToday } from "@/lib/domain/invoices";
@@ -22,7 +23,7 @@ export type CaptureDraft = { supplier_id: string | null; new_supplier: string | 
   number: string | null; issued_on: string | null; due_on: string | null; reverse_charge: boolean; lines: CaptureDraftLine[] };
 export type CaptureRouting = { method: "vat_number" | "name" | "uploaded" | "none"; confidence: "high" | "medium" | "low"; billed_to: string | null };
 
-export const rehearsalMode = () => process.env.LEDGERLINE_AI_FIXTURES === "1";
+export const rehearsalMode = () => process.env.LEDGERLINE_AI_FIXTURES === "1" || HOSTED_DEMO;
 export const captureAvailable = () => aiConfigured() || rehearsalMode();
 
 const cents = (value: number) => Math.round(value * 100);
@@ -118,6 +119,8 @@ export async function readCaptureFile(fileId: string) {
   if (rehearsalMode() && fs.existsSync(fixture)) {
     const parsed = CAPTURE_ANSWER.safeParse(JSON.parse(fs.readFileSync(fixture, "utf8")));
     if (parsed.success) invoices = parsed.data.invoices.map(invoice => ({ ...invoice, client_ref: clients.find(client => client.vat_number && normalVat(client.vat_number) === normalVat(invoice.bill_to.vat_number))?.ref ?? invoice.client_ref }));
+  } else if (HOSTED_DEMO) {
+    error = "The public demo reads its sample documents only. Claude reads your own once Ledgerline is set up for your practice.";
   } else if (!aiConfigured()) {
     error = "AI is not set up yet. Add ANTHROPIC_API_KEY to .env.local and restart.";
   } else {

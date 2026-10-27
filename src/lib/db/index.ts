@@ -3,6 +3,7 @@ import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { PGlite, types } from "@electric-sql/pglite";
 import pg from "pg";
@@ -27,7 +28,24 @@ import { seedDemo } from "@/lib/db/seed";
  * only inside asService(), so each such place is visible in the code.
  */
 
-const DATA_DIR = process.env.LEDGERLINE_DATA_DIR ? path.resolve(process.env.LEDGERLINE_DATA_DIR) : path.join(process.cwd(), ".data", "ledgerline");
+/**
+ * Where the embedded database keeps its files: .data/ledgerline, or
+ * LEDGERLINE_DATA_DIR. A host whose app folder is read-only (Vercel) keeps
+ * them in its temporary folder: the hosted demo, made afresh on each new
+ * server and kept only while that server runs.
+ */
+function dataDir() {
+  if (process.env.LEDGERLINE_DATA_DIR) return path.resolve(process.env.LEDGERLINE_DATA_DIR);
+  const local = path.join(process.cwd(), ".data", "ledgerline");
+  try {
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.accessSync(path.dirname(local), fs.constants.W_OK);
+    return local;
+  } catch {
+    return path.join(os.tmpdir(), "ledgerline");
+  }
+}
+const DATA_DIR = dataDir();
 const DATABASE_URL = process.env.DATABASE_URL;
 const DEMO_DATA = !DATABASE_URL || process.env.LEDGERLINE_DEMO_DATA === "1";
 /** The laptop demo's person before anyone signs in: who opens it in a meeting. */
