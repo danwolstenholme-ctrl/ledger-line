@@ -27,7 +27,7 @@ if (!url) throw new Error("Set DATABASE_URL to the live database (its session po
 // sslmode as Postgres means it ("require": encrypted), as the app connects (src/lib/db).
 const client = new pg.Client({ connectionString: /[?&]sslmode=/.test(url) && !/[?&]uselibpqcompat=/.test(url) ? `${url}&uselibpqcompat=true` : url });
 await client.connect();
-const run = async <R = Record<string, unknown>>(text: string, params: unknown[] = []) => (await client.query(text, params)).rows as R[];
+const run = async <R = Record<string, unknown>,>(text: string, params: unknown[] = []) => (await client.query(text, params)).rows as R[];
 
 // The same token and fingerprint as an invitation made in Ledgerline (src/lib/invitations.ts).
 const token = randomBytes(24).toString("base64url");
