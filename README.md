@@ -692,7 +692,16 @@ enforces those rules too: what it shows Maria is what the database lets her see.
 5. The Data API can stay on or be switched off: anonymous requests get
    nothing, and a signed-in one sees only what the rules allow.
 6. The first practice and its first partner are made by Wolsten Studios
-   (the admin console is still to come); everyone else is invited.
+   (the admin console is still to come); everyone else is invited:
+   `DATABASE_URL=… npx tsx --conditions=react-server scripts/first-practice.mts
+   --practice "Name Ltd" --partner "Full Name" --email partner@example.com`
+   opens the practice with its own books and prints the partner's link.
+
+Live since 28 October 2026 on the Supabase project Ledger Line (Ireland,
+eu-west-1), with Vercel's functions beside it in Dublin (`vercel.json`). Its
+Data API is off. The baseline and the accounts migration are applied and
+recorded, so `npm run supabase:migration` now refuses: a change to the schema
+is a new, dated migration, and schema.sql follows it.
 
 The whole test suite runs against any Postgres too:
 `DATABASE_URL=… npx playwright test` (an empty, throwaway database; it is

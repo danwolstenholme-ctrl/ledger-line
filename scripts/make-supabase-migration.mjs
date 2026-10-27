@@ -1,15 +1,22 @@
 /**
- * Supabase's baseline migration is schema.sql, word for word. Until
- * Ledgerline is live, run this after changing schema.sql:
+ * Supabase's baseline migration is schema.sql, word for word, as it was when
+ * Ledgerline went live (28 October 2026, on the Supabase project Ledger Line,
+ * where it and the accounts migration are recorded as applied).
  *
- *   npm run supabase:migration
+ * A live database is migrated, never rebuilt: every change to the schema now
+ * goes in a new, dated file in supabase/migrations, and schema.sql follows it,
+ * so this refuses to rewrite the baseline unless told to (only for a database
+ * that is thrown away):
  *
- * Once a live database exists, stop: from then on every change to the
- * schema goes in a new, dated file in supabase/migrations, and schema.sql
- * follows it, because a live database is migrated, never rebuilt.
+ *   LEDGERLINE_BASELINE_UNLOCK=1 npm run supabase:migration
  */
 import fs from "node:fs";
 import path from "node:path";
+
+if (process.env.LEDGERLINE_BASELINE_UNLOCK !== "1") {
+  console.error("Ledgerline is live: the baseline migration is applied and must not change.\nAdd a new dated migration in supabase/migrations for the change, and make schema.sql match it.");
+  process.exit(1);
+}
 
 const root = path.join(import.meta.dirname, "..");
 const schema = fs.readFileSync(path.join(root, "src", "lib", "db", "schema.sql"), "utf8");
