@@ -1,5 +1,9 @@
+import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+
+// These walk through the laptop demo, signed in as its own user; the Supabase sign-in has its own tests.
+test.skip(process.env.LEDGERLINE_AUTH_E2E === "supabase", "The demo's journeys run without Supabase Auth");
 
 const files = ["01-greek-marine-fuel-invoice.pdf", "02-two-invoices-in-one-pdf.pdf", "03-photographed-print-shop-invoice.jpg", "04-eu-reverse-charge-invoice.pdf"]
   .map(name => path.join(process.cwd(), "demo-files", name));
@@ -640,4 +644,165 @@ test("each client's AML review is a deadline, and the file it opens shows the ri
   await expect(page.getByText(/Approved by Maria Antoniou as compliance officer/)).toBeVisible();
   await page.goto("/clients");
   await expect(page.getByRole("row", { name: /Kalamies Dental Clinic/ })).toContainText("in 19 days");
+});
+
+test("signing in as a client's owner shows that company only, and signing out shuts Ledgerline", async ({ page }) => {
+  await page.goto("/sign-in");
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await page.getByRole("button", { name: /Sign in as Nikos Savva/ }).click();
+  await expect(page).toHaveURL(/\/c\/pixelforge$/);
+  await expect(page.getByRole("heading", { name: "Pixelforge Studio Ltd" })).toBeVisible();
+  const menu = page.getByRole("navigation", { name: "Main navigation" }).or(page.getByLabel("Main navigation"));
+  await expect(menu.getByRole("link", { name: "Client files" })).toHaveCount(0);
+  await page.goto("/clients");
+  await expect(page).toHaveURL(/\/c\/pixelforge$/);
+  const other = await page.goto("/c/aegean-blue-marine");
+  expect(other?.status()).toBe(404);
+
+  await page.goto("/c/pixelforge");
+  await page.getByRole("button", { name: /Nikos Savva: account/ }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await page.goto("/clients");
+  await expect(page).toHaveURL(/\/sign-in\?next=%2Fclients$/);
+  await page.getByRole("button", { name: /Sign in as Maria Antoniou/ }).click();
+  await expect(page).toHaveURL(/\/clients$/);
+});
+
+test("a partner invites an accountant, who joins from the link and sees the practice", async ({ page, browser }) => {
+  await page.goto("/settings/people");
+  await page.getByLabel("Name").fill("Eleni Ioannou");
+  await page.getByLabel("Email").fill("Eleni@Saltlake.example");
+  await page.getByRole("button", { name: "Invite" }).click();
+  await expect(page.getByText("Eleni Ioannou is invited.")).toBeVisible();
+  const link = (await page.locator("pre").first().innerText()).trim();
+  expect(link).toMatch(/\/join\/[A-Za-z0-9_-]{32}$/);
+  await page.reload();
+  await expect(page.getByRole("listitem").filter({ hasText: "eleni@saltlake.example" })).toContainText("Withdraw");
+
+  const fresh = await browser.newContext();
+  const joining = await fresh.newPage();
+  await joining.goto(link);
+  // The practice, by whatever name it has now (an earlier test rebrands it): not a company's books.
+  await expect(joining.getByRole("heading", { name: /^Join [^’]+$/ })).toBeVisible();
+  await joining.getByRole("button", { name: "Join as Eleni Ioannou" }).click();
+  await expect(joining).toHaveURL(/\/\?joined=1$/);
+  await expect(joining.getByRole("button", { name: /Eleni Ioannou: account/ })).toBeVisible();
+  await joining.goto("/clients");
+  await expect(joining.getByRole("heading", { name: "Client files" })).toBeVisible();
+  // The link is spent.
+  await joining.goto(link);
+  await expect(joining.getByText("This invitation has been used.")).toBeVisible();
+  await fresh.close();
+
+  await page.goto("/settings/people");
+  await expect(page.getByRole("listitem").filter({ hasText: "Eleni Ioannou" }).first()).toContainText("Signs in");
+  await page.goto("/c/saltlake-accounting/audit");
+  await expect(page.getByText("Invitation accepted: joined")).toBeVisible();
+});
+
+test("a client's owner is invited from the company, and sees only that company's books", async ({ page, browser }) => {
+  await page.goto("/c/larnaka-roast/settings/people");
+  await expect(page.getByText("Nobody at the company signs in yet")).toBeVisible();
+  await page.getByLabel("Name").fill("Marios Georgiou");
+  await page.getByLabel("Email").fill("marios@larnakaroast.example");
+  await page.getByRole("button", { name: "Invite" }).click();
+  const link = (await page.locator("pre").first().innerText()).trim();
+
+  const fresh = await browser.newContext();
+  const owner = await fresh.newPage();
+  await owner.goto(link);
+  await expect(owner.getByRole("heading", { name: /Join Larnaka Roast Coffee Co Ltd’s books/ })).toBeVisible();
+  await owner.getByRole("button", { name: "Join as Marios Georgiou" }).click();
+  await expect(owner).toHaveURL(/\/c\/larnaka-roast\?joined=1$/);
+  await owner.goto("/");
+  await expect(owner).toHaveURL(/\/c\/larnaka-roast$/);
+  expect((await owner.goto("/c/pixelforge"))?.status()).toBe(404);
+  await fresh.close();
+
+  // Withdrawn, a link is dead.
+  await page.goto("/c/larnaka-roast/settings/people");
+  await expect(page.getByRole("listitem").filter({ hasText: "Marios Georgiou" })).toContainText("Owner");
+  await page.getByLabel("Name").fill("Katerina Georgiou");
+  await page.getByLabel("Email").fill("katerina@larnakaroast.example");
+  await page.getByRole("button", { name: "Invite" }).click();
+  const second = (await page.locator("pre").first().innerText()).trim();
+  await page.reload();
+  await page.getByRole("listitem").filter({ hasText: "katerina@larnakaroast.example" }).getByRole("button", { name: "Withdraw" }).click();
+  await page.goto(second);
+  await expect(page.getByText("This invitation was withdrawn.")).toBeVisible();
+});
+
+test("Registrar, payroll and employer's deadlines are worked out too, and an official extension says who moved the date", async ({ page }) => {
+  await page.goto("/c/kalamies-dental/deadlines");
+  await expect(page.getByText("Annual return (HE32), made up to 4 November 2026")).toBeVisible();
+  await expect(page.getByText("Payroll returns, September 2026")).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "Employer’s return (TD7), 2025" })).toContainText("Extended from 31 May 2026 by the Tax Department");
+  await page.getByRole("listitem").filter({ hasText: "Financial statements 2025 to the Registrar" }).getByRole("link", { name: "Open the year end" }).click();
+  await expect(page.getByRole("heading", { name: "Year end and audit", level: 1 })).toBeVisible();
+  await expect(page.getByText("Reviewed under ISRE 2400, as the law allows")).toBeVisible();
+  await expect(page.getByRole("link", { name: "2025 · With the reviewer" })).toBeVisible();
+});
+
+test("the year end follows Cyprus company law: audited when the year before was over the limit, and the report dated after the board's approval", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/year-end");
+  await expect(page.getByText("Must be audited")).toBeVisible();
+  await expect(page.getByText("The year before: turnover €212,400 is over the €200,000 limit.")).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "Laid before the annual general meeting" })).toContainText(/Was due 30 Sept? 2026/);
+
+  await page.getByText("Record dates").click();
+  await page.getByLabel("Approved by the board").fill("2026-10-20");
+  await page.getByLabel("Report signed").fill("2026-10-19");
+  await page.getByLabel("Opinion").selectOption("unmodified");
+  await page.getByRole("button", { name: "Save dates" }).click();
+  await expect(page.getByText("The report can’t be dated before the board approved the financial statements.")).toBeVisible();
+  await page.getByLabel("Report signed").fill("2026-10-22");
+  await page.getByRole("button", { name: "Save dates" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "Auditor’s report signed" })).toContainText("Unmodified");
+  await expect(page.getByRole("link", { name: "2025 · Signed" })).toBeVisible();
+
+  await page.goto("/c/larnaka-roast/audit");
+  await expect(page.getByText("Year end updated").first()).toBeVisible();
+  await expect(page.getByText(/Report signed: 22 October 2026/).first()).toBeVisible();
+});
+
+test("a year's audit file downloads as one ZIP: trial balance, ledgers, open items, bank, VAT and the audit trail, with what was checked", async ({ page }) => {
+  await page.goto("/c/aegean-blue-marine/year-end");
+  await expect(page.getByRole("link", { name: "2025 · Filed" })).toBeVisible();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download the audit file" }).click()]);
+  expect(download.suggestedFilename()).toBe("Aegean Blue Marine Services Ltd audit file 2025.zip");
+  const archive = fs.readFileSync(await download.path());
+  expect(archive.subarray(0, 4).toString("hex")).toBe("504b0304");
+  const text = archive.toString("utf8");
+  for (const name of ["00 Read me.txt", "01 Trial balance at 2025-12-31.csv", "04 General ledger 2025.csv", "07 Receivables at 2025-12-31.csv", "12 Audit trail from 2025-01-01.csv"]) expect(text).toContain(name);
+  expect(text).toContain("it balances");
+  expect(text).toContain("the chain is intact");
+  expect(text).toContain("Opinion: Unmodified, signed 16 April 2026.");
+});
+
+test("the auditor is invited to read a company's books: they see its year end and take the audit file, and the database refuses any change", async ({ page, browser }) => {
+  await page.goto("/c/pixelforge/settings/people");
+  await page.getByLabel("Name").fill("Andri Kition");
+  await page.getByLabel("Email").fill("andri@kitionaudit.example");
+  await page.getByLabel("Role").selectOption("auditor");
+  await page.getByRole("button", { name: "Invite" }).click();
+  const link = (await page.locator("pre").first().innerText()).trim();
+
+  const fresh = await browser.newContext();
+  const auditor = await fresh.newPage();
+  await auditor.goto(link);
+  await auditor.getByRole("button", { name: "Join as Andri Kition" }).click();
+  await expect(auditor).toHaveURL(/\/c\/pixelforge\?joined=1$/);
+  await auditor.goto("/c/pixelforge/year-end");
+  await expect(auditor.getByText("You’re here as Pixelforge Studio Ltd’s auditor")).toBeVisible();
+  await expect(auditor.getByText("Record dates")).toHaveCount(0);
+  const [download] = await Promise.all([auditor.waitForEvent("download"), auditor.getByRole("link", { name: "Download the audit file" }).click()]);
+  expect(download.suggestedFilename()).toBe("Pixelforge Studio Ltd audit file 2025.zip");
+  await auditor.goto("/c/pixelforge/settings");
+  await auditor.getByLabel("Lock date").fill("2026-10-01");
+  await auditor.getByRole("button", { name: "Save settings" }).click();
+  await expect(auditor.getByText("You can look at these books but not change them.")).toBeVisible();
+  expect((await auditor.goto("/c/larnaka-roast"))?.status()).toBe(404);
+  await fresh.close();
 });

@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowDownLeft, ArrowRight, ArrowUpRight, BadgeCheck, Cal
 
 import { getCompanyHome } from "@/lib/data/home";
 import { getDeadlines } from "@/lib/data/deadlines";
+import { getMembership } from "@/lib/org";
 import { quarterLabel } from "@/lib/domain/vat";
 import { formatAgo, formatAmount, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -24,7 +25,7 @@ type Attention = { key: string; href: string; icon: LucideIcon; tone: "critical"
  * doing, and the to-dos. The accountant's views are under Reports and More.
  */
 export default async function CompanyHome({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const [home, query] = await Promise.all([getCompanyHome(), searchParams]);
+  const [home, query, membership] = await Promise.all([getCompanyHome(), searchParams, getMembership()]);
   const deadlines = (await getDeadlines({ client: home.org.slug })).rows.filter(row => row.kind !== "vat_return" && (row.state === "overdue" || (row.state === "due" && row.daysLeft <= 14)));
   const { org, today, cash, receivables, payables, vat } = home;
   const capture = `/c/${org.slug}/capture`;
@@ -48,7 +49,7 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
     title: row.title, detail: row.state === "overdue" ? `${-row.daysLeft} days overdue: due ${formatDate(row.due)}` : `Due ${formatDate(row.due)}, in ${row.daysLeft} days` });
   if (home.waitingEnquiries.count) attention.push({ key: "enquiries", href: `/c/${org.slug}/crm/enquiries`, icon: Inbox, tone: "critical",
     title: `${home.waitingEnquiries.count} enquir${home.waitingEnquiries.count === 1 ? "y" : "ies"} waiting for a reply`, detail: `The oldest arrived ${formatAgo(home.waitingEnquiries.oldest)}: nobody has answered yet` });
-  if (home.vatUnconfirmed.length) attention.push({ key: "vies", href: home.vatUnconfirmed.length === 1 ? `/c/${org.slug}/customers/${home.vatUnconfirmed[0].id}` : "/vat-numbers", icon: BadgeCheck, tone: "caution",
+  if (home.vatUnconfirmed.length) attention.push({ key: "vies", href: home.vatUnconfirmed.length === 1 ? `/c/${org.slug}/customers/${home.vatUnconfirmed[0].id}` : membership.practice ? "/vat-numbers" : `/c/${org.slug}/customers`, icon: BadgeCheck, tone: "caution",
     title: `${home.vatUnconfirmed.length} EU customer${home.vatUnconfirmed.length === 1 ? "’s VAT number" : "s’ VAT numbers"} to confirm in VIES`,
     detail: `${home.vatUnconfirmed.map(customer => customer.name).join(", ")}: sales to ${home.vatUnconfirmed.length === 1 ? "it" : "them"} are zero-rated` });
   if (home.toReview) attention.push({ key: "capture", href: capture, icon: ScanText, tone: "caution",

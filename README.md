@@ -43,6 +43,14 @@ to reconcile.
   receivables per client, where each client's books are locked, last activity.
 - Every figure is a link into that client's books.
 
+### 1a. Who sees what (`/sign-in`), 1 minute
+- Top right, your name → **Sign in as someone else**: the demo's people.
+  **Nikos Savva** owns Pixelforge: he lands on its books, with no practice
+  pages and no other client; Pixelforge's AML file isn't his to see. The
+  database decides this, not the screens (row-level security).
+- Back as Maria: **Practice settings → People → Invite someone**. The link
+  is shown once; open it in a private window to join as the new person.
+
 ### 1b. A company's Home, 1 minute
 - Open **Larnaka Roast Coffee**. One company at a time: the switcher at the
   top of the menu changes it and keeps the section you are in.
@@ -149,9 +157,15 @@ to reconcile.
   board in red, and show on the company's Home.
 
 ### 1g. Deadlines (`/deadlines`), 2 minutes
-- Every client's VAT returns, VIES statements, provisional tax and company
-  tax returns, worked out from each company's VAT quarters and tax year,
-  with who looks after it. Nobody typed a deadline in.
+- Every client's VAT returns, VIES statements, provisional tax, company tax
+  returns and the balance of tax; payroll returns each month and the
+  employer's annual TD7; the financial statements and the annual return
+  (HE32) for the Registrar. All worked out from each company's VAT quarters,
+  tax and financial years, incorporation date and the services the practice
+  provides, with who looks after it. Nobody typed a deadline in.
+- An official extension moves a date and says so: Kalamies' 2025 employer's
+  return shows **Extended from 31 May 2026 by the Tax Department**, with the
+  announcement linked.
 - **Overdue**: Kalamies Dental's first provisional tax instalment slipped.
   It is also on Kalamies' Home. **Mark done** closes it.
 - A VAT return closes itself when it is filed: file one from **Open the
@@ -223,6 +237,30 @@ to reconcile.
   a demo register and say "Demo answer"; any real number goes to the real
   VIES. Saving a customer or supplier with a mistyped EU number is refused.
 
+### 1k. Year end and audit (a company's **Year end**, under Reports), 3 minutes
+- **Kalamies Dental**: 2025's turnover and total assets, and 2024's, are within
+  the limits, so its accounts may be **reviewed** (ISRE 2400) instead of
+  audited, and the company has chosen that. The page shows why, figure by
+  figure. Its 2026 year began before 6 February 2026, so the old €200,000
+  turnover limit still applies to it; the €300,000 limit starts with 2027.
+- **Larnaka Roast**: 2024's turnover was over the limit, so 2025 must be
+  audited. The steps run in the order the law sets, each with its due date.
+  The annual general meeting is past its date (15 months after the last one)
+  and shows in red. **Record dates**: a report dated before the board approved
+  the accounts is refused (ISA 700).
+- **Before it goes to the auditor**: the trial balance, the lock date, bank
+  lines, VAT returns, the manual journals an auditor will ask about (ISA 240;
+  opening balances, agreed to last year's accounts under ISA 510) and the audit
+  trail.
+- **Download the audit file**: one ZIP of CSVs (trial balance, P&L, balance
+  sheet, general ledger, journal, manual journals, receivables and payables at
+  the year end, bank, VAT returns, the audit trail), and a read-me with the
+  checks and each file's SHA-256.
+- **Troodos Gold** is audited by the practice itself: the page says what the
+  IESBA Code (section 601) asks of a firm that audits books it keeps.
+- **People** (under More): invite the auditor with the role **Auditor**. They
+  read the books and take the audit file; the database refuses any change.
+
 ### 2. AI capture (`/capture`), 4 minutes
 - Drag all four files from `demo-files/` in at once:
   - `01-greek-marine-fuel-invoice.pdf`: Greek, addressed to ΑΙΓΑΙΟ ΜΠΛΟΥ…
@@ -286,6 +324,50 @@ to reconcile.
 - One page against Balabook, from its public site (checked 20 Oct 2026).
   "Not stated" means its pages don't say, not that it lacks it.
 
+## Cyprus rules Ledgerline follows (checked 26 October 2026)
+
+The dates and tests are in `src/lib/domain` (`deadlines.ts`, `vat.ts`,
+`extensions.ts`, `audit.ts`), and `npm run check:rules` checks each one.
+
+- **Company tax return (IR4)**: for tax years to 2025, 31 March two years on;
+  from tax year 2026, 31 January two years on (13 months), with the balance of
+  tax. For years to 2025 the balance is paid by 1 August of the following year.
+  Provisional tax: 31 July and 31 December. Corporation tax is 15% from 2026.
+- **VAT**: the return and payment by the 10th of the second month after the
+  quarter; VIES by the 15th of the month after a month with EU services.
+- **Payroll**: the monthly TD7, Social Insurance, GESY and tax withheld by the
+  end of the following month; the employer's TD7 by 31 May of the next year.
+- **Official extensions** (`extensions.ts`, kept from the announcements): 2024
+  company tax returns and the 2025 employer's return to 30 November 2026; the
+  VAT return for the quarter to 30 November 2025 and December 2025's VIES to
+  20 January 2026; the quarter to 30 June 2026 and July 2026's VIES to
+  20 August 2026.
+- **Registrar (Companies Law, Cap. 113)**: financial statements within 12
+  months of the year end (s.142(2)); the annual return (HE32) made up to the
+  day after 18 months from incorporation and each year on, filed within 28
+  days (s.120); an AGM every year, at most 15 months apart (s.125).
+- **Audit or review (s.152A)**: every company is audited, except that a private
+  company within the limits in two consecutive years may choose a review under
+  ISRE 2400. The limits are turnover (with rent, interest, dividends and
+  royalties) up to €200,000 for years beginning before 6 February 2026 and
+  €300,000 from then, and total assets up to €500,000. A review is not open to
+  a group that consolidates, nor to a company regulated by the Central Bank,
+  CySEC or the Superintendent of Insurance, or holding a qualifying stake in one.
+- **Size (s.141A)**: micro, small and medium at €450k/€900k/10,
+  €5m/€10m/50 and €25m/€50m/250 (total assets, turnover, employees), with at
+  most one limit exceeded.
+- **Framework**: IFRS as adopted by the EU. A small company may use the
+  Financial Reporting Standard for small-sized entities (s.142(1)(α1)) once
+  ICPAC issues it; it has not yet.
+- **Records**: kept at least six years. The Companies Law counts from the end
+  of the year they relate to, tax law from when that year's return is filed.
+
+Sources: [Cap. 113, consolidated, on CyLaw](http://www.cylaw.org/nomoi/enop/non-ind/0_113/full.html);
+[PwC Tax Summaries, Cyprus tax administration](https://taxsummaries.pwc.com/cyprus/corporate/tax-administration);
+[EY, Cyprus enacts major tax reform legislation](https://globaltaxnews.ey.com/news/2026-0140-cyprus-enacts-major-tax-reform-legislation);
+[ICPAC's financial reporting standards-setting committee](https://www.cbn.com.cy/article/129614/icpac-appoints-financial-reporting-standards-setting-committee);
+and, for each extension, the announcement linked in `src/lib/domain/extensions.ts`.
+
 ## Going live on Supabase
 
 Live, Ledgerline runs on Supabase's Postgres in the EU (Frankfurt), with the
@@ -308,23 +390,51 @@ enforces those rules too: what it shows Maria is what the database lets her see.
   real Postgres: `DATABASE_URL=… CHECK_TENANCY_WIPE=1 npm run check:tenancy`
   (it empties that database first: a throwaway one only).
 
+**Signing in** (`src/lib/auth`, `src/proxy.ts`, `src/app/(auth)`):
+- Live, Supabase Auth: email and password, and an emailed link to set a new
+  one. The proxy refreshes the session and sends anyone not signed in to
+  `/sign-in`; who someone is, is verified (getClaims) where data is read.
+- Nobody signs up on their own. A partner invites the practice's people
+  (Practice settings → People); anyone at the practice, or a company's
+  owner, invites a client company's own people (Company settings → People).
+  The invitation's link (valid 14 days, kept only as a fingerprint) is where
+  they make their account; it is proof the address is theirs.
+- The laptop demo has no passwords: `/sign-in` lists its people. Sign in as
+  Nikos Savva to see Ledgerline as a client's owner does.
+- `tests/supabase-auth.spec.ts` drives the Supabase path through
+  `@supabase/ssr` against `tests/support/stand-in-auth.mjs`, a stand-in for
+  Supabase Auth's endpoints with a real Postgres behind it. It proves
+  Ledgerline's side, not Supabase's: run it against the real project too.
+
 **Setting it up**
 1. Create a Supabase project in the Frankfurt region (eu-central-1).
 2. `supabase link --project-ref …`, then `supabase db push`: it applies
    `supabase/migrations`, the baseline (generated from `schema.sql` by
    `npm run supabase:migration`) and the link to Supabase Auth.
-3. Give the host (Vercel, EU region) `DATABASE_URL`, the project's
-   transaction pooler connection string (port 6543), and `ANTHROPIC_API_KEY`.
-4. The Data API can stay on or be switched off: anonymous requests get
+3. Give the host (Vercel, EU region) the variables at the end of
+   `.env.example`: `DATABASE_URL` (the transaction pooler, port 6543),
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+   `SUPABASE_SECRET_KEY`, `LEDGERLINE_SITE_URL`, and `ANTHROPIC_API_KEY`.
+4. In Supabase Auth: turn off "Allow new users to sign up" (accounts come
+   only from invitations), set the Site URL to `LEDGERLINE_SITE_URL`, and
+   add `LEDGERLINE_SITE_URL/auth/callback` to the redirect URLs.
+5. The Data API can stay on or be switched off: anonymous requests get
    nothing, and a signed-in one sees only what the rules allow.
+6. The first practice and its first partner are made by Wolsten Studios
+   (the admin console is still to come); everyone else is invited.
 
 The whole test suite runs against any Postgres too:
 `DATABASE_URL=… npx playwright test` (an empty, throwaway database; it is
-rebuilt with the demo data). On 26 Oct it passed on Postgres 16.
+rebuilt with the demo data). On 26 Oct it passed on Postgres 16. The
+Supabase sign-in test, against the stand-in:
+`DATABASE_URL=… node tests/support/stand-in-auth.mjs` in one terminal, then
+build with `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` and the
+publishable key from `node tests/support/stand-in-auth.mjs --keys`, and run
+`LEDGERLINE_AUTH_E2E=supabase npx playwright test tests/supabase-auth.spec.ts`
+with the same variables and `SUPABASE_SECRET_KEY`. For a staging demo on a
+real project, `npm run supabase:demo-users` gives the demo's people sign-ins.
 
 **Still to do before the first practice signs up**
-- Sign-in (Supabase Auth) and invitations: a practice inviting its people,
-  a company its owner. `getCurrentUser()` is where the session plugs in.
 - The admin console for Wolsten Studios: every practice, its subscription
   (Stripe), suspending one, logged support access.
 - Files into Supabase Storage: documents, logos and captures are kept in
@@ -399,5 +509,12 @@ rebuilt with the demo data). On 26 Oct it passed on Postgres 16.
   `src/lib/sanctions.ts`) reads the EU's consolidated list; the seed loads a
   snapshot (`npm run sanctions:snapshot` refreshes it), and
   **Update the list** fetches the current one.
-- Not in this demo: sign-in (Supabase Auth, next; row-level security is in
-  place), currencies other than EUR, live bank feeds.
+- Year end and audit (`src/app/(app)/c/[org]/year-end`, `src/lib/data/year-end.ts`,
+  `src/lib/actions/year-end.ts`, `src/lib/domain/audit.ts`): the Cap. 113 tests,
+  the steps and their dates, and the checks an auditor makes first. The audit
+  file is `src/lib/documents/audit-file.ts`, zipped by `src/lib/documents/zip.ts`
+  (files stored as they are, CRC-32 from Node's own zlib: no dependency).
+  `npm run check:rules` checks the dates and tests against the law;
+  `npx tsx scripts/check-tenancy.mts` checks that an auditor reads and never writes.
+- Not in this demo: passwords (the laptop lists its people; live, Supabase
+  Auth), currencies other than EUR, live bank feeds.

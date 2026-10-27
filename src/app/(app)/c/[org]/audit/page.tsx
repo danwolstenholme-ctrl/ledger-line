@@ -23,6 +23,8 @@ const CLIENT_EVENTS: Record<string, string> = {
   "engagement_letter:sent": "Engagement letter sent", "engagement_letter:signed": "Engagement letter signed", "client_document:received": "Due diligence document received",
   "sanctions:screened": "Screened against the EU sanctions list", "sanctions:resolved": "Possible sanctions match decided",
   "risk:assessed": "Risk assessed", "risk:approved": "Risk rating approved",
+  "invitation:invited": "Invitation sent", "invitation:accepted": "Invitation accepted: joined", "invitation:revoked": "Invitation withdrawn",
+  "year_end:updated": "Year end updated",
 };
 
 type AuditRow = { seq: number; at: string; actor: string; action: string; entity: string; detail: Record<string, unknown>; hash: string; prev_hash: string };
@@ -49,6 +51,8 @@ function describe(row: AuditRow) {
     if (row.entity === "sanctions") parts.push(detail.name, row.action === "screened" ? (detail.result === "clear" ? `clear on the list of ${day(detail.list)}` : `${detail.matches} possible match${detail.matches === 1 ? "" : "es"}`) : `${detail.resolution === "confirmed" ? "confirmed" : "not the same"}: ${detail.note}`);
     if (row.entity === "risk") parts.push(row.action === "assessed" ? `${detail.level} risk, ${detail.total} of 20${detail.forced ? `: ${detail.forced}` : ""}` : `${detail.level} risk, approved as ${detail.as === "partner" ? "partner" : "compliance officer"}, next review ${day(detail.next_review)}`);
     if (row.entity === "client_file" && detail.reason) parts.push(detail.reason);
+    if (row.entity === "invitation") { parts.length = 0; parts.push(`${detail.name} (${detail.email})`, detail.company ? `${detail.role} at ${detail.company}` : `${detail.role} at the practice`); }
+    if (row.entity === "year_end") { parts.length = 0; parts.push(`Year to ${day(detail.period_end)}`, ...(Array.isArray(detail.changes) ? detail.changes : [])); }
     return parts.filter(Boolean).join(" · ");
   }
   if (row.action === "checked") {

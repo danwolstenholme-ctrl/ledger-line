@@ -6,6 +6,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { gunzipSync } from "node:zlib";
 
 import { STANDARD_CHART } from "@/lib/domain/chart";
+import { annualReturnDates } from "@/lib/domain/deadlines";
 import { assessRisk, documentRequests, engagementLetter, letterText, nextReview, suggestFactors, type Person, type Role, type Service } from "@/lib/domain/onboarding";
 import { SANCTIONS_INSERT, type SanctionsEntry } from "@/lib/domain/sanctions";
 
@@ -501,6 +502,7 @@ export async function seedDemo(pg: PGlite) {
   await seedDesign(pg);
   await seedSupplierCredits(pg);
   await seedPractice(pg);
+  await seedYearEnds(pg);
   await seedDeadlines(pg);
   await seedVies(pg);
   await seedClientFiles(pg);
@@ -861,7 +863,83 @@ async function seedDeadlines(pg: PGlite) {
     const due = month === 12 ? `${year + 1}-01-15` : `${year}-${String(month + 1).padStart(2, "0")}-15`;
     if (due < today) marks.push({ organisation_id: row.organisation_id, kind: "vies", period_end: row.month_end, done_on: addDays(due, -2), done_by: managerOf.get(row.organisation_id) ?? "Maria Antoniou" });
   }
+  // The balance of 2025's tax, paid by 1 August 2026; every annual return and month's payroll returns already due, done.
+  const companies = (await pg.query<{ id: string; slug: string; manager: string; incorporated_on: string | null; is_practice: boolean }>("select id, slug, manager, incorporated_on::text, is_practice from organisations")).rows;
+  for (const org of companies) {
+    if (!org.is_practice && "2026-08-01" < today) marks.push({ organisation_id: org.id, kind: "tax_payment", period_end: "2025-12-31", done_on: "2026-07-28", done_by: org.manager });
+    if (org.incorporated_on) for (const date of annualReturnDates(org.incorporated_on, START, today))
+      if (addDays(date, 28) < today) marks.push({ organisation_id: org.id, kind: "annual_return", period_end: date, done_on: addDays(date, 9), done_by: org.manager });
+    if (!(CLIENT_SERVICES[org.slug] ?? []).includes("payroll")) continue;
+    for (const month of MONTHS) {
+      const end = `${month}-${String(lastDay(month)).padStart(2, "0")}`;
+      const next = MONTHS[MONTHS.indexOf(month) + 1] ?? "2026-11";
+      const due = `${next}-${String(lastDay(next)).padStart(2, "0")}`;
+      if (due < today) marks.push({ organisation_id: org.id, kind: "payroll", period_end: end, done_on: addDays(due, -6), done_by: org.manager });
+    }
+    // The employer's return for 2025 is extended to 30 November 2026: one is in, three to go.
+    if (org.slug === "aegean-blue-marine") marks.push({ organisation_id: org.id, kind: "employer_return", period_end: "2025-12-31", done_on: "2026-10-14", done_by: org.manager });
+  }
   if (marks.length) await pg.query("insert into deadline_marks (organisation_id, kind, period_end, done_on, done_by) select organisation_id, kind, period_end, done_on, done_by from jsonb_populate_recordset(null::deadline_marks, $1::jsonb)", [JSON.stringify(marks)]);
+}
+
+// ---------------------------------------------------------------------------
+// Company law: when each company was incorporated, who audits it, and 2025's
+// year end in each state there is. Aegean Blue and Mesogeios are filed;
+// Troodos Gold is signed, audited by the practice itself (the independence
+// question); Larnaka Roast is with the auditor and past its AGM date (last
+// year's figures over the review limit, so audited); Kalamies Dental is
+// within the limits both years and chose a review; Pixelforge hasn't started.
+// The year before the books began holds only the AGM it was laid at.
+// ---------------------------------------------------------------------------
+
+const COMPANY_LAW: Record<string, { incorporated: string; auditor: string; practiceAudits?: boolean; group?: boolean }> = {
+  "aegean-blue-marine": { incorporated: "2014-03-11", auditor: "Kition Audit Partners Ltd" },
+  "troodos-gold": { incorporated: "2011-01-15", auditor: "Saltlake Accounting Ltd", practiceAudits: true },
+  "kalamies-dental": { incorporated: "2016-05-03", auditor: "Kition Audit Partners Ltd" },
+  "larnaka-roast": { incorporated: "2019-08-20", auditor: "Kition Audit Partners Ltd" },
+  "pixelforge": { incorporated: "2020-11-02", auditor: "Kition Audit Partners Ltd" },
+  "mesogeios-holdings": { incorporated: "2008-06-30", auditor: "Kition Audit Partners Ltd", group: true },
+  "saltlake-accounting": { incorporated: "2019-03-14", auditor: "Kition Audit Partners Ltd" },
+};
+const YEAR_ENDS: Record<string, Row[]> = {
+  "aegean-blue-marine": [
+    { period_end: "2024-12-31", agm_on: "2025-05-22" },
+    { period_end: "2025-12-31", average_employees: 7, turnover_before_books: 161400, prior_turnover: 298700, prior_total_assets: 141200,
+      sent_to_auditor_on: "2026-02-27", approved_on: "2026-04-14", report_signed_on: "2026-04-16", opinion: "unmodified", agm_on: "2026-05-21", filed_on: "2026-06-04" },
+  ],
+  "troodos-gold": [
+    { period_end: "2024-12-31", agm_on: "2025-09-30" },
+    { period_end: "2025-12-31", average_employees: 9, turnover_before_books: 48900, prior_turnover: 96800, prior_total_assets: 58300,
+      sent_to_auditor_on: "2026-05-12", approved_on: "2026-07-08", report_signed_on: "2026-07-10", opinion: "unmodified" },
+  ],
+  "kalamies-dental": [
+    { period_end: "2024-12-31", agm_on: "2025-09-18" },
+    { period_end: "2025-12-31", assurance: "review", average_employees: 4, turnover_before_books: 94500, prior_turnover: 184300, prior_total_assets: 98400, sent_to_auditor_on: "2026-09-28" },
+  ],
+  "larnaka-roast": [
+    { period_end: "2024-12-31", agm_on: "2025-06-30" },
+    { period_end: "2025-12-31", average_employees: 6, turnover_before_books: 101200, prior_turnover: 212400, prior_total_assets: 61700, sent_to_auditor_on: "2026-09-15",
+      notes: "2024 turnover was over the review limit, so 2025 is audited. Kition have asked for the coffee stock count sheets." },
+  ],
+  "mesogeios-holdings": [
+    { period_end: "2024-12-31", agm_on: "2025-04-24" },
+    { period_end: "2025-12-31", average_employees: 0, turnover_before_books: 3750, prior_turnover: 7500, prior_total_assets: 431900,
+      sent_to_auditor_on: "2026-02-10", approved_on: "2026-03-24", report_signed_on: "2026-03-26", opinion: "unmodified", agm_on: "2026-04-29", filed_on: "2026-05-12" },
+  ],
+};
+
+async function seedYearEnds(pg: PGlite) {
+  for (const [slug, law] of Object.entries(COMPANY_LAW))
+    await pg.query("update organisations set incorporated_on = $2, auditor_name = $3, auditor_is_practice = $4, consolidated_group = $5 where slug = $1",
+      [slug, law.incorporated, law.auditor, law.practiceAudits ?? false, law.group ?? false]);
+  const rows = Object.entries(YEAR_ENDS).flatMap(([slug, years]) => years.map(year => ({ slug, assurance: "audit", updated_by: MANAGERS[slug] ?? "Maria Antoniou", ...year })));
+  await pg.query(`insert into year_ends (organisation_id, period_end, assurance, average_employees, turnover_before_books, prior_turnover, prior_total_assets,
+      sent_to_auditor_on, approved_on, report_signed_on, opinion, agm_on, filed_on, notes, updated_by)
+    select o.id, r.period_end, r.assurance, r.average_employees, r.turnover_before_books, r.prior_turnover, r.prior_total_assets,
+           r.sent_to_auditor_on, r.approved_on, r.report_signed_on, r.opinion, r.agm_on, r.filed_on, r.notes, r.updated_by
+      from jsonb_to_recordset($1::jsonb) as r (slug text, period_end date, assurance text, average_employees numeric, turnover_before_books numeric, prior_turnover numeric, prior_total_assets numeric,
+           sent_to_auditor_on date, approved_on date, report_signed_on date, opinion text, agm_on date, filed_on date, notes text, updated_by text)
+      join organisations o on o.slug = r.slug`, [JSON.stringify(rows)]);
 }
 
 // ---------------------------------------------------------------------------
@@ -932,6 +1010,9 @@ async function seedPractice(pg: PGlite) {
   // A client's own owner, who uses Pixelforge's books and sees nothing else: not the other clients, not the firm's file on Pixelforge.
   const owner = (await pg.query<{ id: string }>("insert into app_users (name, email, initials) values ('Nikos Savva', 'nikos@pixelforge.example', 'NS') returning id")).rows[0].id;
   await pg.query("insert into company_members (organisation_id, user_id, role) select id, $1, 'owner' from organisations where slug = 'pixelforge'", [owner]);
+  // On the laptop, each seeded person's sign-in is a stand-in with their own id. On Supabase the sign-ins are made there
+  // (npm run supabase:demo-users) and attach by email, so they are left for it.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) await pg.query("update app_users set auth_id = id where auth_id is null");
   const clients = (await pg.query<{ id: string; slug: string; name: string; vat_number: string | null; vat_registered: boolean; contact_email: string | null; address: string | null; manager: string }>(
     "select id, slug, name, vat_number, vat_registered, contact_email, address, manager from organisations order by name")).rows;
 

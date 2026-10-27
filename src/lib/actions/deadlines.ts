@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import { one, sql } from "@/lib/db";
+import { MARKED_KINDS } from "@/lib/domain/deadlines";
 import { firmToday } from "@/lib/domain/invoices";
 import { getCurrentUser } from "@/lib/org";
 
 /** A deadline other than a VAT return, marked done or opened again. A VAT return closes itself when it is filed. */
 
-const KINDS = ["vies", "provisional_tax", "tax_return"] as const;
+const KINDS = MARKED_KINDS;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function read(form: FormData) {

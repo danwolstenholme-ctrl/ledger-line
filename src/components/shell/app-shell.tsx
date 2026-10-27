@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "@/components/navigation/navigation-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeCheck, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
+  BadgeCheck, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
   LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, Truck, Users, X, type LucideIcon,
 } from "lucide-react";
 
@@ -14,11 +14,13 @@ import { NavigationContent, NavigationProvider } from "@/components/navigation/n
 import { LedgerlineMark } from "@/components/brand/ledgerline-mark";
 import { MenuPanel, Motion, NavigationProgress } from "@/components/motion/motion";
 import { TimerControl, type TimerRunning } from "@/components/work/timer-control";
+import { UserMenu } from "@/components/shell/user-menu";
 import { motion } from "motion/react";
 
 export type ShellPractice = { name: string; initials: string; brand_color: string; tagline: string | null };
 export type ShellClient = { id: string; slug: string; name: string; industry: string; practice: boolean; toReview: number };
-export type ShellUser = { name: string; initials: string };
+/** The person signed in. `role`: their role at the practice, or what they are to their company. `demo`: the laptop demo's sign-in. */
+export type ShellUser = { name: string; initials: string; email: string; role: string; demo: boolean };
 
 /** `also`: other paths that belong to this item, as credit notes belong to Invoices. */
 type NavItem = { href: string; label: string; icon: LucideIcon; title: string; badge?: number; also?: string[] };
@@ -30,7 +32,8 @@ type NavGroup = { label: string | null; items: NavItem[]; more?: boolean };
  * it, and the menu below is that company's, grouped by what the owner does
  * (sell, buy, bank, keep in touch) with the accountant's pages under More.
  */
-type ShellProps = { practice: ShellPractice; clients: ShellClient[]; user: ShellUser; toReview: number; timer: TimerRunning | null; children: ReactNode };
+/** `member`: one of the practice's people. A client company's own people get their company's menu only: none of the practice's pages. */
+type ShellProps = { practice: ShellPractice; clients: ShellClient[]; user: ShellUser; member: boolean; toReview: number; timer: TimerRunning | null; children: ReactNode };
 
 export function AppShell(props: ShellProps) {
   return <NavigationProvider><Motion><NavigationProgress /><WorkspaceShell {...props} /></Motion></NavigationProvider>;
@@ -75,12 +78,14 @@ function companyNav(base: string, client: ShellClient): NavGroup[] {
       { href: `${base}/reports`, label: "Reports", icon: BarChart3, title: "Reports" },
       { href: `${base}/reports/vat`, label: "VAT returns", icon: Percent, title: "VAT returns" },
       { href: `${base}/deadlines`, label: "Deadlines", icon: CalendarClock, title: "Deadlines" },
+      { href: `${base}/year-end`, label: "Year end", icon: ClipboardCheck, title: "Year end and audit" },
     ] },
     { label: "More", more: true, items: [
       { href: `${base}/chart`, label: "Chart of accounts", icon: BookOpen, title: "Chart of accounts" },
       { href: `${base}/journals`, label: "Journals", icon: NotebookPen, title: "Journals" },
       { href: `${base}/audit`, label: "Audit trail", icon: ShieldCheck, title: "Audit trail" },
       { href: `${base}/settings`, label: "Company settings", icon: Settings, title: "Company settings" },
+      { href: `${base}/settings/people`, label: "People", icon: Users, title: "People" },
     ] },
   ];
 }
@@ -93,7 +98,7 @@ function sameSection(pathname: string, slug: string) {
   return `/c/${slug}${section.length ? `/${section.join("/")}` : ""}`;
 }
 
-function CompanySwitcher({ clients, current, pathname, onNavigate }: { clients: ShellClient[]; current: ShellClient | undefined; pathname: string; onNavigate: () => void }) {
+function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { clients: ShellClient[]; current: ShellClient | undefined; pathname: string; onNavigate: () => void; member: boolean }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -126,8 +131,8 @@ function CompanySwitcher({ clients, current, pathname, onNavigate }: { clients: 
         <input autoFocus value={filter} onChange={event => setFilter(event.target.value)} placeholder="Switch company…" aria-label="Find a company" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
       </div>
       <ul className="max-h-[60vh] overflow-y-auto py-1">
-        <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3"><LayoutDashboard className="size-3.5" />Practice dashboard</Link></li>
-        {firm ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
+        {member ? <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3"><LayoutDashboard className="size-3.5" />Practice dashboard</Link></li> : null}
+        {firm && member ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
           <BookOpen className="size-3.5" /><span className="min-w-0 flex-1 truncate">Your firm’s own books</span>{firm.slug === current?.slug ? <Check className="size-3.5" /> : null}</Link></li> : null}
         {shown.map(entry => <li key={entry.slug}>
           <Link href={sameSection(pathname, entry.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", entry.slug === current?.slug ? "text-brand font-medium" : "text-ink")}>
@@ -142,7 +147,7 @@ function CompanySwitcher({ clients, current, pathname, onNavigate }: { clients: 
   </div>;
 }
 
-function WorkspaceShell({ practice, clients, user, toReview, timer, children }: ShellProps) {
+function WorkspaceShell({ practice, clients, user, member, toReview, timer, children }: ShellProps) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const slug = slugFromPath(pathname);
@@ -158,7 +163,7 @@ function WorkspaceShell({ practice, clients, user, toReview, timer, children }: 
     { href: "/capture", label: "Capture", icon: ScanText, title: "Capture", badge: toReview },
     { href: "/settings", label: "Practice settings", icon: Settings, title: "Practice settings" },
   ] }];
-  const groups = client ? companyNav(base, client) : practiceGroups;
+  const groups = client ? companyNav(base, client) : member ? practiceGroups : [];
   const items = groups.flatMap(group => group.items);
   // The longest matching href wins, so /c/x/reports/vat is VAT returns and /c/x/sales/new is Invoices.
   const under = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -212,7 +217,7 @@ function WorkspaceShell({ practice, clients, user, toReview, timer, children }: 
         <Link href="/" onClick={close} className="min-w-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" aria-label={`${practice.name} dashboard`}><PracticeMark practice={practice} /></Link>
         <button type="button" onClick={close} className="hover:bg-muted text-ink-muted grid size-7 shrink-0 place-items-center rounded-md lg:hidden touch:size-11" aria-label="Close navigation"><X className="size-4" /></button>
       </div>
-      <div className="px-2.5 pt-3"><CompanySwitcher clients={clients} current={client} pathname={pathname} onNavigate={close} /></div>
+      <div className="px-2.5 pt-3"><CompanySwitcher clients={clients} current={client} pathname={pathname} onNavigate={close} member={member} /></div>
       <nav ref={navRef} className="min-h-0 flex-1 overflow-y-auto px-2.5 pt-2 pb-3">
         {groups.map((group, index) => {
           if (group.more) {
@@ -250,7 +255,7 @@ function WorkspaceShell({ practice, clients, user, toReview, timer, children }: 
             })}
           </ol>
         </nav>
-        <TimerControl running={timer} currentSlug={slug} companies={clients.map(entry => ({ id: entry.id, name: entry.name, slug: entry.slug, practice: entry.practice }))} />
+        {member ? <TimerControl running={timer} currentSlug={slug} companies={clients.map(entry => ({ id: entry.id, name: entry.name, slug: entry.slug, practice: entry.practice }))} /> : null}
         <form onSubmit={search} className="border-hairline-strong bg-surface hidden h-8 w-[220px] items-center gap-2 rounded-md border px-2.5 md:flex xl:w-[260px]">
           <Search className="text-ink-faint size-3.5 shrink-0" />
           <input value={query} onChange={event => setQuery(event.target.value)} placeholder={client ? "Search customers" : "Search clients"} aria-label="Search" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
@@ -259,10 +264,7 @@ function WorkspaceShell({ practice, clients, user, toReview, timer, children }: 
           <Bell className="size-4" />{toReview ? <span className="bg-critical absolute top-1.5 right-1.5 size-1.5 rounded-full" /> : null}
         </Link>
         <span className="bg-hairline mx-0.5 hidden h-6 w-px sm:block" />
-        <span className="flex items-center gap-2">
-          <span className="bg-brand grid size-7 place-items-center rounded-full text-[10.5px] font-semibold text-white">{user.initials}</span>
-          <span className="hidden leading-tight sm:block"><span className="text-ink block text-[12.5px] font-medium">{user.name}</span><span className="text-ink-faint block text-[11px]">Partner</span></span>
-        </span>
+        <UserMenu user={user} />
       </header>
       <main className="min-w-0 flex-1"><NavigationContent scope="page" label="Loading…" variant="page">{children}</NavigationContent></main>
     </div>

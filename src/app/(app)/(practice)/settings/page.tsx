@@ -1,20 +1,25 @@
 import type { Metadata } from "next";
 
-import { getPractice } from "@/lib/org";
+import Link from "@/components/navigation/navigation-link";
+import { getPractice, requirePracticeMember } from "@/lib/org";
 import { resetDemoData } from "@/lib/actions/practice";
 import { PageBody } from "@/components/common/primitives";
 import { BrandForm } from "@/components/settings/brand-form";
-import { RecordHeader, RecordSection } from "@/components/records/record-layout";
+import { RecordHeader, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
 
 export const metadata: Metadata = { title: "Practice settings" };
 
 /** Journey 5: white label. The practice's name, initials and colour run through every screen. */
 export default async function PracticeSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  await requirePracticeMember();
   const practice = await getPractice();
   // Resetting is for rehearsals: it appears only at /settings?demo=1.
   const showReset = (await searchParams).demo === "1";
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title="Practice settings" description="Ledgerline runs under your firm's brand: your name, your initials, your colour. Your clients see your practice; Ledgerline stays in the small print." />
+    <RecordSection title="People" hint="Who at the practice signs in, and inviting someone" action={<Link href="/settings/people" className={recordOutlineButton}>Manage people</Link>}>
+      <p className="text-ink-muted px-4 py-3 text-[12.5px] sm:px-5">Everyone at the practice who signs in sees every client. A partner invites them; each makes their own account from the link.</p>
+    </RecordSection>
     <RecordSection title="Your brand"><div className="p-4 sm:p-5"><BrandForm practice={practice} /></div></RecordSection>
     {showReset ? <RecordSection title="Demo data" hint="For rehearsing: back to the state the demo starts in">
       <form action={resetDemoData} className="flex flex-wrap items-center gap-3 p-4 sm:p-5">

@@ -32,7 +32,18 @@ function Detail({ row }: { row: DeadlineRow }) {
   if (row.kind === "vies") return <span>{formatAmount(row.amount)} of services to EU businesses</span>;
   if (row.kind === "provisional_tax") return <span>Estimate the year’s profit and pay the instalment</span>;
   if (row.kind === "aml_review") return <span>Check the due diligence is current, screen again and rate the risk</span>;
-  return <span>For the tax year {row.periodEnd.slice(0, 4)}</span>;
+  if (row.kind === "tax_payment") return <span>Pay what the provisional tax didn’t cover, on a self-assessment</span>;
+  if (row.kind === "financial_statements") return <span>Audited or reviewed, with the annual return</span>;
+  if (row.kind === "annual_return") return <span>The HE32, filed within 28 days of its date</span>;
+  if (row.kind === "payroll") return <span>Monthly TD7, Social Insurance and GESY, and the tax withheld</span>;
+  if (row.kind === "employer_return") return <span>The year’s TD7: every employee’s pay and deductions</span>;
+  return <span>For the tax year {row.periodEnd.slice(0, 4)}{Number(row.periodEnd.slice(0, 4)) >= 2026 ? ", with the balance of tax" : ""}</span>;
+}
+
+/** An official extension, said plainly: from when, and by whom. */
+function Extended({ row }: { row: DeadlineRow }) {
+  if (!row.extension) return null;
+  return <span className="text-ink-faint block text-[11.5px]">Extended from {formatDate(row.extension.from)} by {row.extension.by} · <a href={row.extension.source} target="_blank" rel="noreferrer" className="hover:text-brand underline-offset-2 hover:underline">source</a></span>;
 }
 
 function Action({ row }: { row: DeadlineRow }) {
@@ -41,6 +52,7 @@ function Action({ row }: { row: DeadlineRow }) {
   if (row.kind === "vat_return") return row.state === "done" ? null
     : <Link href={`${base}/reports/vat?range=custom&from=${row.periodStart}&to=${row.periodEnd}`} className={recordOutlineButton}>Open the return</Link>;
   if (row.kind === "aml_review") return row.review ? <Link href={`/clients/${row.review.fileId}`} className={recordOutlineButton}>Open the file</Link> : null;
+  if (row.kind === "financial_statements") return <Link href={`${base}/year-end?period=${row.periodEnd}`} className={recordOutlineButton}>Open the year end</Link>;
   if (row.state === "done") return <form action={reopenDeadline}>{hidden}<InlineSubmit title="Open this deadline again">Undo</InlineSubmit></form>;
   return <div className="flex flex-wrap items-center justify-end gap-2">
     {row.kind === "vies" ? <Link href={`${base}/reports/vies?range=custom&from=${row.periodStart}&to=${row.periodEnd}`} className="text-brand text-[12px] hover:underline">Statement</Link> : null}
@@ -72,7 +84,7 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
 
   return <PageBody className="space-y-4">
     <RecordHeader title={client ? `Deadlines: ${client.name}` : "Deadlines"}
-      description={company ? "This company’s VAT returns, VIES statements, provisional tax, tax returns and AML review, worked out from its VAT quarters, tax year and risk rating. Filing a VAT return closes its deadline and approving a review sets the next; mark the rest done as you go." : "Every VAT return, VIES statement, provisional tax instalment, company tax return and AML review, worked out from each company’s VAT quarters, tax year and risk rating. Filing a VAT return closes its deadline and approving a review sets the next; mark the rest done as you go."} />
+      description={company ? "This company’s deadlines with the Tax Department and the Registrar, and its AML review: worked out from its VAT quarters, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it, as does the year end recording the accounts filed; mark the rest done as you go." : "Every client’s deadlines with the Tax Department and the Registrar of Companies, and the practice’s AML reviews: worked out from each company’s VAT quarters, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it, as does a year end recording the accounts filed; mark the rest done as you go."} />
 
     <section aria-label="Deadlines at a glance" className="ll-panel bg-hairline grid grid-cols-2 gap-px overflow-hidden lg:grid-cols-4 [&>*]:bg-surface">
       <StatTile label="Overdue" value={String(data.counts.overdue)} tone={data.counts.overdue ? "critical" : undefined} context={data.counts.overdue ? "Past the date, still open" : "Nothing past its date"} href={href({ view: "overdue" })} />
@@ -93,6 +105,7 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
         <span className="min-w-0">
           <span className="text-ink block text-[13px] font-medium">{row.title}</span>
           <span className="text-ink-muted block text-[12px]"><Link href={`/c/${row.company.slug}`} className="text-ink hover:text-brand hover:underline">{row.company.name}</Link> · <Detail row={row} /></span>
+          <Extended row={row} />
         </span>
         <span className="text-ink-muted text-[12px]">{row.company.manager ?? "No one yet"}</span>
         <span><Status row={row} /></span>

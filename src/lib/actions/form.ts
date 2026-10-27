@@ -331,6 +331,8 @@ export function describeDbError(
     case "23503":
       return "That refers to something that no longer exists. Reload and try again.";
     case "42501":
+      // Row-level security refusing a write: someone who may read these books, not change them.
+      if (error.message.includes("row-level security")) return "You can look at these books but not change them.";
       return "You do not have permission to do that.";
     default:
       return fallback;

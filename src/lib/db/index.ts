@@ -7,6 +7,7 @@ import path from "node:path";
 import { PGlite, types } from "@electric-sql/pglite";
 import pg from "pg";
 
+import { signedIn } from "@/lib/auth/session";
 import { seedDemo } from "@/lib/db/seed";
 
 /**
@@ -29,7 +30,7 @@ import { seedDemo } from "@/lib/db/seed";
 const DATA_DIR = process.env.LEDGERLINE_DATA_DIR ? path.resolve(process.env.LEDGERLINE_DATA_DIR) : path.join(process.cwd(), ".data", "ledgerline");
 const DATABASE_URL = process.env.DATABASE_URL;
 const DEMO_DATA = !DATABASE_URL || process.env.LEDGERLINE_DEMO_DATA === "1";
-/** Until sign-in arrives, the person using the laptop demo. */
+/** The laptop demo's person before anyone signs in: who opens it in a meeting. */
 const DEMO_USER = process.env.LEDGERLINE_DEMO_USER ?? "maria@saltlake.example";
 
 type Rows<T> = { rows: T[] };
@@ -132,6 +133,11 @@ async function install(conn: Connection) {
     // What the demo data itself posts is the system's doing, not a person's.
     await conn.query("select set_config('ledgerline.actor', 'system', false)");
     await conn.exec(schemaText());
+    // On a Supabase database (or one built like it), sign-ins are linked to people as Supabase makes them.
+    if ((await conn.query<{ users: string | null }>("select to_regclass('auth.users')::text as users")).rows[0]?.users) {
+      const migrations = path.join(process.cwd(), "supabase", "migrations");
+      for (const file of fs.readdirSync(migrations).filter(name => name.endsWith("_supabase_accounts.sql"))) await conn.exec(fs.readFileSync(path.join(migrations, file), "utf8"));
+    }
     await seedDemo(conn as unknown as PGlite);
     await conn.query("create table ledgerline_meta (key text primary key, value text not null)");
     await conn.query("insert into ledgerline_meta (key, value) values ('schema', $1)", [schemaVersion()]);
@@ -153,29 +159,33 @@ export function db() {
 // Who is asking
 // ---------------------------------------------------------------------------
 
-type Identity = { kind: "person"; userId: string | null } | { kind: "service"; why: string };
+/** A person is named by their sign-in (app_users.auth_id): what request.jwt.claims' sub carries, live and in the demo. */
+type Identity = { kind: "person"; authId: string | null } | { kind: "service"; why: string };
 const asking = new AsyncLocalStorage<Identity>();
 
 /** Work done for nobody in particular, with the owner's rights: say why. Everything else runs as a person. */
 export function asService<T>(why: string, work: () => Promise<T>): Promise<T> {
   return asking.run({ kind: "service", why }, work);
 }
-/** Work done as one particular person: a job acting for them, or a test. */
-export function asPerson<T>(userId: string | null, work: () => Promise<T>): Promise<T> {
-  return asking.run({ kind: "person", userId }, work);
+/** Work done as one particular person, by their sign-in: a job acting for them, or a test. */
+export function asPerson<T>(authId: string | null, work: () => Promise<T>): Promise<T> {
+  return asking.run({ kind: "person", authId }, work);
 }
 
-/** The person using Ledgerline. Until sign-in, the demo's own user. */
-async function signedInUser(): Promise<string | null> {
+/** The laptop demo's own person, until someone is chosen at sign-in. */
+async function demoSignIn(): Promise<string | null> {
   holder.__ledgerlineUser ??= (async () => {
     const conn = await db();
-    return (await conn.query<{ id: string }>("select id from app_users where email = $1", [DEMO_USER])).rows[0]?.id ?? null;
+    return (await conn.query<{ auth_id: string | null }>("select auth_id from app_users where email = $1", [DEMO_USER])).rows[0]?.auth_id ?? null;
   })().catch(error => { holder.__ledgerlineUser = undefined; throw error; });
   return holder.__ledgerlineUser;
 }
 
 async function identity(): Promise<Identity> {
-  return asking.getStore() ?? { kind: "person", userId: await signedInUser() };
+  const chosen = asking.getStore();
+  if (chosen) return chosen;
+  const who = await signedIn();
+  return { kind: "person", authId: who === "default" ? await demoSignIn() : who };
 }
 
 type Run = <R = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<R[]>;
@@ -187,7 +197,7 @@ async function within<T>(work: (run: Run) => Promise<T>): Promise<T> {
   return conn.transaction(async tx => {
     if (who.kind === "person") {
       await tx.query("select set_config('role', 'authenticated', true), set_config('request.jwt.claims', $1, true)",
-        [JSON.stringify(who.userId ? { sub: who.userId, role: "authenticated" } : { role: "authenticated" })]);
+        [JSON.stringify(who.authId ? { sub: who.authId, role: "authenticated" } : { role: "authenticated" })]);
     }
     return work(async <R,>(text: string, params: unknown[] = []) => (await tx.query<R>(text, params)).rows);
   });

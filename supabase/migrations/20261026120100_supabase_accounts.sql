@@ -6,16 +6,19 @@
 create function public.handle_new_auth_user() returns trigger language plpgsql security definer set search_path = public as $$
 declare v_name text := coalesce(nullif(btrim(new.raw_user_meta_data ->> 'name'), ''), split_part(new.email, '@', 1));
 begin
-  insert into public.app_users (id, name, email, initials)
-  values (new.id, v_name, new.email, upper(left(coalesce((select string_agg(left(word, 1), '') from unnest(string_to_array(v_name, ' ')) word where word <> ''), v_name), 3)))
-  on conflict (id) do update set email = excluded.email;
+  -- Someone already known (invited, or in the demo data) is attached to their new sign-in; anyone else becomes a new person.
+  update public.app_users set auth_id = new.id where email = lower(new.email) and auth_id is null;
+  if not found and not exists (select 1 from public.app_users where auth_id = new.id) then
+    insert into public.app_users (auth_id, name, email, initials)
+    values (new.id, v_name, lower(new.email), upper(left(coalesce((select string_agg(left(word, 1), '') from unnest(string_to_array(v_name, ' ')) word where word <> ''), v_name), 3)));
+  end if;
   return new;
 end $$;
 create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_auth_user();
 
 create function public.handle_auth_email_change() returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  update public.app_users set email = new.email where id = new.id;
+  update public.app_users set email = lower(new.email) where auth_id = new.id;
   return new;
 end $$;
 create trigger on_auth_user_email_changed after update of email on auth.users for each row when (old.email is distinct from new.email) execute function public.handle_auth_email_change();

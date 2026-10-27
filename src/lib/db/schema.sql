@@ -47,6 +47,13 @@ create table organisations (
   is_practice             boolean not null default false,
   -- The first month the practice keeps the books for: deadlines start here until the first entry is posted.
   books_from              date,
+  -- What company law needs to know: when it was incorporated (its annual return dates follow), who audits it,
+  -- and what keeps it from a review instead of an audit (Cap. 113, s.152A).
+  incorporated_on         date,
+  auditor_name            text,
+  auditor_is_practice     boolean not null default false,
+  regulated               boolean not null default false,
+  consolidated_group      boolean not null default false,
   created_at              timestamptz not null default now()
 );
 create unique index organisations_one_practice on organisations (practice_id) where is_practice;
@@ -59,20 +66,23 @@ create table organisation_logos (
   updated_at      timestamptz not null default now()
 );
 
--- The people who sign in. Live, each is a Supabase Auth user with the same id
--- (supabase/migrations makes the row when the account is created).
+-- The people who use Ledgerline. auth_id is their sign-in: live, a Supabase Auth
+-- user's id (supabase/migrations links the two by email when the account is
+-- made); in the laptop demo, a stand-in. Null until they first sign in, so a
+-- person can be invited, or seeded, before their account exists.
 create table app_users (
   id         uuid primary key default gen_random_uuid(),
-  name       text not null,
-  email      text not null unique,
+  auth_id    uuid unique,
+  name       text not null check (length(btrim(name)) between 1 and 200),
+  email      text not null unique check (email = lower(email)),
   initials   text not null,
   created_at timestamptz not null default now()
 );
 
--- Who is asking: the signed-in person's id, from the claims Supabase sets on every request
+-- Who is asking: the person whose sign-in is named by the claims Supabase sets on every request
 -- (the demo sets the same claims). Null when nobody is signed in.
-create function app_user_id() returns uuid language sql stable as $$
-  select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid
+create function app_user_id() returns uuid language sql stable security definer set search_path = public as $$
+  select id from app_users where auth_id = nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -2187,11 +2197,37 @@ create table practice_staff (
 create table company_members (
   organisation_id uuid not null references organisations (id) on delete cascade,
   user_id         uuid not null references app_users (id) on delete cascade,
-  role            text not null default 'owner' check (role in ('owner', 'staff', 'viewer')),
+  -- An owner or staff work in the books; a viewer and the company's auditor only read them.
+  role            text not null default 'owner' check (role in ('owner', 'staff', 'viewer', 'auditor')),
   created_at      timestamptz not null default now(),
   primary key (organisation_id, user_id)
 );
 create index company_members_user on company_members (user_id);
+
+-- Asking someone to join: one of the practice's people, or one of a client company's own (organisation_id set).
+-- The link carries a token; only its fingerprint is kept, so the table can't be used to join.
+create table invitations (
+  id              uuid primary key default gen_random_uuid(),
+  practice_id     uuid not null references practices (id) on delete cascade,
+  organisation_id uuid references organisations (id) on delete cascade,
+  email           text not null check (email = lower(email) and email ~ '^[^\s@]+@[^\s@]+\.[^\s@]+$'),
+  name            text not null check (length(btrim(name)) between 2 and 200),
+  -- At the practice: Partner, Manager, Accountant or Assistant. At a company: owner, staff or viewer.
+  role            text not null,
+  mlco            boolean not null default false,
+  token_hash      text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  invited_by      uuid references app_users (id) on delete set null,
+  created_at      timestamptz not null default now(),
+  expires_at      timestamptz not null default now() + interval '14 days',
+  accepted_at     timestamptz,
+  accepted_by     uuid references app_users (id) on delete set null,
+  revoked_at      timestamptz,
+  constraint invitations_role check (case when organisation_id is null then role in ('Partner', 'Manager', 'Accountant', 'Assistant') else role in ('owner', 'staff', 'viewer', 'auditor') end),
+  constraint invitations_mlco check (not mlco or organisation_id is null),
+  constraint invitations_outcome check (accepted_at is null or revoked_at is null)
+);
+create unique index invitations_open on invitations (practice_id, coalesce(organisation_id, '00000000-0000-0000-0000-000000000000'::uuid), email)
+  where accepted_at is null and revoked_at is null;
 
 -- What a client company pays the practice: a monthly fee, and a rate for extra work billed on top of it.
 -- customer_id is that client as a customer in the practice's own books.
@@ -2281,7 +2317,7 @@ create trigger vat_checks_audit after insert on vat_checks for each row execute 
 create table deadline_marks (
   id              uuid primary key default gen_random_uuid(),
   organisation_id uuid not null references organisations (id) on delete cascade,
-  kind            text not null check (kind in ('vies', 'provisional_tax', 'tax_return')),
+  kind            text not null check (kind in ('vies', 'provisional_tax', 'tax_return', 'tax_payment', 'annual_return', 'payroll', 'employer_return')),
   period_end      date not null,
   done_on         date not null,
   done_by         text not null,
@@ -2583,7 +2619,51 @@ begin
   return new;
 end $$;
 create trigger client_documents_audit after update on client_documents for each row execute function audit_client_document();
+
+-- Who was asked to join, who joined, and whose invitation was withdrawn: on the practice's trail.
+create function audit_invitation() returns trigger language plpgsql as $$
+declare v_action text := case when tg_op = 'INSERT' then 'invited' when new.accepted_at is not null and old.accepted_at is null then 'accepted'
+  when new.revoked_at is not null and old.revoked_at is null then 'revoked' end;
+begin
+  if v_action is not null then
+    perform audit_append(practice_org(new.practice_id), v_action, 'invitation', new.id, jsonb_build_object('email', new.email, 'name', new.name, 'role', new.role,
+      'company', (select name from organisations where id = new.organisation_id)));
+  end if;
+  return new;
+end $$;
+create trigger invitations_audit after insert or update on invitations for each row execute function audit_invitation();
 create trigger risk_assessments_audit after insert or update on risk_assessments for each row execute function audit_client_check();
+
+-- ---------------------------------------------------------------------------
+-- Each financial year's close: whether it is audited or reviewed, the figures
+-- that decide it which aren't in the books, and the date each step was done.
+-- The rules are in src/lib/domain/audit.ts (Cap. 113, ss.120, 125, 141A, 142, 152A).
+-- ---------------------------------------------------------------------------
+create table year_ends (
+  id                   uuid primary key default gen_random_uuid(),
+  organisation_id      uuid not null references organisations (id) on delete cascade,
+  period_end           date not null,
+  assurance            text not null default 'audit' check (assurance in ('audit', 'review')),
+  framework            text not null default 'ifrs' check (framework in ('ifrs', 'frs_small')),
+  -- Not in the books: the average number of employees, the year's turnover before Ledgerline kept the books,
+  -- and the year before's figures when that year isn't in Ledgerline at all.
+  average_employees    numeric(7, 1) check (average_employees >= 0),
+  turnover_before_books numeric(14, 2) check (turnover_before_books >= 0),
+  prior_turnover       numeric(14, 2) check (prior_turnover >= 0),
+  prior_total_assets   numeric(14, 2) check (prior_total_assets >= 0),
+  sent_to_auditor_on   date,
+  report_signed_on     date,
+  opinion              text check (opinion in ('unmodified', 'qualified', 'adverse', 'disclaimer')),
+  approved_on          date,
+  agm_on               date,
+  filed_on             date,
+  tax_return_filed_on  date,
+  notes                text,
+  updated_by           text,
+  updated_at           timestamptz not null default now(),
+  unique (organisation_id, period_end),
+  constraint year_ends_opinion check ((opinion is null) = (report_signed_on is null))
+);
 
 -- ---------------------------------------------------------------------------
 -- Who may see what. Every request from a signed-in person runs as the role
@@ -2613,12 +2693,24 @@ create function visible_companies() returns uuid[] language sql stable security 
     select o.id from organisations o join practice_staff s on s.practice_id = o.practice_id where s.user_id = app_user_id()
     union all select organisation_id from company_members where user_id = app_user_id()) visible
 $$;
+-- What the person may change: their practices' companies, and the companies where they are an owner or staff.
+-- A viewer, and a company's auditor, read only.
+create function writable_companies() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct id), '{}') from (
+    select o.id from organisations o join practice_staff s on s.practice_id = o.practice_id where s.user_id = app_user_id()
+    union all select organisation_id from company_members where user_id = app_user_id() and role in ('owner', 'staff')) writable
+$$;
+-- The client companies the person owns: they may invite that company's own people.
+create function owned_companies() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(organisation_id), '{}') from company_members where user_id = app_user_id() and role = 'owner'
+$$;
 -- The people the person may see: themselves, their colleagues, and the members of their practices' companies.
 create function visible_users() returns uuid[] language sql stable security definer set search_path = public as $$
   select coalesce(array_agg(distinct id), '{}') from (
     select app_user_id() as id
     union all select s.user_id from practice_staff s where s.practice_id = any (my_practices()) and s.user_id is not null
-    union all select m.user_id from company_members m where m.organisation_id = any (practice_companies())) visible where id is not null
+    union all select m.user_id from company_members m where m.organisation_id = any (practice_companies())
+    union all select m.user_id from company_members m join company_members mine on mine.organisation_id = m.organisation_id where mine.user_id = app_user_id()) visible where id is not null
 $$;
 
 grant usage on schema public to authenticated;
@@ -2657,6 +2749,8 @@ alter table customers enable row level security;
 alter table deadline_marks enable row level security;
 alter table enquiry_form_keys enable row level security;
 alter table fee_invoices enable row level security;
+alter table year_ends enable row level security;
+alter table invitations enable row level security;
 alter table invoice_lines enable row level security;
 alter table invoice_payments enable row level security;
 alter table invoices enable row level security;
@@ -2684,47 +2778,163 @@ alter table vat_checks enable row level security;
 alter table vat_returns enable row level security;
 alter table vies_demo_register enable row level security;
 
--- A company's books: everyone who may see the company.
-create policy bank_line_matches_access on bank_line_matches for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bank_statement_imports_access on bank_statement_imports for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bank_statement_lines_access on bank_statement_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bank_transaction_lines_access on bank_transaction_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bank_transactions_access on bank_transactions for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bill_lines_access on bill_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bill_payment_runs_access on bill_payment_runs for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bill_payments_access on bill_payments for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy bills_access on bills for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy credit_allocations_access on credit_allocations for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy credit_note_lines_access on credit_note_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy credit_notes_access on credit_notes for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy crm_activities_access on crm_activities for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy crm_contacts_access on crm_contacts for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy crm_enquiries_access on crm_enquiries for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy crm_matters_access on crm_matters for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy crm_tasks_access on crm_tasks for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy customers_access on customers for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy deadline_marks_access on deadline_marks for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy enquiry_form_keys_access on enquiry_form_keys for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy invoice_lines_access on invoice_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy invoice_payments_access on invoice_payments for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy invoices_access on invoices for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy items_access on items for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy journal_entries_access on journal_entries for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy journal_lines_access on journal_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy ledger_accounts_access on ledger_accounts for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy organisation_logos_access on organisation_logos for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy quote_lines_access on quote_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy quotes_access on quotes for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy repeating_invoices_access on repeating_invoices for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy supplier_credit_allocations_access on supplier_credit_allocations for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy supplier_credit_lines_access on supplier_credit_lines for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy supplier_credits_access on supplier_credits for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy suppliers_access on suppliers for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy vat_checks_access on vat_checks for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
-create policy vat_returns_access on vat_returns for all to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select visible_companies())::uuid[]));
+-- A company's books: read by everyone who may see the company, changed by those who may change it.
+-- An update reaches every row its asker can see and is checked against what they may change, so someone
+-- who may only read (a viewer, the auditor) is refused out loud rather than finding nothing changed.
+create policy bank_line_matches_read on bank_line_matches for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_line_matches_insert on bank_line_matches for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_line_matches_update on bank_line_matches for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_line_matches_delete on bank_line_matches for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_statement_imports_read on bank_statement_imports for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_statement_imports_insert on bank_statement_imports for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_statement_imports_update on bank_statement_imports for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_statement_imports_delete on bank_statement_imports for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_statement_lines_read on bank_statement_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_statement_lines_insert on bank_statement_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_statement_lines_update on bank_statement_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_statement_lines_delete on bank_statement_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_transaction_lines_read on bank_transaction_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_transaction_lines_insert on bank_transaction_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_transaction_lines_update on bank_transaction_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_transaction_lines_delete on bank_transaction_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_transactions_read on bank_transactions for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bank_transactions_insert on bank_transactions for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_transactions_update on bank_transactions for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bank_transactions_delete on bank_transactions for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_lines_read on bill_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bill_lines_insert on bill_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_lines_update on bill_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_lines_delete on bill_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_payment_runs_read on bill_payment_runs for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bill_payment_runs_insert on bill_payment_runs for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_payment_runs_update on bill_payment_runs for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_payment_runs_delete on bill_payment_runs for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_payments_read on bill_payments for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bill_payments_insert on bill_payments for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_payments_update on bill_payments for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bill_payments_delete on bill_payments for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bills_read on bills for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy bills_insert on bills for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bills_update on bills for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy bills_delete on bills for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_allocations_read on credit_allocations for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy credit_allocations_insert on credit_allocations for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_allocations_update on credit_allocations for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_allocations_delete on credit_allocations for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_note_lines_read on credit_note_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy credit_note_lines_insert on credit_note_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_note_lines_update on credit_note_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_note_lines_delete on credit_note_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_notes_read on credit_notes for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy credit_notes_insert on credit_notes for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_notes_update on credit_notes for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy credit_notes_delete on credit_notes for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_activities_read on crm_activities for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_activities_insert on crm_activities for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_activities_update on crm_activities for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_activities_delete on crm_activities for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_contacts_read on crm_contacts for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_contacts_insert on crm_contacts for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_contacts_update on crm_contacts for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_contacts_delete on crm_contacts for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_enquiries_read on crm_enquiries for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_enquiries_insert on crm_enquiries for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_enquiries_update on crm_enquiries for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_enquiries_delete on crm_enquiries for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_matters_read on crm_matters for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_matters_insert on crm_matters for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_matters_update on crm_matters for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_matters_delete on crm_matters for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_tasks_read on crm_tasks for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_tasks_insert on crm_tasks for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_tasks_update on crm_tasks for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_tasks_delete on crm_tasks for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy customers_read on customers for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy customers_insert on customers for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy customers_update on customers for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy customers_delete on customers for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy deadline_marks_read on deadline_marks for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy deadline_marks_insert on deadline_marks for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy deadline_marks_update on deadline_marks for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy deadline_marks_delete on deadline_marks for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy enquiry_form_keys_read on enquiry_form_keys for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy enquiry_form_keys_insert on enquiry_form_keys for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy enquiry_form_keys_update on enquiry_form_keys for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy enquiry_form_keys_delete on enquiry_form_keys for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoice_lines_read on invoice_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy invoice_lines_insert on invoice_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoice_lines_update on invoice_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoice_lines_delete on invoice_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoice_payments_read on invoice_payments for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy invoice_payments_insert on invoice_payments for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoice_payments_update on invoice_payments for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoice_payments_delete on invoice_payments for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoices_read on invoices for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy invoices_insert on invoices for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoices_update on invoices for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy invoices_delete on invoices for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy items_read on items for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy items_insert on items for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy items_update on items for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy items_delete on items for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy journal_entries_read on journal_entries for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy journal_entries_insert on journal_entries for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy journal_entries_update on journal_entries for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy journal_entries_delete on journal_entries for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy journal_lines_read on journal_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy journal_lines_insert on journal_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy journal_lines_update on journal_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy journal_lines_delete on journal_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy ledger_accounts_read on ledger_accounts for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy ledger_accounts_insert on ledger_accounts for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy ledger_accounts_update on ledger_accounts for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy ledger_accounts_delete on ledger_accounts for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy organisation_logos_read on organisation_logos for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy organisation_logos_insert on organisation_logos for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy organisation_logos_update on organisation_logos for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy organisation_logos_delete on organisation_logos for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy quote_lines_read on quote_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy quote_lines_insert on quote_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy quote_lines_update on quote_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy quote_lines_delete on quote_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy quotes_read on quotes for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy quotes_insert on quotes for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy quotes_update on quotes for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy quotes_delete on quotes for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy repeating_invoices_read on repeating_invoices for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy repeating_invoices_insert on repeating_invoices for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy repeating_invoices_update on repeating_invoices for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy repeating_invoices_delete on repeating_invoices for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credit_allocations_read on supplier_credit_allocations for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy supplier_credit_allocations_insert on supplier_credit_allocations for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credit_allocations_update on supplier_credit_allocations for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credit_allocations_delete on supplier_credit_allocations for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credit_lines_read on supplier_credit_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy supplier_credit_lines_insert on supplier_credit_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credit_lines_update on supplier_credit_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credit_lines_delete on supplier_credit_lines for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credits_read on supplier_credits for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy supplier_credits_insert on supplier_credits for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credits_update on supplier_credits for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_credits_delete on supplier_credits for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy suppliers_read on suppliers for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy suppliers_insert on suppliers for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy suppliers_update on suppliers for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy suppliers_delete on suppliers for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy vat_checks_read on vat_checks for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy vat_checks_insert on vat_checks for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy vat_checks_update on vat_checks for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy vat_checks_delete on vat_checks for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy vat_returns_read on vat_returns for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy vat_returns_insert on vat_returns for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy vat_returns_update on vat_returns for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy vat_returns_delete on vat_returns for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
 -- The practice's own records about a company: its people only.
 create policy client_fees_access on client_fees for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
 create policy time_entries_access on time_entries for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
+-- A year end: seen by everyone who may see the company (its auditor included); kept by the practice.
+create policy year_ends_read on year_ends for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy year_ends_write on year_ends for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
 create policy fee_invoices_access on fee_invoices for all to authenticated using (client_organisation_id = any ((select practice_companies())::uuid[])) with check (client_organisation_id = any ((select practice_companies())::uuid[]));
 
 -- The audit trail: read by everyone who may see the company; written only by audit_append.
@@ -2732,7 +2942,7 @@ create policy audit_log_read on audit_log for select to authenticated using (org
 
 -- Companies: seen by whoever may see them; created by the practice (opening the books), never deleted from here.
 create policy organisations_read on organisations for select to authenticated using (id = any ((select visible_companies())::uuid[]));
-create policy organisations_update on organisations for update to authenticated using (id = any ((select visible_companies())::uuid[])) with check (id = any ((select visible_companies())::uuid[]));
+create policy organisations_update on organisations for update to authenticated using (id = any ((select visible_companies())::uuid[])) with check (id = any ((select writable_companies())::uuid[]));
 create policy organisations_insert on organisations for insert to authenticated with check (practice_id = any ((select my_practices())::uuid[]));
 
 -- The practice: its people manage it; a client company's people see whose practice it is (its name and colours).
@@ -2741,8 +2951,14 @@ create policy practices_read on practices for select to authenticated
 create policy practices_update on practices for update to authenticated using (id = any ((select my_practices())::uuid[])) with check (id = any ((select my_practices())::uuid[]));
 create policy practice_staff_access on practice_staff for all to authenticated using (practice_id = any ((select my_practices())::uuid[])) with check (practice_id = any ((select my_practices())::uuid[]));
 create policy company_members_access on company_members for all to authenticated
-  using (organisation_id = any ((select practice_companies())::uuid[]) or user_id = app_user_id()) with check (organisation_id = any ((select practice_companies())::uuid[]));
+  using (organisation_id = any ((select practice_companies())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]) or user_id = app_user_id())
+  with check (organisation_id = any ((select practice_companies())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]));
 create policy app_users_read on app_users for select to authenticated using (id = any ((select visible_users())::uuid[]));
+-- Invitations: the practice's people manage them, and a client company's owner those to that company. Someone joining
+-- reaches theirs only through its link, which Ledgerline checks itself.
+create policy invitations_access on invitations for all to authenticated
+  using (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]))
+  with check (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]));
 create policy app_users_update on app_users for update to authenticated using (id = app_user_id()) with check (id = app_user_id());
 
 -- Client files, and everything in them: the practice's people only. A client never sees its own AML file.
@@ -2753,10 +2969,15 @@ create policy risk_assessments_access on risk_assessments for all to authenticat
 create policy sanctions_screenings_access on sanctions_screenings for all to authenticated using (exists (select 1 from client_files f where f.id = file_id)) with check (exists (select 1 from client_files f where f.id = file_id));
 
 -- Captured documents: the practice's inbox, and a company's own uploads.
-create policy capture_files_access on capture_files for all to authenticated
-  using (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select visible_companies())::uuid[]))
-  with check (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select visible_companies())::uuid[]));
-create policy capture_items_access on capture_items for all to authenticated using (exists (select 1 from capture_files f where f.id = file_id)) with check (exists (select 1 from capture_files f where f.id = file_id));
+create policy capture_files_read on capture_files for select to authenticated
+  using (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select visible_companies())::uuid[]));
+create policy capture_files_write on capture_files for all to authenticated
+  using (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select writable_companies())::uuid[]))
+  with check (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select writable_companies())::uuid[]));
+create policy capture_items_read on capture_items for select to authenticated using (exists (select 1 from capture_files f where f.id = file_id));
+create policy capture_items_write on capture_items for all to authenticated
+  using (exists (select 1 from capture_files f where f.id = file_id and (f.practice_id = any ((select my_practices())::uuid[]) or f.organisation_id = any ((select writable_companies())::uuid[]))))
+  with check (exists (select 1 from capture_files f where f.id = file_id and (f.practice_id = any ((select my_practices())::uuid[]) or f.organisation_id = any ((select writable_companies())::uuid[]))));
 
 -- Reference data everyone signed in may read.
 create policy sanctions_lists_read on sanctions_lists for select to authenticated using (true);

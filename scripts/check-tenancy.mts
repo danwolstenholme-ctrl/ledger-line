@@ -50,10 +50,12 @@ console.log(`Built the demo database in ${((Date.now() - started) / 1000).toFixe
 // A second practice, with one client: Harbourside Accountants, and Eva who works there.
 const harbour = (await conn.query("insert into practices (name, initials) values ('Harbourside Accountants', 'HA') returning id")).rows[0].id as string;
 const eva = (await conn.query("insert into app_users (name, email, initials) values ('Eva Lambrou', 'eva@harbourside.example', 'EL') returning id")).rows[0].id as string;
+await conn.query("update app_users set auth_id = id where id = $1", [eva]);
 await conn.query("insert into practice_staff (practice_id, name, role, user_id) values ($1, 'Eva Lambrou', 'Partner', $2)", [harbour, eva]);
 await conn.query("insert into organisations (practice_id, slug, name, industry) values ($1, 'blue-door-bakery', 'Blue Door Bakery Ltd', 'Bakery')", [harbour]);
 
-const user = async (email: string) => (await conn.query("select id from app_users where email = $1", [email])).rows[0].id as string;
+// A person's sign-in, as the claims carry it.
+const user = async (email: string) => (await conn.query("select auth_id from app_users where email = $1", [email])).rows[0].auth_id as string;
 const maria = await user("maria@saltlake.example"), nikos = await user("nikos@pixelforge.example");
 const org = async (slug: string) => (await conn.query("select id from organisations where slug = $1", [slug])).rows[0].id as string;
 const pixelforge = await org("pixelforge"), aegean = await org("aegean-blue-marine");
@@ -107,6 +109,28 @@ expect("Nikos does not see the firm's AML file on Pixelforge", await count(nikos
 expect("Nikos does not see the firm's fee, time or staff", await count(nikos, "select (select count(*) from client_fees) + (select count(*) from time_entries) + (select count(*) from practice_staff) as n"), is(0));
 expect("Nikos sees whose practice it is, for its name and colours", await count(nikos, "select count(*) as n from practices"), is(1));
 expect("Nikos can raise Pixelforge's own records", await count(nikos, "insert into customers (organisation_id, name) values ($1, 'New Client GmbH') returning id", [pixelforge]), is(1));
+
+// Invitations: the practice that sent them, and nobody else.
+await conn.query("insert into invitations (practice_id, email, name, role, token_hash) select practice_id, 'new.person@example.test', 'New Person', 'Accountant', repeat('a', 64) from organisations where slug = 'pixelforge'");
+expect("Maria sees Saltlake's invitations", await count(maria, "select count(*) as n from invitations"), is(1));
+expect("Eva and Nikos see none of them", Number(await count(eva, "select count(*) as n from invitations")) + Number(await count(nikos, "select count(*) as n from invitations")), is(0));
+
+// Pixelforge's auditor: reads Pixelforge's books and year end, changes nothing, and sees nothing of the firm's.
+const auditor = (await conn.query("insert into app_users (name, email, initials) values ('Andri Kition', 'andri@kitionaudit.example', 'AK') returning id")).rows[0].id as string;
+await conn.query("update app_users set auth_id = id where id = $1", [auditor]);
+await conn.query("insert into company_members (organisation_id, user_id, role) values ($1, $2, 'auditor')", [pixelforge, auditor]);
+await conn.query("insert into year_ends (organisation_id, period_end) values ($1, '2025-12-31')", [pixelforge]);
+expect("The auditor reads Pixelforge's ledger", await count(auditor, "select count(*) as n from journal_lines"), above(0));
+expect("The auditor reads Pixelforge's year end", await count(auditor, "select count(*) as n from year_ends"), is(1));
+expect("The auditor cannot add a customer", await count(auditor, "insert into customers (organisation_id, name) values ($1, 'Audit Test Ltd') returning id", [pixelforge]), refused);
+expect("The auditor cannot change an invoice, and is told so", await count(auditor, "update invoices set notes = 'changed' where organisation_id = $1 returning id", [pixelforge]), refused);
+expect("Nor rename the company", await count(auditor, "update organisations set name = 'Taken' where id = $1 returning id", [pixelforge]), refused);
+expect("Nor remove a bank line", await count(auditor, "delete from bank_statement_lines where organisation_id = $1 returning id", [pixelforge]), is(0));
+expect("The auditor cannot record the year end's steps", await count(auditor, "update year_ends set filed_on = '2026-06-30' returning id"), is(0));
+expect("The auditor sees no client file", await count(auditor, "select count(*) as n from client_files"), is(0));
+expect("Nikos, the owner, cannot record the year end's steps either: the practice keeps them", await count(nikos, "update year_ends set filed_on = '2026-06-30' returning id"), is(0));
+expect("Maria records them", await count(maria, "update year_ends set sent_to_auditor_on = '2026-03-01' where organisation_id = $1 returning id", [pixelforge]), is(1));
+expect("Eva, at another practice, sees none of Saltlake's year ends", await count(eva, "select count(*) as n from year_ends"), is(0));
 
 // Nobody signed in: nothing.
 expect("Nobody signed in sees no company", await count(null, "select count(*) as n from organisations"), is(0));
