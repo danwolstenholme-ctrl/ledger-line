@@ -642,7 +642,10 @@ clients that need something first, forty to sixty at a time, with a search by
 name, HE or VAT number. Pages no longer carry the list of every client for the
 switcher: the switcher and the timer fetch it when the browser is idle or when
 first opened (`/api/shell/companies`), so with 700 clients a company page is
-about 115 KB, down from 400 KB.
+about 115 KB, down from 400 KB. The forms that pick a client (the timer,
+adding time, checking a VAT number) fetch the same list. Time is a hundred
+entries at a time, and VAT numbers fifty, those to look at first, with a
+search: 250 KB and 140 KB with 700 clients, down from 1 MB and 865 KB.
 
 ## If something goes wrong
 - **Reset demo data** at http://localhost:3000/settings?demo=1 rebuilds

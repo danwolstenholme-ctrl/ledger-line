@@ -8,7 +8,7 @@ import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { InlineSubmit } from "@/components/common/form-fields";
-import { RecordBadge, RecordEmpty, RecordHeader, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
+import { RecordBadge, RecordEmpty, RecordHeader, RecordPagination, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
 import { AddTimeForm } from "@/components/work/forms";
 
 export const metadata: Metadata = { title: "Time" };
@@ -18,12 +18,16 @@ const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T12:
 const dayLabel = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 const localDay = (instant: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Nicosia" }).format(new Date(instant));
 
+const PAGE_SIZE = 100;
+
 /** Every hour the practice puts in: each person's week against the hours they have, and what it went on. */
 export default async function TimePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const { week } = await searchParams;
-  const data = await getTimeWeek(week);
+  const query = await searchParams;
+  const data = await getTimeWeek(query.week);
+  // A big practice logs hundreds of entries a week: a hundred at a time, latest first.
+  const page = Math.max(1, Math.min(Number(query.page) || 1, Math.ceil(data.entries.length / PAGE_SIZE) || 1));
   const days = new Map<string, typeof data.entries>();
-  for (const entry of data.entries) days.set(localDay(entry.started_at), [...(days.get(localDay(entry.started_at)) ?? []), entry]);
+  for (const entry of data.entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)) days.set(localDay(entry.started_at), [...(days.get(localDay(entry.started_at)) ?? []), entry]);
   const total = data.people.reduce((sum, person) => sum + person.hours, 0), onClients = data.people.reduce((sum, person) => sum + person.clientHours, 0);
 
   return <PageBody className="space-y-4">
@@ -51,7 +55,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
       <RecordSection title="Add time" hint="Worked without the timer">
-        <div className="p-4"><AddTimeForm companies={data.companies} people={data.people.map(person => person.name)} user={data.user.name} today={data.today} /></div>
+        <div className="p-4"><AddTimeForm people={data.people.map(person => person.name)} user={data.user.name} today={data.today} /></div>
       </RecordSection>
       <RecordSection title="Logged" hint={`${data.entries.length} entr${data.entries.length === 1 ? "y" : "ies"}`}>
         {data.entries.length ? <div className="divide-hairline divide-y">{[...days].map(([day, entries]) => <div key={day}>
@@ -64,7 +68,8 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
             {entry.invoice_id ? <Link href={`/c/${entry.invoice_slug}/sales/${entry.invoice_id}`} className="text-brand font-mono text-[11.5px] hover:underline">{entry.invoice_number}</Link>
               : entry.ended_at ? <form action={deleteTime}><input type="hidden" name="id" value={entry.id} /><InlineSubmit destructive title="Take this time off">Remove</InlineSubmit></form> : null}
           </li>)}</ul>
-        </div>)}</div> : <RecordEmpty title="Nothing logged">Start the clock from the top bar, or add time worked without it.</RecordEmpty>}
+        </div>)}{data.entries.length > PAGE_SIZE ? <RecordPagination page={page} total={data.entries.length} pageSize={PAGE_SIZE} href={`/time?week=${data.from}`} /> : null}</div>
+          : <RecordEmpty title="Nothing logged">Start the clock from the top bar, or add time worked without it.</RecordEmpty>}
       </RecordSection>
     </div>
   </PageBody>;

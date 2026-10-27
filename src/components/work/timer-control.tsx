@@ -30,7 +30,8 @@ function Elapsed({ since }: { since: string }) {
 export function TimerControl({ running, currentSlug }: { running: TimerRunning | null; currentSlug: string | null }) {
   const [open, setOpen] = useState(false);
   // Every company the person can see, fetched when the clock is opened: not carried by every page.
-  const companies: TimerCompany[] = useCompanies(open) ?? [];
+  const loaded: TimerCompany[] | null = useCompanies(open);
+  const companies = loaded ?? [];
   const [state, action] = useActionState(startTimer, idleState);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -59,13 +60,16 @@ export function TimerControl({ running, currentSlug }: { running: TimerRunning |
       <form action={action} onSubmit={() => setOpen(false)} className="space-y-3">
         <p className="text-ink text-[13px] font-semibold">Start the clock</p>
         <label className="block space-y-1 text-[12px]"><span className="text-ink-muted">For</span>
-          <select name="organisation_id" defaultValue={current?.id} required className="border-hairline-strong bg-surface text-ink h-8 w-full rounded-md border px-2 text-[12.5px]">
-            {companies.map(company => <option key={company.id} value={company.id}>{company.practice ? `${company.name} (the firm’s own work)` : company.name}</option>)}
+          {/* Made again once the list has come, and on another company's page, so it starts on the company being looked at. */}
+          <select key={`${currentSlug ?? ""}:${loaded ? "loaded" : "loading"}`} name="organisation_id" defaultValue={current?.id} required disabled={!loaded}
+            className="border-hairline-strong bg-surface text-ink h-8 w-full rounded-md border px-2 text-[12.5px]">
+            {loaded ? companies.map(company => <option key={company.id} value={company.id}>{company.practice ? `${company.name} (the firm’s own work)` : company.name}</option>)
+              : <option value="">Loading the clients…</option>}
           </select></label>
         <label className="block space-y-1 text-[12px]"><span className="text-ink-muted">Working on</span>
           <input name="work" required maxLength={200} list="work-suggestions" autoFocus placeholder="VAT return" className="border-hairline-strong bg-surface text-ink h-8 w-full rounded-md border px-2.5 text-[12.5px]" />
           <datalist id="work-suggestions">{WORK_SUGGESTIONS.map(work => <option key={work} value={work} />)}</datalist></label>
-        <SubmitButton size="sm" pendingLabel="Starting…"><Timer className="size-3.5" />Start</SubmitButton>
+        <SubmitButton size="sm" pendingLabel="Starting…" disabled={!loaded}><Timer className="size-3.5" />Start</SubmitButton>
         {state.error ? <p role="alert" className="text-critical text-[12px]">{state.error}</p> : null}
       </form>
     </MenuPanel>

@@ -9,7 +9,8 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { SubmitButton } from "@/components/common/form-fields";
-import { RecordBadge, RecordEmpty, RecordHeader, RecordSection } from "@/components/records/record-layout";
+import { RecordBadge, RecordEmpty, RecordFilterLinks, RecordHeader, RecordPagination, RecordSection } from "@/components/records/record-layout";
+import { ListSearch } from "@/components/common/list-search";
 import { VatChecker } from "@/components/vat/vat-check";
 
 export const metadata: Metadata = { title: "VAT numbers" };
@@ -23,10 +24,23 @@ const STATE: Record<string, { label: (row: { kept: { checkedAt: string; name: st
   malformed: { label: () => "Not a valid number", tone: "critical" },
 };
 
+const PAGE_SIZE = 50;
+/** What to look at first: a number VIES refused, then one that can't be right, a name that differs, an answer gone stale, one never checked. */
+const URGENCY: Record<string, number> = { invalid: 0, malformed: 1, differs: 2, stale: 3, unchecked: 4, valid: 5 };
+
 /** The practice's VAT number checker: any EU number against VIES, and every number the practice zero-rates against, kept confirmed. */
 export default async function VatNumbersPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const [data, query] = await Promise.all([getVatNumbers(), searchParams]);
   const down = data.availability ? Object.entries(data.availability).filter(([, up]) => !up).map(([code]) => code) : null;
+  // Hundreds of clients' customers and suppliers: those to look at first, a page at a time, found by company, name or number.
+  const view = query.view === "attention" ? "attention" : "all";
+  const term = (query.q ?? "").trim().toLowerCase(), digits = term.replace(/[^a-z0-9]/g, "");
+  const matching = data.rows.filter(row => (view === "all" || row.state !== "valid") && (!term || row.company.toLowerCase().includes(term) || row.name.toLowerCase().includes(term)
+    || (digits.length > 2 && row.vat_number.toLowerCase().replace(/[^a-z0-9]/g, "").includes(digits))))
+    .sort((a, b) => URGENCY[a.state] - URGENCY[b.state] || a.company.localeCompare(b.company) || a.name.localeCompare(b.name));
+  const page = Math.max(1, Math.min(Number(query.page) || 1, Math.ceil(matching.length / PAGE_SIZE) || 1));
+  const shown = matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const here = (next: string) => `/vat-numbers?view=${next}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title="VAT numbers" description="Check any EU VAT number against VIES, the European Commission’s register, and keep the answer as evidence. Before a sale is zero-rated under the reverse charge, the customer’s number should be valid in VIES." />
 
@@ -34,7 +48,7 @@ export default async function VatNumbersPage({ searchParams }: { searchParams: P
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
       <RecordSection title="Check a number">
-        <div className="p-4"><VatChecker companies={data.companies} defaultCompany={data.practiceId} /></div>
+        <div className="p-4"><VatChecker defaultCompany={data.practiceId} /></div>
       </RecordSection>
       <RecordSection title="The registers" hint={down === null ? "VIES didn’t say" : down.length ? `${down.length} not answering` : "All answering"}>
         <div className="flex flex-wrap gap-1.5 p-4">{Object.keys(VIES_COUNTRIES).map(code => {
@@ -49,9 +63,13 @@ export default async function VatNumbersPage({ searchParams }: { searchParams: P
 
     <RecordSection title="Every EU customer and supplier" hint={`${data.counts.total} numbers across every company${data.counts.attention ? `, ${data.counts.attention} to look at` : ", all confirmed"}`}
       action={data.counts.total ? <form action={checkEveryVatNumber}><SubmitButton size="sm" pendingLabel="Asking VIES…"><BadgeCheck className="size-3.5" />Check every number now</SubmitButton></form> : undefined}>
-      {data.rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-[12.5px]">
+      {data.rows.length ? <div className="border-hairline flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5">
+        <RecordFilterLinks label="Which numbers" options={[{ label: `All · ${data.counts.total}`, href: here("all"), active: view === "all" }, { label: `To look at · ${data.counts.attention}`, href: here("attention"), active: view === "attention" }]} />
+        {data.counts.total > PAGE_SIZE ? <ListSearch action="/vat-numbers" value={query.q} keep={{ view }} placeholder="Find: company, name or VAT number" /> : null}
+      </div> : null}
+      {shown.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-[12.5px]">
         <thead><tr className="border-hairline bg-surface-sunken border-b text-left">{["Company", "Customer or supplier", "VAT number", "VIES"].map(label => <th key={label} scope="col" className="text-ink-faint px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase">{label}</th>)}</tr></thead>
-        <tbody className="divide-hairline divide-y">{data.rows.map(row => {
+        <tbody className="divide-hairline divide-y">{shown.map(row => {
           const state = STATE[row.state];
           return <tr key={`${row.kind}-${row.id}`}>
             <td className="text-ink-muted px-4 py-2.5">{row.company.replace(/ (Ltd|Limited)$/, "")}</td>
@@ -60,7 +78,9 @@ export default async function VatNumbersPage({ searchParams }: { searchParams: P
             <td className="px-4 py-2.5"><RecordBadge tone={state.tone}>{state.label(row)}</RecordBadge></td>
           </tr>;
         })}</tbody>
-      </table></div> : <RecordEmpty title="No EU customers or suppliers">Customers marked as EU businesses, and suppliers abroad under the reverse charge, appear here.</RecordEmpty>}
+      </table>{matching.length > PAGE_SIZE ? <RecordPagination page={page} total={matching.length} pageSize={PAGE_SIZE} href={here(view)} /> : null}</div>
+        : data.rows.length ? <RecordEmpty title={term ? "Nothing matches" : "Nothing to look at"}>{term ? "Try part of the company’s or the customer’s name, or the number." : "Every number is confirmed in VIES."}</RecordEmpty>
+        : <RecordEmpty title="No EU customers or suppliers">Customers marked as EU businesses, and suppliers abroad under the reverse charge, appear here.</RecordEmpty>}
     </RecordSection>
 
     <RecordSection title="Checks made" hint="Kept for good, and on each company’s audit trail">

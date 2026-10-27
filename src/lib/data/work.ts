@@ -42,11 +42,10 @@ export async function getRunningTimer(person: string) {
 export async function getTimeWeek(week?: string) {
   const today = firmToday();
   const from = mondayOf(week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : today), to = addDays(from, 6);
-  const [user, staff, entries, companies] = await Promise.all([
+  const [user, staff, entries] = await Promise.all([
     getCurrentUser(),
     sql<{ name: string; role: string | null; weekly_hours: number }>("select name, role, weekly_hours from practice_staff order by name"),
     sql<TimeEntry>(`${ENTRY_SELECT} where (t.started_at at time zone 'Asia/Nicosia')::date between $1 and $2 order by t.started_at desc`, [from, to]),
-    sql<{ id: string; name: string; is_practice: boolean }>("select id, name, is_practice from organisations order by is_practice desc, name"),
   ]);
   const people = staff.map(person => {
     const own = entries.filter(entry => entry.person === person.name);
@@ -54,7 +53,7 @@ export async function getTimeWeek(week?: string) {
     const client = own.filter(entry => !entry.is_practice).reduce((sum, entry) => sum + Number(entry.minutes ?? 0), 0);
     return { ...person, weekly_hours: Number(person.weekly_hours), hours: minutes / 60, clientHours: client / 60, running: own.find(entry => !entry.ended_at) ?? null };
   });
-  return { today, from, to, user, people, entries, companies, isThisWeek: from === mondayOf(today) };
+  return { today, from, to, user, people, entries, isThisWeek: from === mondayOf(today) };
 }
 
 export type FeeRow = {

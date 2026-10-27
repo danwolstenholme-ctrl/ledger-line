@@ -9,6 +9,7 @@ import { checkVatNumber, VIES_COUNTRIES } from "@/lib/domain/eu-vat";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SubmitButton } from "@/components/common/form-fields";
+import { useCompanies } from "@/components/shell/companies";
 
 /** A check as a page shows it: a fresh answer, or the latest one kept. `stale` when it is older than the practice re-checks. */
 export type VatAnswerView = VatCheckResult & { stale?: boolean };
@@ -72,9 +73,10 @@ export function VatCheckButton({ vat, country, organisationId, expectName, kept,
   </div>;
 }
 
-/** Any EU VAT number, checked for any of the practice's companies. */
-export function VatChecker({ companies, defaultCompany }: { companies: { id: string; name: string }[]; defaultCompany: string }) {
+/** Any EU VAT number, checked for any of the practice's companies (their list fetched as the switcher's is: a practice may have hundreds). */
+export function VatChecker({ defaultCompany }: { defaultCompany: string }) {
   const [state, action] = useActionState(checkVat, idleVatCheck);
+  const companies = useCompanies(true) ?? [{ id: defaultCompany, name: "The practice" }];
   const [typed, setTyped] = useState("");
   const shape = typed.trim().length > 3 ? checkVatNumber(typed) : null;
   return <form action={action} className="space-y-3">

@@ -7,18 +7,23 @@ import { addTime, raiseFees, saveClientFee, saveFeeFloor } from "@/lib/actions/w
 import { idleState } from "@/lib/actions/state";
 import { formatAmount } from "@/lib/format";
 import { Checkbox, Field, FormError, NativeSelect, SubmitButton, TextInput } from "@/components/common/form-fields";
+import { useCompanies } from "@/components/shell/companies";
 import { WORK_SUGGESTIONS } from "@/components/work/timer-control";
 
 /** Time worked without a timer: the client, the work, how long, the day. */
-export function AddTimeForm({ companies, people, user, today }: { companies: { id: string; name: string; is_practice: boolean }[]; people: string[]; user: string; today: string }) {
+export function AddTimeForm({ people, user, today }: { people: string[]; user: string; today: string }) {
   const [state, action] = useActionState(addTime, idleState);
   const uid = useId();
   const errors = state.fieldErrors ?? {};
+  // Every client, fetched as the switcher's list is (a practice may have hundreds): the firm's own work first.
+  const loaded = useCompanies(true);
+  const companies = loaded ? [...loaded].sort((a, b) => Number(b.practice) - Number(a.practice) || a.name.localeCompare(b.name)) : null;
   return <form action={action} className="space-y-3" noValidate>
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Client" htmlFor={`${uid}-org`} error={errors.organisation_id}>
-        <NativeSelect id={`${uid}-org`} name="organisation_id" defaultValue={companies.find(company => !company.is_practice)?.id}>
-          {companies.map(company => <option key={company.id} value={company.id}>{company.is_practice ? `${company.name} (the firm’s own work)` : company.name}</option>)}
+        <NativeSelect key={companies ? "loaded" : "loading"} id={`${uid}-org`} name="organisation_id" defaultValue={companies?.find(company => !company.practice)?.id} disabled={!companies}>
+          {companies ? companies.map(company => <option key={company.id} value={company.id}>{company.practice ? `${company.name} (the firm’s own work)` : company.name}</option>)
+            : <option value="">Loading the clients…</option>}
         </NativeSelect>
       </Field>
       <Field label="Work" htmlFor={`${uid}-work`} error={errors.work}>
@@ -38,7 +43,7 @@ export function AddTimeForm({ companies, people, user, today }: { companies: { i
     <Checkbox name="extra" label="Extra work: bill it on top of the monthly fee, at the client’s rate" />
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
-      <SubmitButton size="sm" pendingLabel="Saving…">Add the time</SubmitButton>
+      <SubmitButton size="sm" pendingLabel="Saving…" disabled={!companies}>Add the time</SubmitButton>
       {state.ok ? <span role="status" className="text-positive text-[12px]">Added</span> : null}
     </div>
   </form>;

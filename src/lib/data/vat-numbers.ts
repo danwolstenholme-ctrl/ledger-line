@@ -1,8 +1,7 @@
 import "server-only";
 
-import { sql } from "@/lib/db";
+import { one, sql } from "@/lib/db";
 import { checkVatNumber } from "@/lib/domain/eu-vat";
-import { getOrganisations } from "@/lib/org";
 import { answerView, latestChecks, viesAvailability, type VatCheckRow } from "@/lib/vies";
 
 /**
@@ -11,8 +10,8 @@ import { answerView, latestChecks, viesAvailability, type VatCheckRow } from "@/
  * the last time VIES confirmed each one. And the checks made, latest first.
  */
 export async function getVatNumbers() {
-  const [organisations, parties, recent, availability] = await Promise.all([
-    getOrganisations(),
+  const [practice, parties, recent, availability] = await Promise.all([
+    one<{ id: string }>("select id from organisations where is_practice"),
     sql<{ id: string; kind: "customer" | "supplier"; name: string; vat_number: string; country: string; organisation_id: string; slug: string; company: string }>(`
       select c.id, 'customer' as kind, c.name, c.vat_number, c.country, o.id as organisation_id, o.slug, o.name as company
         from customers c join organisations o on o.id = c.organisation_id where c.is_active and c.eu_business and c.vat_number is not null
@@ -30,10 +29,8 @@ export async function getVatNumbers() {
     const state = !shape.ok ? "malformed" : !kept ? "unchecked" : !kept.valid ? "invalid" : kept.stale ? "stale" : kept.match === "differs" ? "differs" : "valid";
     return { ...party, shape, kept, state } as const;
   });
-  const practice = organisations.find(org => org.is_practice) ?? organisations[0];
   return {
     rows, recent, availability, practiceId: practice?.id ?? "",
-    companies: organisations.map(org => ({ id: org.id, name: org.name })),
     counts: { total: rows.length, attention: rows.filter(row => row.state !== "valid").length },
   };
 }
