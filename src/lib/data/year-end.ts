@@ -1,10 +1,10 @@
 import "server-only";
 
 import { one, sql } from "@/lib/db";
-import { companySize, journalFlags, reviewEligibility, yearEndSteps, type JournalFlag, type Opinion, type YearFigures } from "@/lib/domain/audit";
+import { companySize, journalFlags, reviewEligibility, ukAuditExemption, ukYearEndSteps, yearEndSteps, type JournalFlag, type Opinion, type YearFigures } from "@/lib/domain/audit";
 import { addDays, addMonths, financialYearEnds } from "@/lib/domain/deadlines";
 import { firmToday } from "@/lib/domain/invoices";
-import { vatQuarters } from "@/lib/domain/vat";
+import { vatPeriods, vatSettingsOf } from "@/lib/domain/vat";
 import { getBooksStart, getMembership, requireOrg } from "@/lib/org";
 
 /**
@@ -15,7 +15,7 @@ import { getBooksStart, getMembership, requireOrg } from "@/lib/org";
  */
 
 export type YearEndRow = {
-  id: string; organisation_id: string; period_end: string; assurance: "audit" | "review"; framework: "ifrs" | "frs_small"; average_employees: number | null;
+  id: string; organisation_id: string; period_end: string; assurance: "audit" | "review" | "exempt"; framework: "ifrs" | "frs_small"; average_employees: number | null;
   turnover_before_books: number | null; prior_turnover: number | null; prior_total_assets: number | null; sent_to_auditor_on: string | null; report_signed_on: string | null;
   opinion: Opinion | null; approved_on: string | null; agm_on: string | null; filed_on: string | null; tax_return_filed_on: string | null; notes: string | null; updated_by: string | null; updated_at: string;
 };
@@ -67,10 +67,14 @@ export async function getYearEnd(requested?: string) {
     prior = { yearStart: yearStartOf(priorEnd), assets: before.assets,
       turnover: priorStartsBefore ? priorRow?.turnover_before_books === null || priorRow?.turnover_before_books === undefined ? null : before.turnover + Number(priorRow.turnover_before_books) : before.turnover };
   }
-  const review = reviewEligibility({ year, prior, regulated: org.regulated, group: org.consolidated_group });
-  const size = year.turnover === null ? null : companySize({ assets: year.assets ?? 0, turnover: year.turnover, employees: row?.average_employees ?? null });
-  const assurance = row?.assurance ?? "audit";
-  const steps = yearEndSteps(periodEnd, assurance, priorRow?.agm_on ?? null).map(step => ({
+  // A Cyprus company may be reviewed instead of audited (Cap. 113); a small UK company is exempt from audit (Companies Act 2006).
+  const uk = org.country === "GB";
+  const employees = row?.average_employees === null || row?.average_employees === undefined ? null : Number(row.average_employees);
+  const review = uk ? ukAuditExemption({ year: { ...year, employees }, regulated: org.regulated, group: org.consolidated_group })
+    : reviewEligibility({ year, prior, regulated: org.regulated, group: org.consolidated_group });
+  const size = uk || year.turnover === null ? null : companySize({ assets: year.assets ?? 0, turnover: year.turnover, employees });
+  const assurance = row?.assurance ?? (uk && review.allowed ? "exempt" : "audit");
+  const steps = (uk ? ukYearEndSteps(periodEnd, assurance === "audit") : yearEndSteps(periodEnd, assurance === "review" ? "review" : "audit", priorRow?.agm_on ?? null)).map(step => ({
     ...step, doneOn: step.key === "books_closed" ? (org.lock_date && String(org.lock_date).slice(0, 10) >= periodEnd ? String(org.lock_date).slice(0, 10) : null) : (row?.[step.key] ?? null),
   }));
 
@@ -86,7 +90,7 @@ export async function getYearEnd(requested?: string) {
     one<{ debit: number; credit: number }>(`select coalesce(sum(l.debit), 0) as debit, coalesce(sum(l.credit), 0) as credit from journal_lines l join journal_entries e on e.id = l.entry_id
        where e.organisation_id = $1 and e.entry_date <= $2`, [org.id, periodEnd]),
   ]);
-  const quarters = org.vat_registered ? vatQuarters(org.vat_quarter_end_month, booksFrom > yearStart ? booksFrom : yearStart, periodEnd).filter(quarter => quarter.to <= periodEnd && quarter.to >= yearStart) : [];
+  const quarters = org.vat_registered ? vatPeriods(vatSettingsOf(org), booksFrom > yearStart ? booksFrom : yearStart, periodEnd).filter(quarter => quarter.to <= periodEnd && quarter.to >= yearStart) : [];
   const missingVat = quarters.filter(quarter => !vatFiled.some(filed => filed.period_to === quarter.to));
   const manual = journals.map(entry => ({ ...entry, total: Number(entry.total), flags: journalFlags({ ...entry, total: Number(entry.total) }, periodEnd) as JournalFlag[] }));
   const flagged = manual.filter(entry => entry.flags.length);
@@ -95,8 +99,8 @@ export async function getYearEnd(requested?: string) {
     org, today, booksFrom, periodEnd, yearStart, startsBeforeBooks, priorEnd, priorInBooks: priorEnd >= booksFrom, row, priorRow, year, prior, review, size, assurance, steps,
     years: ends.map(end => {
       const item = rows.find(entry => entry.period_end === end);
-      return { periodEnd: end, label: org.year_end_month === 12 ? end.slice(0, 4) : `To ${end}`,
-        status: item?.filed_on ? "Filed" : item?.report_signed_on ? "Signed" : item?.sent_to_auditor_on ? `With the ${item.assurance === "review" ? "reviewer" : "auditor"}` : end >= today ? "Running" : "To do" };
+      return { periodEnd: end, label: org.year_end_month === 12 ? end.slice(0, 4) : `To ${new Date(`${end}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}`,
+        status: item?.filed_on ? "Filed" : item?.report_signed_on ? "Signed" : item?.sent_to_auditor_on ? `With the ${item.assurance === "review" ? "reviewer" : "auditor"}` : item?.approved_on ? "Approved" : end >= today ? "Running" : "To do" };
     }),
     checks: {
       balanced: Math.abs(Number(totals?.debit ?? 0) - Number(totals?.credit ?? 0)) < 0.005,

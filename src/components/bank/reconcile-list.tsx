@@ -12,7 +12,8 @@ import { formatAmount, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FormError, InlineSubmit, NativeSelect, SubmitButton, TextInput } from "@/components/common/form-fields";
 import { AccountOptions } from "@/components/accounts/line-editor";
-import { VAT_RATES, type BankLineStatus, type BankMatchItem } from "@/types/database";
+import type { BankLineStatus, BankMatchItem } from "@/types/database";
+import { useCurrency, useRegime } from "@/components/common/regime";
 
 export type ReconcileLine = {
   id: string; txn_date: string; amount: number; description: string; reference: string | null; counterparty: string | null;
@@ -27,8 +28,8 @@ type Candidates = {
 };
 
 const cents = (value: number) => Math.round(value * 100);
-const toNumber = (text: string) => { const value = Number(text.replace(/[,\s€]/g, "")); return Number.isFinite(value) ? value : NaN; };
-const signed = (amount: number) => `${amount < 0 ? "−" : ""}${formatAmount(Math.abs(amount))}`;
+const toNumber = (text: string) => { const value = Number(text.replace(/[,\s€£]/g, "")); return Number.isFinite(value) ? value : NaN; };
+const signed = (amount: number, currency: string) => `${amount < 0 ? "−" : ""}${formatAmount(Math.abs(amount), currency)}`;
 const CONFIDENCE = { high: "Sure", medium: "Likely", low: "Possible" } as const;
 /** The rules' suggestions first, then the AI's, leaving out any the rules already made. */
 const withAi = (rules: Suggestion[], ai: Suggestion[]) => [...rules, ...ai.filter(item => !rules.some(rule => JSON.stringify(rule.items) === JSON.stringify(item.items)))];
@@ -128,6 +129,7 @@ export function ReconcileList({ view, lines, suggestions, documents, candidates,
 
 /** The date, the bank's words and the amount: the three cells every row shares. */
 function LineCells({ line }: { line: ReconcileLine }) {
+  const currency = useCurrency();
   const detail = [line.counterparty, line.reference].filter(Boolean).join(" · ");
   return <>
     <span className="text-ink-muted [grid-area:date] self-center text-[12px] whitespace-nowrap tabular-nums">{formatDate(line.txn_date)}</span>
@@ -135,7 +137,7 @@ function LineCells({ line }: { line: ReconcileLine }) {
       <span className="text-ink block text-[13px] break-words @min-[40rem]:truncate">{line.description}</span>
       {detail ? <span className="text-ink-faint block truncate text-[11.5px]">{detail}</span> : null}
     </span>
-    <span className={cn("[grid-area:amount] self-center text-right text-[13px] font-medium whitespace-nowrap tabular-nums", line.amount > 0 ? "text-positive" : "text-ink")}>{signed(line.amount)}</span>
+    <span className={cn("[grid-area:amount] self-center text-right text-[13px] font-medium whitespace-nowrap tabular-nums", line.amount > 0 ? "text-positive" : "text-ink")}>{signed(line.amount, currency)}</span>
   </>;
 }
 
@@ -155,6 +157,8 @@ function Confidence({ suggestion }: { suggestion: Suggestion }) {
 function LineToMatch({ line, suggestions, candidates, selected, onSelect }: {
   line: ReconcileLine; suggestions: Suggestion[]; candidates: Candidates; selected: boolean; onSelect?: (on: boolean) => void;
 }) {
+  const { vatRates } = useRegime();
+  const currency = useCurrency();
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState("");
   const [rate, setRate] = useState(0);
@@ -167,7 +171,7 @@ function LineToMatch({ line, suggestions, candidates, selected, onSelect }: {
 
   if (line.status === "partial") return <div className={ROW}>
     {check}<LineCells line={line} />
-    <p className={cn(WIDE, "text-caution text-[12px]")}>Partly matched: {signed(line.matched_amount)} of {signed(line.amount)} is explained, because something it was matched to has changed.</p>
+    <p className={cn(WIDE, "text-caution text-[12px]")}>Partly matched: {signed(line.matched_amount, currency)} of {signed(line.amount, currency)} is explained, because something it was matched to has changed.</p>
     <form action={unmatchLine} className="[grid-area:act] flex justify-end self-center"><input type="hidden" name="line_id" value={line.id} /><InlineSubmit>Unmatch</InlineSubmit></form>
   </div>;
 
@@ -188,7 +192,7 @@ function LineToMatch({ line, suggestions, candidates, selected, onSelect }: {
         </div>
         <div className="[grid-area:vat] min-w-0 self-center">
           <NativeSelect aria-label="VAT rate" value={String(rate)} onChange={event => setRate(Number(event.target.value))} className={cn(QUIET, !rate && "text-ink-muted")}>
-            {VAT_RATES.map(value => <option key={value} value={value}>{value}% VAT</option>)}
+            {vatRates.map(value => <option key={value} value={value}>{value}% VAT</option>)}
           </NativeSelect>
         </div>
       </>}
@@ -239,6 +243,7 @@ function LineOptions({ line, candidates, others }: { line: ReconcileLine; candid
 
 /** Choose one or more invoices (money in) or bills (money out), with how much of the line goes to each. */
 function DocumentPicker({ line, candidates }: { line: ReconcileLine; candidates: Candidates }) {
+  const currency = useCurrency();
   const uid = useId();
   const moneyIn = line.amount > 0;
   const documents = useMemo(() => (moneyIn
@@ -268,7 +273,7 @@ function DocumentPicker({ line, candidates }: { line: ReconcileLine; candidates:
     <TextInput aria-label={moneyIn ? "Search open invoices" : "Search open bills"} placeholder={moneyIn ? "Search invoice number or client" : "Search bill number or supplier"} value={query} onChange={event => setQuery(event.target.value)} />
     {shown.length ? <ul className="divide-hairline border-hairline bg-surface divide-y rounded-md border">{shown.map(doc => <li key={doc.id} className="flex items-center gap-3 px-3 py-1.5 text-[12.5px]">
       <span className="min-w-0 flex-1 truncate"><span className="text-ink font-mono text-[12px]">{doc.number}</span> <span className="text-ink-muted">· {doc.name}</span></span>
-      <span className="text-ink-muted tabular-nums">{formatAmount(doc.balance)} owed</span>
+      <span className="text-ink-muted tabular-nums">{formatAmount(doc.balance, currency)} owed</span>
       <button type="button" onClick={() => add(doc)} className="text-brand text-[12px] font-medium hover:underline touch:min-h-10">Add</button>
     </li>)}</ul> : <p className="text-ink-faint text-[12px]">{documents.length ? "Nothing else matches that search." : moneyIn ? "No invoices are open." : "No bills are open."}</p>}
     {chosen.length ? <div className="space-y-1.5">
@@ -279,10 +284,10 @@ function DocumentPicker({ line, candidates }: { line: ReconcileLine; candidates:
           onChange={event => setChosen(current => current.map(entry => entry.id === item.id ? { ...entry, amount: event.target.value } : entry))} />
         <button type="button" aria-label={`Remove ${item.label}`} onClick={() => setChosen(current => current.filter(entry => entry.id !== item.id))} className="text-ink-faint hover:text-critical grid size-8 place-items-center touch:size-10"><X className="size-3.5" /></button>
       </div>)}
-      <p className={cn("text-[12px] tabular-nums", total === target ? "text-positive" : "text-ink-muted")}>Chosen {formatAmount(total / 100)} of {formatAmount(target / 100)}{total < target ? ` · ${formatAmount((target - total) / 100)} still to place` : ""}</p>
+      <p className={cn("text-[12px] tabular-nums", total === target ? "text-positive" : "text-ink-muted")}>Chosen {formatAmount(total / 100, currency)} of {formatAmount(target / 100, currency)}{total < target ? ` · ${formatAmount((target - total) / 100, currency)} still to place` : ""}</p>
       {total > target ? null : <p className="text-ink-faint text-[11.5px]">{moneyIn ? "A part payment is fine: an invoice can take less than it owes, and one payment can cover several invoices." : "A part payment is fine: a bill can take less than it owes, and one payment can cover several bills."}</p>}
       {canCharge ? <label className="text-ink flex items-center gap-2 text-[12.5px]"><input type="checkbox" checked={charges} onChange={event => setCharges(event.target.checked)} className="size-4" />
-        Record the {formatAmount(short / 100)} difference as bank charges taken from the payment</label> : null}
+        Record the {formatAmount(short / 100, currency)} difference as bank charges taken from the payment</label> : null}
     </div> : null}
     {chosen.length ? <MatchButton lineId={line.id} items={items} disabled={!valid} /> : null}
   </div>;
@@ -290,6 +295,7 @@ function DocumentPicker({ line, candidates }: { line: ReconcileLine; candidates:
 
 /** Match payments or bank entries recorded earlier and not yet on a statement. */
 function RecordedPicker({ line, recorded }: { line: ReconcileLine; recorded: RecordedItem[] }) {
+  const currency = useCurrency();
   const sameWay = recorded.filter(item => (item.amount > 0) === (line.amount > 0));
   const [chosen, setChosen] = useState<string[]>([]);
   const total = sameWay.filter(item => chosen.includes(item.id)).reduce((sum, item) => sum + cents(item.amount), 0);
@@ -301,10 +307,10 @@ function RecordedPicker({ line, recorded }: { line: ReconcileLine; recorded: Rec
         <input type="checkbox" className="size-4" checked={chosen.includes(item.id)} onChange={event => setChosen(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} />
         <span className="text-ink-muted w-[5.5rem] shrink-0 tabular-nums">{formatDate(item.item_date)}</span>
         <span className="text-ink min-w-0 flex-1 truncate">{item.label}{item.reference ? <span className="text-ink-faint"> · {item.reference}</span> : null}</span>
-        <span className="tabular-nums">{signed(item.amount)}</span>
+        <span className="tabular-nums">{signed(item.amount, currency)}</span>
       </label>
     </li>)}</ul>
-    <p className={cn("text-[12px] tabular-nums", total === cents(line.amount) ? "text-positive" : "text-ink-muted")}>Chosen {signed(total / 100)} of {signed(line.amount)}</p>
+    <p className={cn("text-[12px] tabular-nums", total === cents(line.amount) ? "text-positive" : "text-ink-muted")}>Chosen {signed(total / 100, currency)} of {signed(line.amount, currency)}</p>
     {items.length ? <MatchButton lineId={line.id} items={items} disabled={total !== cents(line.amount)} /> : null}
   </div>;
 }
@@ -325,6 +331,7 @@ function BulkBar({ lines, chosen, suggestions, accounts, onSelectAll, onDone }: 
   lines: ReconcileLine[]; chosen: ReconcileLine[]; suggestions: Record<string, Suggestion[]>; accounts: PickerAccount[];
   onSelectAll: (on: boolean) => void; onDone: () => void;
 }) {
+  const { vatRates } = useRegime();
   const [account, setAccount] = useState("");
   const [rate, setRate] = useState(0);
   // Done lines leave the list; the selection is cleared when the action returns, not while rendering.
@@ -341,7 +348,7 @@ function BulkBar({ lines, chosen, suggestions, accounts, onSelectAll, onDone }: 
       <form action={code} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="matches" value={JSON.stringify(account ? chosen.map(line => ({ line_id: line.id, items: codedItems(line, account, rate) })) : [])} />
         <NativeSelect aria-label="Code the selected lines to" value={account} onChange={event => setAccount(event.target.value)} className="h-7 w-[16rem] max-w-full text-[12.5px] touch:h-10"><AccountOptions accounts={accounts} /></NativeSelect>
-        <NativeSelect aria-label="VAT rate for the selected lines" value={String(rate)} onChange={event => setRate(Number(event.target.value))} className="h-7 w-[6rem] text-[12.5px] touch:h-10">{VAT_RATES.map(value => <option key={value} value={value}>{value}% VAT</option>)}</NativeSelect>
+        <NativeSelect aria-label="VAT rate for the selected lines" value={String(rate)} onChange={event => setRate(Number(event.target.value))} className="h-7 w-[6rem] text-[12.5px] touch:h-10">{vatRates.map(value => <option key={value} value={value}>{value}% VAT</option>)}</NativeSelect>
         <SubmitButton size="sm" pendingLabel="Coding…" disabled={!account}>Code {chosen.length === 1 ? "it" : `all ${chosen.length}`}</SubmitButton>
       </form>
       {withSuggestion.length ? <form action={code}>
@@ -371,6 +378,8 @@ function BulkBar({ lines, chosen, suggestions, accounts, onSelectAll, onDone }: 
 
 /** Money spent or received that is not on an invoice or bill: coded to an account, VAT worked out from the rate. */
 function CodeIt({ line, accounts }: { line: ReconcileLine; accounts: PickerAccount[] }) {
+  const { vatRates } = useRegime();
+  const currency = useCurrency();
   const uid = useId();
   const [account, setAccount] = useState("");
   const [rate, setRate] = useState(0);
@@ -385,9 +394,9 @@ function CodeIt({ line, accounts }: { line: ReconcileLine; accounts: PickerAccou
       <label className="text-ink-muted space-y-1 text-[11.5px]"><span className="block">Account</span>
         <NativeSelect aria-label="Account" value={account} onChange={event => setAccount(event.target.value)}><AccountOptions accounts={accounts} /></NativeSelect></label>
       <label className="text-ink-muted space-y-1 text-[11.5px]"><span className="block">VAT</span>
-        <NativeSelect aria-label="VAT rate" value={String(rate)} onChange={event => setRate(Number(event.target.value))}>{VAT_RATES.map(value => <option key={value} value={value}>{value}%</option>)}</NativeSelect></label>
+        <NativeSelect aria-label="VAT rate" value={String(rate)} onChange={event => setRate(Number(event.target.value))}>{vatRates.map(value => <option key={value} value={value}>{value}%</option>)}</NativeSelect></label>
     </div>
-    {rate ? <p className="text-ink-muted text-[12px] tabular-nums">{formatAmount(net / 100)} plus {formatAmount((gross - net) / 100)} VAT</p> : null}
+    {rate ? <p className="text-ink-muted text-[12px] tabular-nums">{formatAmount(net / 100, currency)} plus {formatAmount((gross - net) / 100, currency)} VAT</p> : null}
     <MatchButton lineId={line.id} items={items} disabled={!account || !description.trim()} />
   </div>;
 }
@@ -416,13 +425,14 @@ function SetAside({ line }: { line: ReconcileLine }) {
 }
 
 function MatchedLine({ line, documents }: { line: ReconcileLine; documents: MatchedDocumentView[] }) {
+  const currency = useCurrency();
   return <div className={ROW}>
     <LineCells line={line} />
     <div className={cn(WIDE, "space-y-0.5 text-[12px]")}>
       {documents.map((document, index) => <span key={index} className="flex min-w-0 items-center gap-1.5">
         <Check aria-hidden className="text-positive size-3.5 shrink-0" />
         {document.href ? <Link href={document.href} className="text-brand min-w-0 truncate hover:underline">{document.label}</Link> : <span className="text-ink-muted min-w-0 truncate">{document.label}</span>}
-        <span className="text-ink-faint shrink-0 tabular-nums">{signed(document.amount)}</span>
+        <span className="text-ink-faint shrink-0 tabular-nums">{signed(document.amount, currency)}</span>
       </span>)}
     </div>
     <form action={unmatchLine} className="[grid-area:act] flex justify-end self-center"><input type="hidden" name="line_id" value={line.id} /><InlineSubmit title="Keeps what was recorded">Unmatch</InlineSubmit></form>

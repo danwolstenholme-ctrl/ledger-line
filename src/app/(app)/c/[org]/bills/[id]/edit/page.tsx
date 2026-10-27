@@ -27,7 +27,7 @@ export default async function EditBillPage({ params }: { params: Promise<{ id: s
       <BillForm today={firmToday()} accounts={accounts.rows} suppliers={suppliers.rows.filter(item => item.is_active || item.id === bill.supplier_id)}
         bill={{
           id: bill.id, supplier_id: bill.supplier_id, number: bill.number, reference: bill.reference, issued_on: bill.issued_on, due_on: bill.due_on,
-          notes: bill.notes, source_document: bill.source_document, reverse_charge: bill.reverse_charge,
+          notes: bill.notes, source_document: bill.source_document, reverse_charge: bill.reverse_charge, reverse_charge_kind: bill.reverse_charge_kind,
           lines: result.lines.map(line => ({ description: line.description, account_id: line.account_id, net: plain(line.net), vat_rate: Number(line.vat_rate), vat_amount: plain(line.vat_amount) })),
         }} />
     </Panel>

@@ -54,7 +54,24 @@ create table organisations (
   auditor_is_practice     boolean not null default false,
   regulated               boolean not null default false,
   consolidated_group      boolean not null default false,
-  created_at              timestamptz not null default now()
+  -- The country whose tax and company law apply (lib/domain/regimes), and the currency its books are kept in.
+  country                 char(2) not null default 'CY' check (country in ('CY', 'GB')),
+  currency                char(3) not null default 'EUR',
+  -- A company, or someone in business on their own: a sole trader is taxed by an individual's tax year.
+  entity                  text not null default 'company' check (entity in ('company', 'sole_trader')),
+  -- How VAT is returned: every quarter (the stagger above), every month, or once a year (UK annual accounting,
+  -- the year ending in vat_year_end_month, with payments on account monthly or quarterly).
+  vat_period              text not null default 'quarterly' check (vat_period in ('quarterly', 'monthly', 'annual')),
+  vat_year_end_month      smallint check (vat_year_end_month between 1 and 12),
+  vat_annual_payments     text check (vat_annual_payments in ('monthly', 'quarterly')),
+  -- UK schemes. Cash accounting: VAT follows payments. The flat rate: its percentage of VAT-inclusive turnover;
+  -- with cash accounting set too, the scheme's own cash-based turnover (the two schemes cannot be combined).
+  vat_cash_accounting     boolean not null default false,
+  vat_flat_rate           numeric(4, 2) check (vat_flat_rate > 0 and vat_flat_rate <= 16.5),
+  created_at              timestamptz not null default now(),
+  constraint organisations_currency check ((country = 'CY' and currency = 'EUR') or (country = 'GB' and currency = 'GBP')),
+  constraint organisations_uk_schemes check (country = 'GB' or (vat_period <> 'annual' and not vat_cash_accounting and vat_flat_rate is null)),
+  constraint organisations_annual check ((vat_period = 'annual') = (vat_year_end_month is not null and vat_annual_payments is not null))
 );
 create unique index organisations_one_practice on organisations (practice_id) where is_practice;
 
@@ -102,6 +119,8 @@ create table ledger_accounts (
   type            ledger_account_type not null,
   system_role     text check (system_role in ('receivable', 'payable', 'vat', 'sales', 'retained_earnings')),
   description     text,
+  -- Never on a VAT return, whatever passes through it: wages, PAYE and NIC, business rates, dividends.
+  outside_vat     boolean not null default false,
   bank_details    text,
   is_active       boolean not null default true,
   created_at      timestamptz not null default now(),
@@ -174,7 +193,7 @@ create table items (
   description     text,
   unit            text,
   unit_price      numeric(14, 4) not null default 0 check (unit_price >= 0),
-  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19, 20)),
   account_id      uuid not null,
   is_active       boolean not null default true,
   created_at      timestamptz not null default now(),
@@ -198,7 +217,8 @@ create table invoices (
   number          text not null,
   issued_on       date not null,
   due_on          date,
-  currency        char(3) not null default 'EUR',
+  -- The company's own currency unless set (document_currency, below).
+  currency        char(3) not null,
   vat_treatment   vat_treatment not null default 'standard',
   net             numeric(14, 2) not null default 0,
   vat_amount      numeric(14, 2) not null default 0,
@@ -234,7 +254,7 @@ create table invoice_lines (
   unit_price      numeric(14, 4) check (unit_price >= 0),
   discount_pct    numeric(5, 2) not null default 0 check (discount_pct >= 0 and discount_pct < 100),
   net             numeric(14, 2) not null check (net >= 0),
-  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19, 20)),
   vat_amount      numeric(14, 2) not null default 0,
   unique (invoice_id, position),
   foreign key (organisation_id, invoice_id) references invoices (organisation_id, id) on delete cascade,
@@ -270,7 +290,8 @@ create table bills (
   reference          text,
   issued_on          date not null,
   due_on             date,
-  currency           char(3) not null default 'EUR',
+  -- The company's own currency unless set (document_currency, below).
+  currency           char(3) not null,
   net                numeric(14, 2) not null default 0 check (net >= 0),
   vat_amount         numeric(14, 2) not null default 0 check (vat_amount >= 0),
   total              numeric(14, 2) generated always as (net + vat_amount) stored,
@@ -283,6 +304,8 @@ create table bills (
   capture_item_id    uuid,
   reverse_charge     boolean not null default false,
   reverse_charge_vat numeric(14, 2) not null default 0,
+  -- Which reverse charge: services from abroad, construction (CIS), or imports under postponed VAT accounting.
+  reverse_charge_kind text check (reverse_charge_kind in ('services', 'construction', 'import')),
   created_by         uuid,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now(),
@@ -303,7 +326,7 @@ create table bill_lines (
   description     text not null,
   account_id      uuid not null,
   net             numeric(14, 2) not null check (net >= 0),
-  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19, 20)),
   vat_amount      numeric(14, 2) not null default 0 check (vat_amount >= 0),
   unique (bill_id, position),
   foreign key (organisation_id, bill_id) references bills (organisation_id, id) on delete cascade,
@@ -359,6 +382,7 @@ create table bank_transactions (
   vat_amount          numeric(14, 2) not null default 0 check (vat_amount >= 0),
   reverse_charge      boolean not null default false,
   reverse_charge_vat  numeric(14, 2) not null default 0,
+  reverse_charge_kind text check (reverse_charge_kind in ('services', 'construction', 'import')),
   -- Set on a refund of a customer's credit: it posts against receivables, and has no lines.
   credit_note_id      uuid,
   -- Set on a refund received from a supplier against their credit note: it posts against payables.
@@ -380,7 +404,7 @@ create table bank_transaction_lines (
   description     text not null,
   account_id      uuid not null,
   net             numeric(14, 2) not null check (net >= 0),
-  vat_rate        numeric(5, 2) not null default 0 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_rate        numeric(5, 2) not null default 0 check (vat_rate in (0, 3, 5, 9, 19, 20)),
   vat_amount      numeric(14, 2) not null default 0 check (vat_amount >= 0),
   unique (transaction_id, position),
   foreign key (organisation_id, transaction_id) references bank_transactions (organisation_id, id) on delete cascade,
@@ -391,7 +415,7 @@ create table bank_transaction_lines (
 -- The general ledger
 -- ---------------------------------------------------------------------------
 
-create type journal_source as enum ('invoice', 'invoice_payment', 'bill', 'bill_payment', 'bank', 'manual', 'credit_note', 'supplier_credit');
+create type journal_source as enum ('invoice', 'invoice_payment', 'bill', 'bill_payment', 'bank', 'manual', 'credit_note', 'supplier_credit', 'payroll');
 
 create table journal_entries (
   id              uuid primary key default gen_random_uuid(),
@@ -512,7 +536,7 @@ begin
     if v_org is not null then perform ledger_replace(v_org, 'invoice', p_id, null, null, null, null); end if;
     return;
   end if;
-  if v.status not in ('issued', 'part_paid', 'paid') or v.currency <> 'EUR' then
+  if v.status not in ('issued', 'part_paid', 'paid') or v.currency <> (select currency from organisations where id = v.organisation_id) then
     perform ledger_replace(v.organisation_id, 'invoice', p_id, null, null, null, null);
     return;
   end if;
@@ -763,6 +787,11 @@ create trigger invoice_payment_guard before insert on invoice_payments for each 
 -- Writing documents
 -- ---------------------------------------------------------------------------
 
+-- The VAT rates each country uses: Cyprus 19, 9, 5, 3 and 0; the UK 20, 5 and 0.
+create function vat_rates(p_country text) returns numeric[] language sql immutable as $$
+  select case p_country when 'GB' then array[20, 5, 0]::numeric[] else array[19, 9, 5, 3, 0]::numeric[] end;
+$$;
+
 create function ledger_document_lines(p_org uuid, p_lines jsonb, p_label text)
 returns table (pos integer, description text, account_id uuid, net numeric, vat_rate numeric, vat_amount numeric,
                item_id uuid, unit text, quantity numeric, unit_price numeric, discount_pct numeric)
@@ -810,8 +839,8 @@ begin
     if v_type = 'bank' or v_role in ('receivable', 'payable') or (v_role = 'vat' and p_label in ('bill', 'invoice', 'quote', 'credit note', 'supplier credit')) then
       raise exception 'ledger_line_account: line % cannot be coded to a bank, receivable, payable or VAT account', v_pos using errcode = '23514';
     end if;
-    if vat_rate not in (0, 3, 5, 9, 19) then
-      raise exception 'ledger_vat_rate: line % has a VAT rate Cyprus does not use', v_pos using errcode = '23514';
+    if not (vat_rate = any (vat_rates((select country from organisations where id = p_org)))) then
+      raise exception 'ledger_vat_rate: line % has a VAT rate of %%%, which % does not use', v_pos, vat_rate, (select country from organisations where id = p_org) using errcode = '23514';
     end if;
     if abs(vat_amount - round(net * vat_rate / 100, 2)) > 0.01 then
       raise exception 'ledger_vat_amount: the VAT on line % does not match its rate', v_pos using errcode = '23514';
@@ -821,20 +850,20 @@ begin
 end $$;
 
 create function save_bill(p_org uuid, p_id uuid, p_supplier_id uuid, p_number text, p_reference text,
-  p_issued_on date, p_due_on date, p_notes text, p_source_document text, p_lines jsonb, p_reverse_charge boolean default false)
+  p_issued_on date, p_due_on date, p_notes text, p_source_document text, p_lines jsonb, p_reverse_charge boolean default false, p_reverse_charge_kind text default null)
 returns uuid language plpgsql as $$
 declare v_id uuid := p_id; v_net numeric(14, 2); v_vat numeric(14, 2); v_rc boolean := coalesce(p_reverse_charge, false);
 begin
   select coalesce(sum(l.net), 0), coalesce(sum(l.vat_amount), 0) into v_net, v_vat from ledger_document_lines(p_org, p_lines, 'bill') l;
   if v_id is null then
-    insert into bills (organisation_id, supplier_id, number, reference, issued_on, due_on, net, vat_amount, reverse_charge, reverse_charge_vat, notes, source_document)
+    insert into bills (organisation_id, supplier_id, number, reference, issued_on, due_on, net, vat_amount, reverse_charge, reverse_charge_vat, reverse_charge_kind, notes, source_document)
     values (p_org, p_supplier_id, nullif(btrim(p_number), ''), nullif(btrim(p_reference), ''), p_issued_on, p_due_on, v_net,
-            case when v_rc then 0 else v_vat end, v_rc, case when v_rc then v_vat else 0 end, nullif(btrim(p_notes), ''), nullif(btrim(p_source_document), ''))
+            case when v_rc then 0 else v_vat end, v_rc, case when v_rc then v_vat else 0 end, p_reverse_charge_kind, nullif(btrim(p_notes), ''), nullif(btrim(p_source_document), ''))
     returning id into v_id;
   else
     update bills set supplier_id = p_supplier_id, number = nullif(btrim(p_number), ''), reference = nullif(btrim(p_reference), ''),
            issued_on = p_issued_on, due_on = p_due_on, net = v_net, vat_amount = case when v_rc then 0 else v_vat end,
-           reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end,
+           reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end, reverse_charge_kind = p_reverse_charge_kind,
            notes = nullif(btrim(p_notes), ''), source_document = nullif(btrim(p_source_document), ''), updated_at = now()
      where id = v_id and organisation_id = p_org and status <> 'void';
     if not found then raise exception 'bill_closed: this bill is void or no longer exists' using errcode = '23514'; end if;
@@ -918,7 +947,7 @@ create table quote_lines (
   unit_price      numeric(14, 4) check (unit_price >= 0),
   discount_pct    numeric(5, 2) not null default 0 check (discount_pct >= 0 and discount_pct < 100),
   net             numeric(14, 2) not null check (net >= 0),
-  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19, 20)),
   vat_amount      numeric(14, 2) not null default 0,
   unique (quote_id, position),
   foreign key (organisation_id, quote_id) references quotes (organisation_id, id) on delete cascade,
@@ -1012,7 +1041,7 @@ create table credit_note_lines (
   unit_price      numeric(14, 4) check (unit_price >= 0),
   discount_pct    numeric(5, 2) not null default 0 check (discount_pct >= 0 and discount_pct < 100),
   net             numeric(14, 2) not null check (net >= 0),
-  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_rate        numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19, 20)),
   vat_amount      numeric(14, 2) not null default 0,
   unique (credit_note_id, position),
   foreign key (organisation_id, credit_note_id) references credit_notes (organisation_id, id) on delete cascade,
@@ -1237,6 +1266,7 @@ create table supplier_credits (
   total              numeric(14, 2) generated always as (net + vat_amount) stored,
   reverse_charge     boolean not null default false,
   reverse_charge_vat numeric(14, 2) not null default 0,
+  reverse_charge_kind text check (reverse_charge_kind in ('services', 'construction', 'import')),
   amount_allocated   numeric(14, 2) not null default 0 check (amount_allocated >= 0),
   amount_refunded    numeric(14, 2) not null default 0 check (amount_refunded >= 0),
   status             supplier_credit_status not null default 'recorded',
@@ -1251,6 +1281,25 @@ create table supplier_credits (
 create unique index supplier_credits_number_unique on supplier_credits (organisation_id, supplier_id, lower(btrim(number)))
   where number is not null and status <> 'void';
 
+-- A document in the company's own currency unless it says otherwise, and a reverse charge that says which kind
+-- (a Cyprus company's is always services from abroad).
+create function document_currency() returns trigger language plpgsql as $$
+begin
+  if new.currency is null then select currency into new.currency from organisations where id = new.organisation_id; end if;
+  return new;
+end $$;
+create trigger invoices_currency before insert on invoices for each row execute function document_currency();
+create trigger bills_currency before insert on bills for each row execute function document_currency();
+
+create function reverse_charge_kind() returns trigger language plpgsql as $$
+begin
+  new.reverse_charge_kind := case when new.reverse_charge then coalesce(new.reverse_charge_kind, 'services') end;
+  return new;
+end $$;
+create trigger bills_reverse_charge_kind before insert or update on bills for each row execute function reverse_charge_kind();
+create trigger bank_transactions_reverse_charge_kind before insert or update on bank_transactions for each row execute function reverse_charge_kind();
+create trigger supplier_credits_reverse_charge_kind before insert or update on supplier_credits for each row execute function reverse_charge_kind();
+
 create table supplier_credit_lines (
   id                 uuid primary key default gen_random_uuid(),
   organisation_id    uuid not null,
@@ -1259,7 +1308,7 @@ create table supplier_credit_lines (
   description        text not null,
   account_id         uuid not null,
   net                numeric(14, 2) not null check (net >= 0),
-  vat_rate           numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19)),
+  vat_rate           numeric(5, 2) not null default 19 check (vat_rate in (0, 3, 5, 9, 19, 20)),
   vat_amount         numeric(14, 2) not null default 0 check (vat_amount >= 0),
   unique (supplier_credit_id, position),
   foreign key (organisation_id, supplier_credit_id) references supplier_credits (organisation_id, id) on delete cascade,
@@ -1403,7 +1452,7 @@ begin
 end $$;
 
 create function save_supplier_credit(p_org uuid, p_id uuid, p_supplier_id uuid, p_bill_id uuid, p_number text, p_issued_on date,
-  p_notes text, p_lines jsonb, p_reverse_charge boolean default false)
+  p_notes text, p_lines jsonb, p_reverse_charge boolean default false, p_reverse_charge_kind text default null)
 returns uuid language plpgsql as $$
 declare v_id uuid := p_id; v_net numeric(14, 2); v_vat numeric(14, 2); v_rc boolean := coalesce(p_reverse_charge, false); v_bill bills; v_credited numeric(14, 2);
 begin
@@ -1422,9 +1471,9 @@ begin
     end if;
   end if;
   if v_id is null then
-    insert into supplier_credits (organisation_id, supplier_id, bill_id, number, issued_on, net, vat_amount, reverse_charge, reverse_charge_vat, notes)
+    insert into supplier_credits (organisation_id, supplier_id, bill_id, number, issued_on, net, vat_amount, reverse_charge, reverse_charge_vat, reverse_charge_kind, notes)
     values (p_org, p_supplier_id, p_bill_id, nullif(btrim(p_number), ''), p_issued_on, v_net, case when v_rc then 0 else v_vat end, v_rc,
-            case when v_rc then v_vat else 0 end, nullif(btrim(p_notes), ''))
+            case when v_rc then v_vat else 0 end, p_reverse_charge_kind, nullif(btrim(p_notes), ''))
     returning id into v_id;
   else
     if exists (select 1 from bank_transactions where supplier_credit_id = v_id) then
@@ -1433,7 +1482,7 @@ begin
     delete from supplier_credit_allocations where supplier_credit_id = v_id;
     update supplier_credits set supplier_id = p_supplier_id, bill_id = p_bill_id, number = nullif(btrim(p_number), ''), issued_on = p_issued_on,
            net = v_net, vat_amount = case when v_rc then 0 else v_vat end, reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end,
-           notes = nullif(btrim(p_notes), '')
+           reverse_charge_kind = p_reverse_charge_kind, notes = nullif(btrim(p_notes), '')
      where id = v_id and organisation_id = p_org and status = 'recorded';
     if not found then raise exception 'supplier_credit_closed: a void credit note cannot be changed' using errcode = '23514'; end if;
     delete from supplier_credit_lines where supplier_credit_id = v_id;
@@ -1520,7 +1569,7 @@ begin
 end $$;
 
 create function save_bank_transaction(p_org uuid, p_id uuid, p_kind bank_transaction_kind, p_bank_account_id uuid, p_transfer_account_id uuid,
-  p_date date, p_contact text, p_reference text, p_amount numeric, p_lines jsonb, p_reverse_charge boolean default false)
+  p_date date, p_contact text, p_reference text, p_amount numeric, p_lines jsonb, p_reverse_charge boolean default false, p_reverse_charge_kind text default null)
 returns uuid language plpgsql as $$
 declare v_id uuid := p_id; v_net numeric(14, 2) := 0; v_vat numeric(14, 2) := 0; v_rc boolean := coalesce(p_reverse_charge, false) and p_kind = 'spend';
 begin
@@ -1535,17 +1584,18 @@ begin
       from ledger_document_lines(p_org, p_lines, case when p_kind = 'spend' then 'payment' else 'receipt' end) l;
   end if;
   if v_id is null then
-    insert into bank_transactions (organisation_id, kind, bank_account_id, transfer_account_id, txn_date, contact, reference, amount, net, vat_amount, reverse_charge, reverse_charge_vat)
+    insert into bank_transactions (organisation_id, kind, bank_account_id, transfer_account_id, txn_date, contact, reference, amount, net, vat_amount, reverse_charge, reverse_charge_vat, reverse_charge_kind)
     values (p_org, p_kind, p_bank_account_id, case when p_kind = 'transfer' then p_transfer_account_id end, p_date,
             nullif(btrim(p_contact), ''), nullif(btrim(p_reference), ''),
             case when p_kind = 'transfer' then round(p_amount, 2) when v_rc then v_net else v_net + v_vat end, v_net,
-            case when v_rc then 0 else v_vat end, v_rc, case when v_rc then v_vat else 0 end)
+            case when v_rc then 0 else v_vat end, v_rc, case when v_rc then v_vat else 0 end, p_reverse_charge_kind)
     returning id into v_id;
   else
     update bank_transactions set kind = p_kind, bank_account_id = p_bank_account_id, transfer_account_id = case when p_kind = 'transfer' then p_transfer_account_id end,
            txn_date = p_date, contact = nullif(btrim(p_contact), ''), reference = nullif(btrim(p_reference), ''),
            amount = case when p_kind = 'transfer' then round(p_amount, 2) when v_rc then v_net else v_net + v_vat end, net = v_net,
-           vat_amount = case when v_rc then 0 else v_vat end, reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end, updated_at = now()
+           vat_amount = case when v_rc then 0 else v_vat end, reverse_charge = v_rc, reverse_charge_vat = case when v_rc then v_vat else 0 end,
+           reverse_charge_kind = p_reverse_charge_kind, updated_at = now()
      where id = v_id and organisation_id = p_org;
     if not found then raise exception 'Bank transaction not found' using errcode = '23503'; end if;
     delete from bank_transaction_lines where transaction_id = v_id;
@@ -1669,8 +1719,9 @@ language sql stable as $$
          coalesce(sum(l.debit) filter (where l.is_tax and e.source not in ('credit_note', 'supplier_credit')), 0)
            - coalesce(sum(l.credit) filter (where l.is_tax and e.source = 'supplier_credit'), 0),
          coalesce(sum(l.credit - l.debit) filter (where not l.is_tax and a.type in ('revenue', 'other_income') and e.source in ('invoice', 'bank', 'credit_note')), 0),
+         -- Wages, social insurance, PAYE and the like are never on a VAT return (ledger_accounts.outside_vat).
          coalesce(sum(l.debit - l.credit) filter (where not l.is_tax and a.type in ('direct_costs', 'expense', 'depreciation', 'fixed_asset', 'current_asset')
-                                                  and a.system_role is null and e.source in ('bill', 'bank', 'supplier_credit')), 0)
+                                                  and a.system_role is null and not a.outside_vat and e.source in ('bill', 'bank', 'supplier_credit')), 0)
     from journal_lines l
     join journal_entries e on e.id = l.entry_id
     join ledger_accounts a on a.id = l.account_id
@@ -1686,7 +1737,7 @@ language sql stable as $$
     select vat_treatment, sum(net) filter (where vat_rate > 0) as rated, sum(net) filter (where vat_rate = 0) as zero
       from (select i.vat_treatment, l.net, l.vat_rate
               from invoices i join invoice_lines l on l.invoice_id = i.id
-             where i.organisation_id = p_org and i.status in ('issued', 'part_paid', 'paid') and i.currency = 'EUR' and i.issued_on between p_from and p_to
+             where i.organisation_id = p_org and i.status in ('issued', 'part_paid', 'paid') and i.currency = (select currency from organisations where id = p_org) and i.issued_on between p_from and p_to
             union all
             -- Credit notes come off the sales of the period they are issued in.
             select n.vat_treatment, -l.net, l.vat_rate
@@ -1709,6 +1760,72 @@ language sql stable as $$
          coalesce((select coalesce(rated, 0) + coalesce(zero, 0) from sales where vat_treatment = 'outside_scope'), 0),
          coalesce((select net from purchases), 0),
          coalesce((select vat from purchases), 0);
+$$;
+
+-- What a UK VAT return is made from, for one period (VAT Notice 700/12 and 733, checked 27 Oct 2026).
+-- By invoice date; or under cash accounting, by the day money moved, each payment split between net and VAT
+-- in its document's own proportion. Reverse charges are apart, by kind, since each kind fills different boxes;
+-- and single capital purchases of £2,000 or more with VAT, the only purchases the flat rate lets a business reclaim.
+create function uk_vat_figures(p_org uuid, p_from date, p_to date, p_cash boolean)
+returns table (sales_vat numeric, purchase_vat numeric, sales_net numeric, purchases_net numeric,
+               rc_services_net numeric, rc_services_vat numeric, rc_construction_net numeric, rc_construction_vat numeric,
+               rc_import_net numeric, rc_import_vat numeric, capital_net numeric, capital_vat numeric)
+language sql stable as $$
+  with rc as (
+    select kind, sum(net) as net, sum(vat) as vat from (
+      select b.reverse_charge_kind as kind, b.net, b.reverse_charge_vat as vat from bills b
+       where b.organisation_id = p_org and b.reverse_charge and b.status <> 'void' and b.issued_on between p_from and p_to
+      union all
+      select t.reverse_charge_kind, t.net, t.reverse_charge_vat from bank_transactions t
+       where t.organisation_id = p_org and t.reverse_charge and t.txn_date between p_from and p_to
+      union all
+      select c.reverse_charge_kind, -c.net, -c.reverse_charge_vat from supplier_credits c
+       where c.organisation_id = p_org and c.reverse_charge and c.status = 'recorded' and c.issued_on between p_from and p_to
+    ) x group by kind
+  ), rc_vat as (select coalesce(sum(vat), 0) as vat from rc),
+  -- By invoice date: the ledger's VAT less the reverse charges in it (vat_summary leaves out what is never on a return).
+  accrual as (
+    select s.output_vat - r.vat as sales_vat, s.input_vat - r.vat as purchase_vat, s.sales_net, s.purchases_net
+      from vat_summary(p_org, p_from, p_to) s, rc_vat r
+  ),
+  -- By the day money moved: invoices and bills as they are paid, the bank's own entries as they happen.
+  received as (
+    select coalesce(sum(p.amount * i.vat_amount / nullif(i.total, 0)), 0) as vat, coalesce(sum(p.amount * i.net / nullif(i.total, 0)), 0) as net
+      from invoice_payments p join invoices i on i.id = p.invoice_id
+     where p.organisation_id = p_org and p.received_on between p_from and p_to
+  ), paid as (
+    select coalesce(sum(p.amount * b.vat_amount / nullif(b.total, 0)), 0) as vat,
+           coalesce(sum(p.amount * (select coalesce(sum(l.net), 0) from bill_lines l join ledger_accounts a on a.id = l.account_id where l.bill_id = b.id and not a.outside_vat) / nullif(b.total, 0)), 0) as net
+      from bill_payments p join bills b on b.id = p.bill_id
+     where p.organisation_id = p_org and p.paid_on between p_from and p_to
+  ), banked as (
+    select coalesce(sum(l.vat_amount) filter (where t.kind = 'receive'), 0) as sales_vat,
+           coalesce(sum(l.net) filter (where t.kind = 'receive' and a.type in ('revenue', 'other_income')), 0) as sales_net,
+           coalesce(sum(l.vat_amount) filter (where t.kind = 'spend' and not t.reverse_charge), 0) as purchase_vat,
+           coalesce(sum(l.net) filter (where t.kind = 'spend' and not a.outside_vat and a.system_role is null
+                                         and a.type in ('direct_costs', 'expense', 'depreciation', 'fixed_asset', 'current_asset')), 0) as purchases_net
+      from bank_transactions t join bank_transaction_lines l on l.transaction_id = t.id join ledger_accounts a on a.id = l.account_id
+     where t.organisation_id = p_org and t.txn_date between p_from and p_to
+  ), capital as (
+    select coalesce(sum(net), 0) as net, coalesce(sum(vat), 0) as vat from (
+      select l.net, l.vat_amount as vat from bill_lines l join bills b on b.id = l.bill_id join ledger_accounts a on a.id = l.account_id
+       where b.organisation_id = p_org and b.status <> 'void' and not b.reverse_charge and b.issued_on between p_from and p_to
+         and a.type = 'fixed_asset' and l.net + l.vat_amount >= 2000
+      union all
+      select l.net, l.vat_amount from bank_transaction_lines l join bank_transactions t on t.id = l.transaction_id join ledger_accounts a on a.id = l.account_id
+       where t.organisation_id = p_org and t.kind = 'spend' and not t.reverse_charge and t.txn_date between p_from and p_to
+         and a.type = 'fixed_asset' and l.net + l.vat_amount >= 2000
+    ) x
+  )
+  select case when p_cash then received.vat + banked.sales_vat else accrual.sales_vat end,
+         case when p_cash then paid.vat + banked.purchase_vat else accrual.purchase_vat end,
+         case when p_cash then received.net + banked.sales_net else accrual.sales_net end,
+         case when p_cash then paid.net + banked.purchases_net else accrual.purchases_net end,
+         coalesce((select net from rc where kind = 'services'), 0), coalesce((select vat from rc where kind = 'services'), 0),
+         coalesce((select net from rc where kind = 'construction'), 0), coalesce((select vat from rc where kind = 'construction'), 0),
+         coalesce((select net from rc where kind = 'import'), 0), coalesce((select vat from rc where kind = 'import'), 0),
+         capital.net, capital.vat
+    from accrual, received, paid, banked, capital;
 $$;
 
 create view v_journal_lines as
@@ -2317,7 +2434,7 @@ create trigger vat_checks_audit after insert on vat_checks for each row execute 
 create table deadline_marks (
   id              uuid primary key default gen_random_uuid(),
   organisation_id uuid not null references organisations (id) on delete cascade,
-  kind            text not null check (kind in ('vies', 'provisional_tax', 'tax_return', 'tax_payment', 'annual_return', 'payroll', 'employer_return')),
+  kind            text not null check (kind in ('vies', 'provisional_tax', 'tax_return', 'tax_payment', 'annual_return', 'payroll', 'employer_return', 'vat_payment', 'accounts_filing', 'confirmation_statement')),
   period_end      date not null,
   done_on         date not null,
   done_by         text not null,
@@ -2413,6 +2530,8 @@ create table client_files (
   enquiry_id            uuid references crm_enquiries (id) on delete set null,
   status                text not null default 'onboarding' check (status in ('onboarding', 'active', 'declined')),
   company_name          text not null check (length(btrim(company_name)) between 1 and 200),
+  -- Where the company is: its books are opened in that country's terms (lib/domain/regimes).
+  country               char(2) not null default 'CY' check (country in ('CY', 'GB')),
   he_number             text,
   incorporated_on       date,
   registered_address    text,
@@ -2643,7 +2762,8 @@ create table year_ends (
   id                   uuid primary key default gen_random_uuid(),
   organisation_id      uuid not null references organisations (id) on delete cascade,
   period_end           date not null,
-  assurance            text not null default 'audit' check (assurance in ('audit', 'review')),
+  -- A UK company small enough is exempt from audit.
+  assurance            text not null default 'audit' check (assurance in ('audit', 'review', 'exempt')),
   framework            text not null default 'ifrs' check (framework in ('ifrs', 'frs_small')),
   -- Not in the books: the average number of employees, the year's turnover before Ledgerline kept the books,
   -- and the year before's figures when that year isn't in Ledgerline at all.
@@ -2664,6 +2784,116 @@ create table year_ends (
   unique (organisation_id, period_end),
   constraint year_ends_opinion check ((opinion is null) = (report_signed_on is null))
 );
+
+-- ---------------------------------------------------------------------------
+-- Payroll (Cyprus): the employees, each month's run and its payslips. A run is worked out in lib/domain/payroll-cy
+-- and, once approved, posts one entry: wages and the employer's contributions against what is owed to Social
+-- Insurance Services, the tax withheld and the net salaries.
+-- ---------------------------------------------------------------------------
+
+create table employees (
+  id                  uuid primary key default gen_random_uuid(),
+  organisation_id     uuid not null references organisations (id) on delete cascade,
+  name                text not null check (length(btrim(name)) between 1 and 200),
+  email               text,
+  job_title           text,
+  -- What the monthly TD7 and Social Insurance Services need: the tax identification and social insurance numbers.
+  tic                 text,
+  social_insurance_no text,
+  id_document         text,
+  date_of_birth       date,
+  start_date          date not null,
+  leave_date          date,
+  monthly_salary      numeric(12, 2) not null check (monthly_salary >= 0),
+  thirteenth_salary   boolean not null default true,
+  iban                text check (iban is null or iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'),
+  -- Declared on form TD59 for the tax year: deductions (children, home interest or rent, insurance), and any exempt part of the pay.
+  annual_deductions   numeric(12, 2) not null default 0 check (annual_deductions >= 0),
+  annual_exemption    numeric(12, 2) not null default 0 check (annual_exemption >= 0),
+  -- The year's pay before Ledgerline ran the payroll: brought forward for the tax to be right from the first run.
+  ytd_year            smallint,
+  ytd_gross           numeric(12, 2) not null default 0,
+  ytd_insurable       numeric(12, 2) not null default 0,
+  ytd_si              numeric(12, 2) not null default 0,
+  ytd_gesy            numeric(12, 2) not null default 0,
+  ytd_tax             numeric(12, 2) not null default 0,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  unique (organisation_id, id),
+  constraint employees_dates check (leave_date is null or leave_date >= start_date)
+);
+
+create table payroll_runs (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  period          date not null check (extract(day from period) = 1),
+  pay_date        date not null,
+  status          text not null default 'draft' check (status in ('draft', 'posted')),
+  posted_at       timestamptz,
+  posted_by       text,
+  created_by      text,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  unique (organisation_id, period)
+);
+
+create table payslips (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  run_id          uuid not null,
+  employee_id     uuid not null,
+  salary          numeric(12, 2) not null default 0,
+  other_pay       numeric(12, 2) not null default 0,
+  thirteenth      numeric(12, 2) not null default 0,
+  gross           numeric(12, 2) not null,
+  insurable       numeric(12, 2) not null,
+  si_employee     numeric(12, 2) not null,
+  gesy_employee   numeric(12, 2) not null,
+  paye            numeric(12, 2) not null,
+  net             numeric(12, 2) not null,
+  si_employer     numeric(12, 2) not null,
+  gesy_employer   numeric(12, 2) not null,
+  social_cohesion numeric(12, 2) not null,
+  redundancy      numeric(12, 2) not null,
+  training        numeric(12, 2) not null,
+  unique (run_id, employee_id),
+  foreign key (organisation_id, run_id) references payroll_runs (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, employee_id) references employees (organisation_id, id),
+  constraint payslips_net check (net = gross - si_employee - gesy_employee - paye)
+);
+
+-- A run once approved: one entry on its pay date. The accounts it needs are made if the company's chart lacks them.
+create function post_payroll_run(p_id uuid) returns void language plpgsql as $$
+declare v payroll_runs; t record; v_wages uuid; v_costs uuid; v_social uuid; v_paye uuid; v_net uuid;
+  v_label text;
+begin
+  select * into v from payroll_runs where id = p_id;
+  if not found then
+    perform ledger_replace(e.organisation_id, 'payroll', p_id, null, null, null, null) from journal_entries e where e.source = 'payroll' and e.source_id = p_id;
+    return;
+  end if;
+  if v.status <> 'posted' then perform ledger_replace(v.organisation_id, 'payroll', p_id, null, null, null, null); return; end if;
+  insert into ledger_accounts (organisation_id, code, name, type, outside_vat)
+  select v.organisation_id, a.code, a.name, a.type::ledger_account_type, true
+    from (values ('477', 'Salaries and wages', 'expense'), ('478', 'Social insurance, GESY and employer funds', 'expense'), ('825', 'Social insurance and GESY payable', 'current_liability'),
+                 ('826', 'Income tax withheld (PAYE) payable', 'current_liability'), ('835', 'Net salaries payable', 'current_liability')) a (code, name, type)
+   where not exists (select 1 from ledger_accounts l where l.organisation_id = v.organisation_id and l.code = a.code);
+  select id into v_wages from ledger_accounts where organisation_id = v.organisation_id and code = '477';
+  select id into v_costs from ledger_accounts where organisation_id = v.organisation_id and code = '478';
+  select id into v_social from ledger_accounts where organisation_id = v.organisation_id and code = '825';
+  select id into v_paye from ledger_accounts where organisation_id = v.organisation_id and code = '826';
+  select id into v_net from ledger_accounts where organisation_id = v.organisation_id and code = '835';
+  select coalesce(sum(gross), 0) as gross, coalesce(sum(si_employee + gesy_employee), 0) as deducted, coalesce(sum(paye), 0) as paye, coalesce(sum(net), 0) as net,
+         coalesce(sum(si_employer + gesy_employer + social_cohesion + redundancy + training), 0) as employer
+    into t from payslips where run_id = p_id;
+  v_label := to_char(v.period, 'FMMonth YYYY');
+  perform ledger_replace(v.organisation_id, 'payroll', p_id, v.pay_date, 'PAY ' || to_char(v.period, 'YYYY-MM'), 'Payroll, ' || v_label, jsonb_build_array(
+    jsonb_build_object('account_id', v_wages, 'debit', t.gross, 'description', 'Gross pay, ' || v_label),
+    jsonb_build_object('account_id', v_costs, 'debit', t.employer, 'description', 'Employer''s social insurance, GESY and funds'),
+    jsonb_build_object('account_id', v_social, 'credit', t.deducted + t.employer, 'description', 'To Social Insurance Services'),
+    jsonb_build_object('account_id', v_paye, 'credit', t.paye, 'description', 'Income tax withheld, to the Tax Department'),
+    jsonb_build_object('account_id', v_net, 'credit', t.net, 'description', 'Net salaries to pay')));
+end $$;
 
 -- A calendar someone subscribes to from Google, Outlook or Apple: a secret link, kept only as its hash.
 -- It shows what its person may see (every client, or one company), and stops when they make a new one.
@@ -2766,6 +2996,9 @@ alter table enquiry_form_keys enable row level security;
 alter table fee_invoices enable row level security;
 alter table year_ends enable row level security;
 alter table calendar_feeds enable row level security;
+alter table employees enable row level security;
+alter table payroll_runs enable row level security;
+alter table payslips enable row level security;
 alter table invitations enable row level security;
 alter table invoice_lines enable row level security;
 alter table invoice_payments enable row level security;
@@ -2951,6 +3184,19 @@ create policy time_entries_access on time_entries for all to authenticated using
 -- A year end: seen by everyone who may see the company (its auditor included); kept by the practice.
 create policy year_ends_read on year_ends for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
 create policy year_ends_write on year_ends for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
+-- A company's payroll: read by those who may see its books, changed by those who may change them.
+create policy employees_read on employees for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy employees_insert on employees for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy employees_update on employees for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy employees_delete on employees for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy payroll_runs_read on payroll_runs for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy payroll_runs_insert on payroll_runs for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy payroll_runs_update on payroll_runs for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy payroll_runs_delete on payroll_runs for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy payslips_read on payslips for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy payslips_insert on payslips for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy payslips_update on payslips for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy payslips_delete on payslips for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
 -- Each person's own calendar links, for companies they can see. Reading a link's calendar goes through the service, by its hash.
 create policy calendar_feeds_own on calendar_feeds for all to authenticated using (user_id = (select app_user_id()))
   with check (user_id = (select app_user_id()) and (organisation_id is null or organisation_id = any ((select visible_companies())::uuid[])));

@@ -22,9 +22,10 @@ const id = (value: string) => value.replace(/[^A-Za-z0-9/\-?:().,'+]/g, "").slic
 const cents = (value: number) => Math.round(value * 100);
 const amount = (value: number) => (cents(value) / 100).toFixed(2);
 
+/** `salaries`: a payroll's net pay, marked as salaries (category purpose SALA), which banks book as one line and keep private. */
 export function sepaCreditTransfer(input: {
   messageId: string; createdAt: string; executionDate: string;
-  debtor: { name: string; iban: string; bic: string | null }; payments: SepaPayment[];
+  debtor: { name: string; iban: string; bic: string | null }; payments: SepaPayment[]; salaries?: boolean;
 }) {
   const payments = input.payments.filter(payment => validIban(payment.iban) && cents(payment.amount) > 0);
   if (!validIban(input.debtor.iban)) throw new Error("The company's bank account has no valid IBAN.");
@@ -48,7 +49,7 @@ export function sepaCreditTransfer(input: {
     `<GrpHdr><MsgId>${id(input.messageId)}</MsgId><CreDtTm>${input.createdAt.slice(0, 19)}</CreDtTm><NbOfTxs>${payments.length}</NbOfTxs><CtrlSum>${total}</CtrlSum><InitgPty><Nm>${text(input.debtor.name, 70)}</Nm></InitgPty></GrpHdr>`,
     "<PmtInf>",
     `<PmtInfId>${id(`${input.messageId}-1`)}</PmtInfId><PmtMtd>TRF</PmtMtd><BtchBookg>true</BtchBookg><NbOfTxs>${payments.length}</NbOfTxs><CtrlSum>${total}</CtrlSum>`,
-    "<PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf>",
+    `<PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl>${input.salaries ? "<CtgyPurp><Cd>SALA</Cd></CtgyPurp>" : ""}</PmtTpInf>`,
     `<ReqdExctnDt>${input.executionDate}</ReqdExctnDt>`,
     `<Dbtr><Nm>${text(input.debtor.name, 70)}</Nm></Dbtr>`,
     `<DbtrAcct><Id><IBAN>${compactIban(input.debtor.iban)}</IBAN></Id></DbtrAcct>`,

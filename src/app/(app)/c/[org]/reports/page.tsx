@@ -27,8 +27,13 @@ const REPORTS = [
   ] },
 ] as const;
 
+/** A UK company's VAT report is HMRC's nine boxes, and it has no VIES statement: that is for EU trade, which left with Brexit. */
+const forCountry = (country: string) => country !== "GB" ? REPORTS : REPORTS.map(group => ({ ...group, items: group.items
+  .filter(item => item.href !== "/accounts/reports/vies")
+  .map(item => item.href === "/accounts/reports/vat" ? { ...item, title: "VAT return", text: "HMRC’s nine boxes, by the company’s scheme, the date they are due, and filing that locks the period." } : item) }));
+
 export default async function ReportsPage() {
-  await requireOrg();
+  const org = await requireOrg();
   return <PageBody className="space-y-4">
     <RecordHeader title="Reports" description="Every figure comes from the same ledger, so the statements always agree." />
     <Link href="/accounts/reports/overview" className="ll-panel border-brand-200 bg-brand-50 hover:bg-brand-100 block px-4 py-3.5 transition-colors">
@@ -36,7 +41,7 @@ export default async function ReportsPage() {
       <span className="text-ink-muted mt-0.5 block text-[12px] leading-relaxed">Cash, what is owed each way, the year against the last, twelve months of charts, the books health checks, and an AI read of all of it on request.</span>
     </Link>
     <div className="grid items-start gap-4 lg:grid-cols-3">
-      {REPORTS.map(group => <section key={group.group} aria-label={group.group} className="ll-panel overflow-hidden">
+      {forCountry(org.country).map(group => <section key={group.group} aria-label={group.group} className="ll-panel overflow-hidden">
         <h3 className="text-ink-faint border-hairline border-b px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase">{group.group}</h3>
         <ul className="divide-hairline divide-y">{group.items.map(item => <li key={item.href}>
           <Link href={item.href} className="hover:bg-surface-sunken block px-4 py-3">

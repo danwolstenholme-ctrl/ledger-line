@@ -64,7 +64,7 @@ export async function getReconcileView(bankAccountId: string, view: ReconcileVie
 export async function getMatchCandidates() {
   const org = await requireOrg();
   const [invoices, bills, examples] = await Promise.all([
-    sql<{ id: string; number: string; client_name: string; balance: number; due_on: string | null }>("select id, number, client_name, balance, due_on from v_invoice_directory where organisation_id = $1 and status in ('issued', 'part_paid') and currency = 'EUR'", [org.id]),
+    sql<{ id: string; number: string; client_name: string; balance: number; due_on: string | null }>("select id, number, client_name, balance, due_on from v_invoice_directory where organisation_id = $1 and status in ('issued', 'part_paid') and currency = $2", [org.id, org.currency]),
     sql<{ id: string; number: string | null; supplier_name: string; balance: number; due_on: string | null }>("select id, number, supplier_name, balance, due_on from v_bill_directory where organisation_id = $1 and status in ('awaiting_payment', 'part_paid')", [org.id]),
     // How lines were coded when they were money spent or received: the account of each one's first line.
     sql<{ description: string; counterparty: string | null; kind: "spend" | "receive"; account_id: string; code: string; name: string; vat_rate: number }>(`

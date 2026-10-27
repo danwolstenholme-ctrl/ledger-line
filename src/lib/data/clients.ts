@@ -16,6 +16,8 @@ import { currentList, refreshState, type ScreeningRow } from "@/lib/sanctions";
  */
 
 export type ClientFileRow = {
+  /** Its country, whose terms its books are opened in. */
+  country: "CY" | "GB";
   id: string; practice_id: string; organisation_id: string | null; enquiry_id: string | null; status: "onboarding" | "active" | "declined";
   company_name: string; he_number: string | null; incorporated_on: string | null; registered_address: string | null; business: string;
   contact_name: string | null; contact_email: string | null; contact_phone: string | null; services: Service[];

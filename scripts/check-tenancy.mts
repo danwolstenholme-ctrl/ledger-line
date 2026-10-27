@@ -84,8 +84,8 @@ const above = (floor: number) => (value: unknown) => typeof value === "number" &
 const refused = (value: unknown) => typeof value === "string" && /row-level security|permission denied/.test(value);
 
 // Maria, a partner at Saltlake: every company the firm keeps, and its own books.
-expect("Maria sees Saltlake's 7 companies", await count(maria, "select count(*) as n from organisations"), is(7));
-expect("Maria sees every client file", await count(maria, "select count(*) as n from client_files"), is(7));
+expect("Maria sees Saltlake's 9 companies, two of them in the UK", await count(maria, "select count(*) as n from organisations"), is(9));
+expect("Maria sees every client file", await count(maria, "select count(*) as n from client_files"), is(9));
 expect("Maria sees the time the firm spent", await count(maria, "select count(*) as n from time_entries"), above(0));
 expect("Maria sees Pixelforge's invoices through the directory view", await count(maria, "select count(*) as n from v_invoice_directory where organisation_id = $1", [pixelforge]), above(0));
 
@@ -140,6 +140,27 @@ expect("But not for Aegean Blue, which he can't see", await count(nikos, "insert
 expect("Nor in Maria's name", await count(nikos, "insert into calendar_feeds (user_id, token_hash) values ($1, $2) returning id", [mariaId, "d".repeat(64)]), refused);
 expect("Nikos sees his own link, not Maria's", await count(nikos, "select count(*) as n from calendar_feeds"), is(1));
 expect("Nobody signed in sees no calendar link", await count(null, "select count(*) as n from calendar_feeds"), is(0));
+
+// Payroll: the people a company employs and what they are paid, for that company's books and nobody else's.
+expect("Maria sees Aegean Blue's 4 employees", await count(maria, "select count(*) as n from employees where organisation_id = $1", [aegean]), is(4));
+expect("Eva sees no employee of Saltlake's clients", await count(eva, "select count(*) as n from employees"), is(0));
+expect("Nikos sees none of Aegean Blue's employees", await count(nikos, "select count(*) as n from employees where organisation_id = $1", [aegean]), is(0));
+expect("Nikos, the owner, adds one to Pixelforge", await count(nikos, "insert into employees (organisation_id, name, start_date, monthly_salary) values ($1, 'Test Developer', '2026-10-01', 3000) returning id", [pixelforge]), is(1));
+expect("Nor can he add one to Aegean Blue", await count(nikos, "insert into employees (organisation_id, name, start_date, monthly_salary) values ($1, 'Sneaky Hire', '2026-10-01', 3000) returning id", [aegean]), refused);
+expect("Pixelforge's auditor reads its employees but cannot add one", [await count(auditor, "select count(*) as n from employees"),
+  await count(auditor, "insert into employees (organisation_id, name, start_date, monthly_salary) values ($1, 'Audit Hire', '2026-10-01', 1000) returning id", [pixelforge])].join(" / "),
+  (value: unknown) => typeof value === "string" && value.startsWith("1 / ") && refused(value.slice(4)));
+const runRows = await as(maria, "insert into payroll_runs (organisation_id, period, pay_date, status, posted_at) values ($1, '2026-10-01', '2026-10-31', 'posted', now()) returning id", [aegean]);
+const runId = Array.isArray(runRows) ? String(runRows[0]?.id) : "";
+const someone = (await conn.query("select id from employees where organisation_id = $1 order by name limit 1", [aegean])).rows[0].id as string;
+await as(maria, `insert into payslips (organisation_id, run_id, employee_id, salary, gross, insurable, si_employee, gesy_employee, paye, net, si_employer, gesy_employer, social_cohesion, redundancy, training)
+  values ($1, $2, $3, 2000, 2000, 2000, 176, 53, 15.74, 1755.26, 176, 58, 40, 24, 10)`, [aegean, runId, someone]);
+await as(maria, "select post_payroll_run($1)", [runId]);
+expect("Maria posts Aegean Blue's October payroll: wages and contributions, balanced", await as(maria, `select sum(l.debit) as debit, sum(l.credit) as credit from journal_lines l join journal_entries e on e.id = l.entry_id
+  where e.source = 'payroll' and e.source_id = $1`, [runId]).then(rows => Array.isArray(rows) ? `${Number(rows[0]?.debit)} = ${Number(rows[0]?.credit)}` : rows.error), is("2308 = 2308"));
+expect("A payslip whose net isn't its gross less what is withheld is refused", await count(maria, `insert into payslips (organisation_id, run_id, employee_id, gross, insurable, si_employee, gesy_employee, paye, net, si_employer, gesy_employer, social_cohesion, redundancy, training)
+  select $1, $2, id, 1000, 1000, 88, 26.5, 0, 900, 88, 29, 20, 12, 5 from employees where organisation_id = $1 and id <> $3 limit 1 returning id`, [aegean, runId, someone]), (value: unknown) => typeof value === "string" && value.includes("payslips_net"));
+expect("Eva sees none of the payslips, Nikos none of Aegean Blue's", Number(await count(eva, "select count(*) as n from payslips")) + Number(await count(nikos, "select count(*) as n from payslips")), is(0));
 
 // Nobody signed in: nothing.
 expect("Nobody signed in sees no company", await count(null, "select count(*) as n from organisations"), is(0));

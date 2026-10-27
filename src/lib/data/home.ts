@@ -6,7 +6,7 @@ import { getMyWork } from "@/lib/data/crm";
 import { getRepeatingDueCount } from "@/lib/data/sales";
 import { addDays } from "@/lib/domain/invoice-math";
 import { firmToday } from "@/lib/domain/invoices";
-import { nextVatReturn } from "@/lib/domain/vat";
+import { nextVatReturn, vatSettingsOf } from "@/lib/domain/vat";
 import { requireOrg, getBooksStart } from "@/lib/org";
 import { answerView, latestChecks, vatKey } from "@/lib/vies";
 
@@ -60,7 +60,7 @@ export async function getCompanyHome() {
     repeatingDue: repeating.due,
     waitingEnquiries: { count: Number(waiting?.count ?? 0), oldest: waiting?.oldest ?? null },
     vatUnconfirmed: unconfirmed.map(customer => ({ id: customer.id, name: customer.name })),
-    vat: nextVatReturn({ quarterEndMonth: org.vat_quarter_end_month, registered: org.vat_registered, booksFrom: await getBooksStart(org.id), filed: filed.map(row => row.period_to), today }),
+    vat: nextVatReturn({ vat: vatSettingsOf(org), registered: org.vat_registered, booksFrom: await getBooksStart(org.id), filed: filed.map(row => row.period_to), today }),
     tasks: work.tasks,
   };
 }

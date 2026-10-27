@@ -6,8 +6,21 @@
  * locale would make the server and the browser disagree during hydration.
  */
 
+import { cache } from "react";
+
 export const FIRM_LOCALE = "en-GB";
 export const FIRM_TIME_ZONE = "Europe/Nicosia";
+
+/**
+ * The currency a server request's figures are in: that of the company the
+ * request is about, which requireOrg() sets as it loads it, so a page's
+ * amounts need not each name it. One value per request (React's cache). In
+ * the browser, and on a page about many companies, an amount names its own:
+ * useCurrency() inside a company, or each row's.
+ */
+const requestMoney = cache(() => ({ currency: "EUR" }));
+export function setRequestCurrency(currency: string) { requestMoney().currency = currency; }
+export const requestCurrency = () => requestMoney().currency;
 
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
@@ -29,7 +42,7 @@ function currencyFormatter(currency: string, compact: boolean) {
 /** `€12,500`. Fees are quoted in whole units; the cents are noise on a KPI. */
 export function formatMoney(
   amount: number | null | undefined,
-  currency = "EUR",
+  currency = requestCurrency(),
   options: { compact?: boolean; fallback?: string } = {},
 ) {
   const { compact = false, fallback = "—" } = options;
@@ -45,7 +58,7 @@ const exactFormatters = new Map<string, Intl.NumberFormat>();
  * `€1,323.40`. An invoice figure is the figure on the document, so the cents
  * stay. Accepts the numeric strings PostgREST returns for `numeric` columns.
  */
-export function formatAmount(amount: number | string | null | undefined, currency = "EUR", fallback = "—") {
+export function formatAmount(amount: number | string | null | undefined, currency = requestCurrency(), fallback = "—") {
   if (amount === null || amount === undefined || amount === "") return fallback;
   const value = Number(amount);
   if (!Number.isFinite(value)) return fallback;

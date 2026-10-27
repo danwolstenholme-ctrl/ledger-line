@@ -77,8 +77,8 @@ function lines(text: string | null | undefined) {
   return (text ?? "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 }
 
-// Registration numbers are kept as the company writes them, "HE 395540", or as the bare number.
-const heOf = (org: OrganisationRow) => org.he_number ? (/^HE/i.test(org.he_number) ? org.he_number : `HE ${org.he_number}`) : null;
+// Registration numbers are kept as the company writes them, "HE 395540", or as the bare number. A UK company's is its Companies House number.
+const heOf = (org: OrganisationRow) => !org.he_number ? null : org.country === "GB" ? `Company no. ${org.he_number}` : /^HE/i.test(org.he_number) ? org.he_number : `HE ${org.he_number}`;
 
 /** The company's own colour, and a text colour that reads on it: dark on a light accent, white on a dark one. */
 function accentOf(org: OrganisationRow) {
@@ -89,7 +89,8 @@ function accentOf(org: OrganisationRow) {
 
 /** The issuing company across the top: its logo or its name, and what it prints about itself. */
 function CompanyHeader({ org, logo }: { org: OrganisationRow; logo: string | null }) {
-  const registration = [org.vat_number ? `VAT ${org.vat_number}` : null, heOf(org), org.tic ? `TIC ${org.tic}` : null].filter(Boolean).join(" · ");
+  // A UK company's UTR is HMRC's business, not its customers': it isn't printed.
+  const registration = [org.vat_number ? `VAT ${org.vat_number}` : null, heOf(org), org.tic && org.country !== "GB" ? `TIC ${org.tic}` : null].filter(Boolean).join(" · ");
   return <View style={styles.header}>
     <View style={styles.brand}>
       {/* eslint-disable-next-line jsx-a11y/alt-text -- a PDF image, not an HTML one */}
@@ -125,6 +126,13 @@ function Footer({ org, title }: { org: OrganisationRow; title: string }) {
 function treatmentNote(data: DocumentPdfData) {
   const { document, org } = data;
   if (!org.vat_registered) return `${org.name} is not registered for VAT. No VAT has been charged.`;
+  if (org.country === "GB") {
+    // The CIS domestic reverse charge: the invoice says so, and shows the VAT the customer is to pay HMRC.
+    if (document.vat_treatment === "reverse_charge") return `Reverse charge: customer to pay the VAT to HMRC. VAT at 20% on ${formatAmount(document.net, org.currency)}: ${formatAmount(Math.round(Number(document.net) * 20) / 100, org.currency)}.`;
+    if (document.vat_treatment === "exempt") return "Exempt from VAT.";
+    if (document.vat_treatment === "outside_scope") return "Outside the scope of UK VAT: the place of supply is outside the UK.";
+    return null;
+  }
   if (document.vat_treatment === "reverse_charge") return "Reverse charge: VAT to be accounted for by the recipient under Article 196 of Council Directive 2006/112/EC.";
   if (document.vat_treatment === "exempt") return "Exempt from VAT.";
   if (document.vat_treatment === "outside_scope") return "Outside the scope of Cyprus VAT: the place of supply is outside Cyprus.";
@@ -149,7 +157,8 @@ const TITLES = { invoice: "Invoice", quote: "Quote", credit_note: "Credit note" 
 export function SalesDocument(data: DocumentPdfData) {
   const { kind, org, document, lines: items, customer, bank, corrects, logo } = data;
   const { accent, onAccent } = accentOf(org);
-  const money = (value: number | string) => formatAmount(value, "EUR");
+  // In the document's own currency: an invoice carries one; a quote or credit note is in the company's.
+  const money = (value: number | string) => formatAmount(value, ("currency" in document && document.currency) || org.currency);
   const title = TITLES[kind];
   const until = "due_on" in document ? document.due_on : "valid_until" in document ? document.valid_until : null;
   const paid = "amount_paid" in document ? Number(document.amount_paid) : 0;
@@ -266,7 +275,7 @@ const AGES = [["current", "Not yet due"], ["1-30", "1–30 days"], ["31-60", "31
 export function StatementDocument(data: StatementPdfData) {
   const { org, customer, from, to, opening, lines: rows, closing, ageing, unusedCredit, bank, logo } = data;
   const { accent } = accentOf(org);
-  const money = (value: number | string) => formatAmount(value, "EUR");
+  const money = (value: number | string) => formatAmount(value, org.currency);
   const overdue = AGES.slice(1).reduce((sum, [key]) => sum + (ageing.get(key) ?? 0), 0);
   const kindLabel = { invoice: "Invoice", payment: "Payment", credit_note: "Credit note", refund: "Refund" } as const;
   return <Document title={`Statement ${customer.name}`} author={org.name} subject={customer.name} creator={org.name} producer={org.name}>

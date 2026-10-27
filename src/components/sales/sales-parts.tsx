@@ -12,12 +12,22 @@ import type { CreditNoteStatus, InvoiceStatus, VatTreatment } from "@/types/data
 export const TREATMENT_LABELS: Record<VatTreatment, string> = {
   standard: "Standard VAT", exempt: "Exempt from VAT", reverse_charge: "Reverse charge", outside_scope: "Outside the scope of VAT",
 };
-export const TREATMENT_DETAIL: Record<VatTreatment, string> = {
-  standard: "VAT charged as each line shows, owed in box 1",
-  exempt: "No VAT charged: box 6 only",
-  reverse_charge: "No VAT charged: the customer accounts for it (Article 196). Box 8B and the VIES statement",
-  outside_scope: "No VAT charged: supplied outside Cyprus. Box 10",
+const DETAIL: Record<"CY" | "GB", Record<VatTreatment, string>> = {
+  CY: {
+    standard: "VAT charged as each line shows, owed in box 1",
+    exempt: "No VAT charged: box 6 only",
+    reverse_charge: "No VAT charged: the customer accounts for it (Article 196). Box 8B and the VIES statement",
+    outside_scope: "No VAT charged: supplied outside Cyprus. Box 10",
+  },
+  GB: {
+    standard: "VAT charged as each line shows, owed in box 1",
+    exempt: "No VAT charged: an exempt supply, in box 6",
+    reverse_charge: "No VAT charged: the customer pays it to HMRC under the CIS domestic reverse charge. Box 6",
+    outside_scope: "No VAT charged: supplied outside the UK. Box 6",
+  },
 };
+/** What a sale's VAT treatment means for the company's own return. */
+export const treatmentDetail = (treatment: VatTreatment, country: string) => DETAIL[country === "GB" ? "GB" : "CY"][treatment];
 
 const INVOICE_LABELS: Record<InvoiceStatus, string> = { draft: "Draft", issued: "Awaiting payment", part_paid: "Part paid", paid: "Paid", void: "Void" };
 

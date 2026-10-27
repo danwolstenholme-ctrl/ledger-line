@@ -142,7 +142,7 @@ export function toDate(period: { range: ReportRange; from: string; to: string },
 
 /** What posted an entry, as the ledger reports name it. */
 export const JOURNAL_SOURCE_LABELS: Record<JournalSource, string> = {
-  invoice: "Sales invoice", invoice_payment: "Money received", bill: "Bill", bill_payment: "Bill paid", bank: "Bank", manual: "Journal", credit_note: "Credit note", supplier_credit: "Supplier credit",
+  invoice: "Sales invoice", invoice_payment: "Money received", bill: "Bill", bill_payment: "Bill paid", bank: "Bank", manual: "Journal", credit_note: "Credit note", supplier_credit: "Supplier credit", payroll: "Payroll",
 };
 
 /** The journal report's filters: everything, or one day book. */

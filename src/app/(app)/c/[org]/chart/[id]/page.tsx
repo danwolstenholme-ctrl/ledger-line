@@ -16,7 +16,7 @@ import { RecordFailure, RecordHeader, RecordSection, recordOutlineButton } from 
 
 export const metadata: Metadata = { title: "Account" };
 
-const SOURCE_LABELS = { invoice: "Invoice", invoice_payment: "Payment received", bill: "Bill", bill_payment: "Bill paid", bank: "Bank", manual: "Journal", credit_note: "Credit note", supplier_credit: "Supplier credit" } as const;
+const SOURCE_LABELS = { invoice: "Invoice", invoice_payment: "Payment received", bill: "Bill", bill_payment: "Bill paid", bank: "Bank", manual: "Journal", credit_note: "Credit note", supplier_credit: "Supplier credit", payroll: "Payroll" } as const;
 
 /**
  * One account's transactions for a period, with the balance after each: the

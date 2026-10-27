@@ -276,6 +276,47 @@ to reconcile.
   old. On the laptop, Apple Calendar can read it; Google and Outlook read from
   their own servers, so they need Ledgerline online.
 
+### 1m. Two UK clients, 3 minutes
+- Each company has its own country: its currency, chart of accounts, VAT
+  rates, VAT return and deadlines follow it. Switch to **Thames Edge Joinery**
+  (Reading): pounds, the UK chart, VAT at 20%, 5% or 0%.
+- It is a joinery subcontractor: its sales to contractors are under the CIS
+  domestic reverse charge (the invoice says "customer to pay the VAT to HMRC"),
+  and it buys in labour the same way. **VAT returns**: HMRC's nine boxes, the
+  construction reverse charge in boxes 1 and 4, and a repayment each quarter.
+- **Record a bill** from Wren Site Labour: the reverse charge is a choice,
+  because each kind fills different boxes (services from abroad, construction,
+  imports under postponed VAT accounting).
+- **Willow & Wren Design** (Bristol) is on the Flat Rate Scheme at 12%: its
+  return is 12% of the turnover with its VAT, less VAT on the one computer over
+  £2,000. **Mark as filed**: the rest of the VAT charged moves to account 265,
+  Flat Rate Scheme surplus. Its **Company settings** hold the scheme.
+- Their **Deadlines** are HMRC's and Companies House's; their **Year end**
+  tests the small-company audit exemption. Submitting to HMRC through Making
+  Tax Digital is the next step, built against HMRC's sandbox first.
+
+### 1n. Payroll (a company's **Payroll**, under Money), 3 minutes
+- **Aegean Blue Marine**: four employees, each with their salary, tax and
+  social insurance numbers, and what the previous payroll paid them from
+  January to September, brought forward so this year's tax is right from the
+  first month in Ledgerline. **Nikos Charalambous** declared two children on
+  TD59.
+- **Run October 2026's payroll**: every payslip worked out as a draft. Social
+  insurance 8.8% each way up to the month's maximum, GESY 2.65% and 2.9%, the
+  employer's funds, and income tax: the year's tax at today's pay, less what
+  has been withheld. **To pay by 30 Nov 2026** says what goes to Social
+  Insurance Services, what to the Tax Department with the monthly TD7, and
+  what to the employees.
+- **Overtime, a bonus or commission this month**: add €250 for Andri Ioannou
+  and the month is worked out again, tax included.
+- **Approve and post October 2026**: one entry in the books on the pay date
+  (wages and contributions against what is owed to each), and the month is
+  fixed. Then **Payslips** (a PDF, a page each, with the year to date),
+  **Salary payments file** (SEPA, marked as salaries, to upload to the bank)
+  and **TD7 and Social Insurance figures** (a CSV, employee by employee).
+- December pays the 13th salary on its own: insurable only up to what is left
+  of the year's maximum. A UK company has no Payroll in its menu yet.
+
 ### 2. AI capture (`/capture`), 4 minutes
 - Drag all four files from `demo-files/` in at once:
   - `01-greek-marine-fuel-invoice.pdf`: Greek, addressed to ΑΙΓΑΙΟ ΜΠΛΟΥ…
@@ -352,6 +393,18 @@ The dates and tests are in `src/lib/domain` (`deadlines.ts`, `vat.ts`,
   quarter; VIES by the 15th of the month after a month with EU services.
 - **Payroll**: the monthly TD7, Social Insurance, GESY and tax withheld by the
   end of the following month; the employer's TD7 by 31 May of the next year.
+- **What payroll works out** (`payroll-cy.ts`, checked 27 October 2026):
+  social insurance 8.8% from the employee and 8.8% from the employer on
+  earnings up to the month's maximum (€5,551 in 2025, €5,742 in 2026), and on
+  the same earnings the Redundancy Fund (1.2%) and the Human Resource
+  Development fund (0.5%); GESY 2.65% and 2.9% on all pay up to €180,000 a
+  year; the Social Cohesion Fund, 2% on all pay. A 13th salary is declared on
+  its own, insurable only up to what is left of the year's maximum. Income
+  tax from 2026: nothing to €22,000, then 20%, 25% (from €32,000), 30% (from
+  €42,000) and 35% (over €72,000); 2025's bands start at €19,500. Social
+  insurance and GESY are deducted up to a fifth of the pay, and so is what the
+  employee declares on TD59. The Central Holiday Fund is left out: most
+  employers are exempt and run their own leave.
 - **Official extensions** (`extensions.ts`, kept from the announcements): 2024
   company tax returns and the 2025 employer's return to 30 November 2026; the
   VAT return for the quarter to 30 November 2025 and December 2025's VIES to
@@ -381,7 +434,56 @@ Sources: [Cap. 113, consolidated, on CyLaw](http://www.cylaw.org/nomoi/enop/non-
 [PwC Tax Summaries, Cyprus tax administration](https://taxsummaries.pwc.com/cyprus/corporate/tax-administration);
 [EY, Cyprus enacts major tax reform legislation](https://globaltaxnews.ey.com/news/2026-0140-cyprus-enacts-major-tax-reform-legislation);
 [ICPAC's financial reporting standards-setting committee](https://www.cbn.com.cy/article/129614/icpac-appoints-financial-reporting-standards-setting-committee);
+[PwC Tax Summaries, Cyprus: personal income tax](https://taxsummaries.pwc.com/cyprus/individual/taxes-on-personal-income),
+[deductions](https://taxsummaries.pwc.com/cyprus/individual/deductions) and
+[other taxes](https://taxsummaries.pwc.com/cyprus/individual/other-taxes);
+[KPMG Cyprus, maximum insurable earnings for 2026](https://kpmg.com/cy/en/insights/tax-alerts/amendment-to-the-maximum-amount-of-insurable-earnings-for-2026.html);
 and, for each extension, the announcement linked in `src/lib/domain/extensions.ts`.
+
+## UK rules Ledgerline follows (checked 27 October 2026)
+
+In `src/lib/domain` (`regimes.ts`, `vat-uk.ts`, `deadlines.ts`, `audit.ts`,
+`eu-vat.ts`) and `uk_vat_figures` in the schema; `npm run check:rules` checks
+each one.
+
+- **VAT**: 20%, 5% and 0%, exempt and outside the scope. The return and its
+  payment 1 calendar month and 7 days after the period; under annual
+  accounting, 2 months after the year, with nine payments on account of 10% or
+  three of 25%.
+- **The nine boxes**: reverse charges in boxes 1 and 4: services bought from
+  abroad (and in box 6 and 7), construction services under the CIS domestic
+  reverse charge, and imports under postponed VAT accounting (and in box 7).
+  Credit notes come off boxes 1 and 4. Wages, PAYE and NIC, business rates and
+  dividends are never on a return. Boxes 2, 8 and 9 (Northern Ireland's goods
+  trade with the EU) are not handled yet.
+- **Flat Rate Scheme**: the rate times VAT-inclusive turnover; only single
+  capital purchases of £2,000 or more with VAT are reclaimed; box 6 includes
+  VAT. It cannot be combined with the Cash Accounting Scheme, but has its own
+  cash-based turnover; it can be combined with annual accounting.
+- **Cash accounting**: VAT when customers pay and suppliers are paid, each
+  payment split between net and VAT as its document was.
+- **Companies House and HMRC**: annual accounts 9 months after the year end
+  (the first, for a first period over a year, the later of 21 months from
+  incorporation and 3 months after it); Corporation Tax 9 months and a day
+  after; the Company Tax Return (CT600) 12 months after; the confirmation
+  statement within 14 days of each anniversary. A deadline counted from a month
+  end runs to a month end (Companies Act 2006, s.443).
+- **Audit exemption**: a small company, within two of turnover £15m, total
+  assets £7.5m and 50 employees, for years beginning on or after 6 April 2025
+  (£10.2m and £5.1m before).
+- **GB VAT numbers**: 9 digits whose check digits pass HMRC's mod 97 test (or
+  the same with 55 added, for numbers issued since 2009). VIES does not hold
+  them; HMRC's own check comes with Making Tax Digital.
+- **An individual's tax year**: 6 April to 5 April.
+
+Sources (GOV.UK): [How to fill in your VAT Return (VAT Notice 700/12)](https://www.gov.uk/guidance/how-to-fill-in-and-submit-your-vat-return-vat-notice-70012);
+[import VAT on the return](https://www.gov.uk/guidance/complete-your-vat-return-to-account-for-import-vat);
+[Flat Rate Scheme](https://www.gov.uk/vat-flat-rate-scheme) and [VAT Notice 733](https://www.gov.uk/government/publications/vat-notice-733-flat-rate-scheme-for-small-businesses/vat-notice-733-flat-rate-scheme-for-small-businesses);
+[Cash Accounting Scheme](https://www.gov.uk/vat-cash-accounting-scheme);
+[annual accounting deadlines](https://www.gov.uk/vat-annual-accounting-scheme/return-and-payment-deadlines);
+[Company Tax Returns](https://www.gov.uk/company-tax-returns); [annual accounts](https://www.gov.uk/prepare-file-annual-accounts-for-limited-company);
+[confirmation statement](https://www.gov.uk/guidance/confirmation-statement-guidance);
+[audit exemptions](https://www.gov.uk/audit-exemptions-for-private-limited-companies).
 
 ## Going live on Supabase
 
@@ -531,11 +633,24 @@ real project, `npm run supabase:demo-users` gives the demo's people sign-ins.
   (files stored as they are, CRC-32 from Node's own zlib: no dependency).
   `npm run check:rules` checks the dates and tests against the law;
   `npx tsx scripts/check-tenancy.mts` checks that an auditor reads and never writes.
+- Payroll (`src/app/(app)/c/[org]/payroll`, `src/lib/data/payroll.ts`,
+  `src/lib/actions/payroll.ts`, `src/lib/domain/payroll-cy.ts`): employees,
+  each month's run and its payslips. A month is worked out from each
+  employee's pay and the year so far (brought forward, then every posted run);
+  `post_payroll_run` posts it on approval. The payslips are
+  `src/lib/documents/payslip-pdf.tsx`; the salary file is the SEPA writer with
+  the SALA purpose.
 - Calendar (`src/components/calendar`, `src/lib/data/calendar.ts`,
   `src/lib/domain/calendar.ts`): deadlines, tasks, invoices and quotes, read as
   the person asking. A subscribe link (`src/app/ics/[token]`,
   `src/lib/calendar-feeds.ts`) is a random token kept only as its SHA-256; a
   calendar app's request runs as the link's owner, under the same row-level
   security, and gets iCalendar from `src/lib/documents/ics.ts` (RFC 5545).
+- Countries (`src/lib/domain/regimes.ts`): an organisation's `country` sets its
+  currency, VAT rates (the database holds each line to them, `vat_rates()`), its
+  chart (`chartFor`), its VAT periods (`vatPeriods`), return and deadlines.
+  Amounts on a server page are in the currency of the company it is about
+  (`requireOrg` sets it, `lib/format`); in the browser, `useCurrency()` from the
+  company layout's `RegimeProvider`; a document keeps its own.
 - Not in this demo: passwords (the laptop lists its people; live, Supabase
   Auth), currencies other than EUR, live bank feeds.

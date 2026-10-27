@@ -9,6 +9,9 @@ import { COUNTRIES, EU_COUNTRIES } from "@/lib/domain/countries";
 import { formatAmount } from "@/lib/format";
 import { Checkbox, Field, FormError, NativeSelect, SubmitButton, TextArea, TextInput } from "@/components/common/form-fields";
 import { INVOICE_PAYMENT_METHODS, type CustomerRow } from "@/types/database";
+import { useCurrency } from "@/components/common/regime";
+import { useRegime } from "@/components/common/regime";
+import { regimeOf } from "@/lib/domain/regimes";
 
 const METHODS: Record<(typeof INVOICE_PAYMENT_METHODS)[number], string> = { bank_transfer: "Bank transfer", card: "Card", cash: "Cash", cheque: "Cheque", other: "Other" };
 
@@ -36,12 +39,13 @@ export function RestoreInvoiceButton({ id }: { id: string }) {
 
 /** Money received against an invoice: a part payment is fine, more than is owed is not. */
 export function RecordPaymentForm({ invoiceId, balance, banks, defaultBank, today }: { invoiceId: string; balance: number; banks: { id: string; code: string; name: string }[]; defaultBank: string | null; today: string }) {
+  const currency = useCurrency();
   const [state, action] = useActionState(recordInvoicePayment, idleState);
   const errors = state.fieldErrors ?? {};
   return <form action={action} className="space-y-3" key={String(balance)}>
     <input type="hidden" name="invoice_id" value={invoiceId} />
     <div className="grid grid-cols-2 gap-3">
-      <Field label="Amount" hint={`${formatAmount(balance)} owed`} error={errors.amount}><TextInput name="amount" inputMode="decimal" defaultValue={balance.toFixed(2)} className="text-right tabular-nums" /></Field>
+      <Field label="Amount" hint={`${formatAmount(balance, currency)} owed`} error={errors.amount}><TextInput name="amount" inputMode="decimal" defaultValue={balance.toFixed(2)} className="text-right tabular-nums" /></Field>
       <Field label="Received on" error={errors.received_on}><TextInput name="received_on" type="date" defaultValue={today} max={today} /></Field>
       <Field label="Into" error={errors.bank_account_id}><NativeSelect name="bank_account_id" defaultValue={defaultBank ?? banks[0]?.id ?? ""}>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</NativeSelect></Field>
       <Field label="Method"><NativeSelect name="method" defaultValue="bank_transfer">{INVOICE_PAYMENT_METHODS.map(method => <option key={method} value={method}>{METHODS[method]}</option>)}</NativeSelect></Field>
@@ -67,7 +71,9 @@ export function QuoteActions({ id, status }: { id: string; status: "draft" | "se
 
 export function CustomerForm({ customer, companyTerms }: { customer?: Pick<CustomerRow, "id" | "name" | "email" | "phone" | "vat_number" | "country" | "address" | "eu_business" | "payment_terms_days">; companyTerms: number }) {
   const [state, action] = useActionState(saveCustomer, idleState);
-  const [country, setCountry] = useState(customer?.country ?? "CY");
+  // A customer is where the company is, unless said otherwise.
+  const { country: home } = useRegime();
+  const [country, setCountry] = useState(customer?.country ?? home);
   const errors = state.fieldErrors ?? {};
   return <form action={action} className="space-y-4" noValidate>
     {customer ? <input type="hidden" name="id" value={customer.id} /> : null}
@@ -76,12 +82,12 @@ export function CustomerForm({ customer, companyTerms }: { customer?: Pick<Custo
       <Field label="Email" error={errors.email}><TextInput name="email" type="email" defaultValue={customer?.email ?? ""} /></Field>
       <Field label="Phone"><TextInput name="phone" defaultValue={customer?.phone ?? ""} maxLength={40} /></Field>
       <Field label="Country"><NativeSelect name="country" value={country} onChange={event => setCountry(event.target.value)}>{COUNTRIES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</NativeSelect></Field>
-      <Field label="VAT number" hint={country === "CY" ? "e.g. CY10123456X" : "with the country prefix"} error={errors.vat_number}><TextInput name="vat_number" defaultValue={customer?.vat_number ?? ""} maxLength={40} className="font-mono" /></Field>
+      <Field label="VAT number" hint={country === home ? `e.g. ${regimeOf(home).vatNumberExample}` : "with the country prefix"} error={errors.vat_number}><TextInput name="vat_number" defaultValue={customer?.vat_number ?? ""} maxLength={40} className="font-mono" /></Field>
       <Field label="Address" hint="printed on invoices" className="sm:col-span-2"><TextArea name="address" rows={2} defaultValue={customer?.address ?? ""} maxLength={500} /></Field>
       <Field label="Payment terms" hint={`days; empty for the company's ${companyTerms}`} error={errors.payment_terms_days}>
         <TextInput name="payment_terms_days" inputMode="numeric" defaultValue={customer?.payment_terms_days ?? ""} placeholder={String(companyTerms)} className="tabular-nums" />
       </Field>
-      {country !== "CY" && EU_COUNTRIES.has(country) ? <Checkbox name="eu_business" defaultChecked={customer?.eu_business ?? true} label="A business in another EU state: invoices are reverse charge and go on the VIES statement" className="sm:col-span-2" /> : null}
+      {home === "CY" && country !== "CY" && EU_COUNTRIES.has(country) ? <Checkbox name="eu_business" defaultChecked={customer?.eu_business ?? true} label="A business in another EU state: invoices are reverse charge and go on the VIES statement" className="sm:col-span-2" /> : null}
     </div>
     <FormError message={state.error} />
     <div className="flex items-center gap-3">

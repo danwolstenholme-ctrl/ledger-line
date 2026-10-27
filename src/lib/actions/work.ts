@@ -109,7 +109,8 @@ export async function saveFeeFloor(_previous: ActionState, form: FormData): Prom
 /**
  * Every client's fee for the month, invoiced in one press from the firm's own
  * books: the monthly fee, and any extra work logged and not yet billed, at
- * the client's rate, with 19% VAT. A client already invoiced for the month is
+ * the client's rate, with 19% VAT; to a client in another country, outside the
+ * scope of Cyprus VAT (a business customer accounts for it where it is). A client already invoiced for the month is
  * left alone, so pressing twice bills nobody twice.
  */
 export async function raiseFees(_previous: ActionState, form: FormData): Promise<ActionState> {
@@ -137,7 +138,8 @@ export async function raiseFees(_previous: ActionState, form: FormData): Promise
              and (started_at at time zone 'Asia/Nicosia')::date >= $2 and (started_at at time zone 'Asia/Nicosia')::date < $3`, [row.organisation_id, data.month, next]);
         const extraMinutes = Number(extra[0]?.minutes ?? 0);
         const lines: { description: string; account_id: string; net: number; vat_rate: number; vat_amount: number }[] = [];
-        const line = (description: string, net: number) => lines.push({ description, account_id: account.id, net, vat_rate: 19, vat_amount: Math.round(net * 19) / 100 });
+        const abroad = row.country !== books.country, rate = abroad ? 0 : 19;
+        const line = (description: string, net: number) => lines.push({ description, account_id: account.id, net, vat_rate: rate, vat_amount: Math.round(net * rate) / 100 });
         if (row.monthly_fee > 0) line(`Accounting services, ${monthName(data.month)}`, row.monthly_fee);
         // Ledgerline, resold under the firm's name at the firm's own price.
         if (row.app_fee > 0) line(`Online books and invoicing, ${monthName(data.month)}`, row.app_fee);
@@ -147,8 +149,8 @@ export async function raiseFees(_previous: ActionState, form: FormData): Promise
         }
         if (!lines.length) continue;
         number += 1;
-        const [saved] = await run<{ id: string }>("select save_invoice($1, null, $2, $3, $4, $5, 'standard', null, $6::jsonb, 'issued', $7) as id",
-          [books.id, row.customer_id, `${prefix}${String(number).padStart(4, "0")}`, issued, due, JSON.stringify(lines), `Fees ${monthName(data.month)}`]);
+        const [saved] = await run<{ id: string }>("select save_invoice($1, null, $2, $3, $4, $5, $8::vat_treatment, null, $6::jsonb, 'issued', $7) as id",
+          [books.id, row.customer_id, `${prefix}${String(number).padStart(4, "0")}`, issued, due, JSON.stringify(lines), `Fees ${monthName(data.month)}`, abroad ? "outside_scope" : "standard"]);
         await run("delete from fee_invoices where client_organisation_id = $1 and period = $2", [row.organisation_id, data.month]);
         await run("insert into fee_invoices (client_organisation_id, period, invoice_id) values ($1, $2, $3)", [row.organisation_id, data.month, saved.id]);
         await run(`update time_entries set invoice_id = $4 where organisation_id = $1 and extra and invoice_id is null and ended_at is not null

@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { RecordDetail, RecordHeader, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
 import { QuoteActions } from "@/components/sales/sale-actions";
-import { DocumentLines, PdfLinks, QuoteStatusBadge, TREATMENT_DETAIL, TREATMENT_LABELS } from "@/components/sales/sales-parts";
+import { DocumentLines, PdfLinks, QuoteStatusBadge, TREATMENT_LABELS, treatmentDetail } from "@/components/sales/sales-parts";
 
 export const metadata: Metadata = { title: "Quote" };
 
@@ -62,7 +62,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       <RecordSection title="Details">
         <dl className="divide-hairline divide-y px-4">
           <RecordDetail label="Customer" value={<Link href={`/accounts/customers/${quote.customer_id}`} className="text-brand hover:underline">{quote.client_name}</Link>} />
-          <RecordDetail label="VAT" value={TREATMENT_DETAIL[org.vat_registered ? quote.vat_treatment : "exempt"]} />
+          <RecordDetail label="VAT" value={treatmentDetail(org.vat_registered ? quote.vat_treatment : "exempt", org.country)} />
           <RecordDetail label="In the books" value="Nothing: a quote posts nothing until it is accepted and invoiced." />
         </dl>
       </RecordSection>

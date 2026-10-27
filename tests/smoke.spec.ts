@@ -10,8 +10,9 @@ const files = ["01-greek-marine-fuel-invoice.pdf", "02-two-invoices-in-one-pdf.p
 
 test("practice dashboard lists every client", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /6 clients/ })).toBeVisible();
-  for (const name of ["Aegean Blue Marine Services Ltd", "Troodos Gold Olive Oil Ltd", "Kalamies Dental Clinic Ltd", "Larnaka Roast Coffee Co Ltd", "Pixelforge Studio Ltd", "Mesogeios Holdings Ltd"]) {
+  await expect(page.getByRole("heading", { name: /8 clients/ })).toBeVisible();
+  for (const name of ["Aegean Blue Marine Services Ltd", "Troodos Gold Olive Oil Ltd", "Kalamies Dental Clinic Ltd", "Larnaka Roast Coffee Co Ltd", "Pixelforge Studio Ltd", "Mesogeios Holdings Ltd",
+    "Thames Edge Joinery Ltd", "Willow & Wren Design Ltd"]) {
     await expect(page.getByRole("link", { name })).toBeVisible();
   }
 });
@@ -520,7 +521,7 @@ test("each client's fee is set against its hours, and the month's fees are invoi
 
   // The app, resold under the firm's name, is its own line on the client's fee invoice.
   await page.goto("/fees");
-  await expect(page.getByText(/4 clients pay you €100.00 a month for the app/)).toBeVisible();
+  await expect(page.getByText(/6 clients pay you €150.00 a month for the app/)).toBeVisible();
   await page.getByRole("row").filter({ hasText: "Larnaka Roast Coffee Co Ltd" }).getByRole("link", { name: /^SAL-/ }).click();
   await expect(page.getByText(/Online books and invoicing, /)).toBeVisible();
 });
@@ -811,7 +812,7 @@ test("the sidebar runs customers first, then money, then reports and tax", async
   await page.goto("/c/kalamies-dental");
   const menu = page.getByRole("complementary", { name: "Main navigation" });
   await expect(menu.locator("p.ll-eyebrow")).toHaveText(["CRM", "Money", "Reports & tax"]);
-  await expect(menu.getByRole("link")).toContainText(["Home", "Enquiries", "Customers", "Quotes", "Invoices", "Products", "Matters", "Tasks", "Calendar", "Bank", "Upload receipts", "Bills", "Suppliers", "Reports", "VAT returns", "Deadlines", "Year end"]);
+  await expect(menu.getByRole("link")).toContainText(["Home", "Enquiries", "Customers", "Quotes", "Invoices", "Products", "Matters", "Tasks", "Calendar", "Bank", "Upload receipts", "Bills", "Suppliers", "Payroll", "Reports", "VAT returns", "Deadlines", "Year end"]);
 });
 
 test("the calendar puts every client's deadlines on their days, and one client's everything", async ({ page }) => {
@@ -858,4 +859,104 @@ test("a calendar link subscribes Google, Outlook or Apple to the deadlines, read
   expect((await outside.get(first)).status()).toBe(404);
   expect((await outside.get(second)).status()).toBe(200);
   await outside.dispose();
+});
+
+test("a UK client keeps its books in pounds, at UK rates, and its VAT return is HMRC's nine boxes", async ({ page }) => {
+  await page.goto("/c/thames-edge-joinery/reports/vat?range=custom&from=2026-05-01&to=2026-07-31");
+  await expect(page.getByText(/HMRC’s VAT return, box by box · GB341872692 · Standard accounting/)).toBeVisible();
+  // Construction labour bought under the CIS domestic reverse charge: in boxes 1 and 4, so it nets to nothing, and in box 7.
+  await expect(page.getByText(/Construction services under the CIS domestic reverse charge: £2,071.48 on £10,357.37/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "VAT return" })).toBeVisible();
+  await expect(page.getByText("£2,896.97").first()).toBeVisible();
+  await expect(page.getByText(/Filed on 3 Sept 2026; the period is locked/)).toBeVisible();
+
+  // A bill: the UK's rates, and which reverse charge.
+  await page.goto("/c/thames-edge-joinery/bills/new");
+  await page.locator('select[name="supplier_id"]').selectOption({ label: "Wren Site Labour Ltd" });
+  await page.locator('input[name="issued_on"]').fill("2026-10-15");
+  await page.getByLabel("Line 1 description").fill("Labour, Kennet Wharf block B");
+  await page.getByLabel("Line 1 account").selectOption({ label: "320 · Labour-only subcontractors (CIS)" });
+  await page.getByLabel("Line 1 net amount").fill("1000");
+  await expect(page.getByLabel("Line 1 VAT rate").locator("option")).toHaveText(["20%", "5%", "0%"]);
+  await page.locator('select[name="reverse_charge_kind"]').selectOption("construction");
+  await page.getByRole("button", { name: "Record bill" }).click();
+  await expect(page.getByRole("heading", { name: /Wren Site Labour Ltd/ })).toBeVisible();
+  await page.goto("/c/thames-edge-joinery/reports/vat?range=custom&from=2026-08-01&to=2026-10-31");
+  await expect(page.getByText(/Construction services under the CIS domestic reverse charge: £2,251.60 on £11,258.02/)).toBeVisible();
+
+  // Its deadlines are HMRC's and Companies House's.
+  await page.goto("/c/thames-edge-joinery/deadlines");
+  await expect(page.getByRole("listitem").filter({ hasText: "Annual accounts to Companies House, the year to 31 March 2026" })).toContainText("31 Dec");
+  await expect(page.getByText("Corporation Tax for the year to 31 March 2026")).toBeVisible();
+  await expect(page.getByText(/VAT return, Aug–Oct 2026/)).toBeVisible();
+});
+
+test("the Flat Rate Scheme: 12% of turnover with its VAT, and filing moves the rest of the VAT charged to the scheme's surplus", async ({ page }) => {
+  await page.goto("/c/willow-wren-design/reports/vat?range=custom&from=2026-07-01&to=2026-09-30");
+  await expect(page.getByText(/Flat Rate Scheme at 12%/).first()).toBeVisible();
+  await expect(page.getByText(/12% of the VAT-inclusive turnover, £17,520.00: £2,102.40/)).toBeVisible();
+  await page.getByRole("button", { name: "Mark as filed and lock the period" }).click();
+  await expect(page.getByText(/Filed on \d+ \w+ 2026; the period is locked/)).toBeVisible();
+  await page.goto("/c/willow-wren-design/journals");
+  await expect(page.getByText(/Flat Rate Scheme: VAT charged less the 12% flat rate, 2026-07-01 to 2026-09-30/)).toBeVisible();
+
+  // Its settings: the UK's labels, and its scheme.
+  await page.goto("/c/willow-wren-design/settings");
+  await expect(page.getByText("Unique Taxpayer Reference (UTR)")).toBeVisible();
+  await expect(page.getByLabel("Flat Rate Scheme")).toHaveValue("12");
+  await expect(page.getByLabel("VAT returns")).toHaveValue("quarterly");
+});
+
+test("a GB VAT number is held to its check digits, and the dashboard keeps euros and pounds apart", async ({ page }) => {
+  await page.goto("/c/willow-wren-design/customers/new");
+  await page.locator('input[name="name"]').fill("Bristol Bike Hire Ltd");
+  await expect(page.locator('select[name="country"]')).toHaveValue("GB");
+  await page.locator('input[name="vat_number"]').fill("GB341872693");
+  await page.getByRole("button", { name: "Add customer" }).click();
+  await expect(page.getByText(/check digits of this UK VAT number don’t match/)).toBeVisible();
+  await page.locator('input[name="vat_number"]').fill("GB 341 8726 92");
+  await page.getByRole("button", { name: "Add customer" }).click();
+  await expect(page.getByText(/check digits of this UK VAT number don’t match/)).toHaveCount(0);
+
+  await page.goto("/");
+  await expect(page.getByText(/€[\d,]+ · £[\d,]+/).first()).toBeVisible();
+});
+
+test("Cyprus payroll: a month worked out from the year so far, extra pay added, approved and posted, with its payslips, salary file and TD7 figures", async ({ page }) => {
+  await page.goto("/c/aegean-blue-marine/payroll");
+  await expect(page.getByRole("heading", { name: "Payroll", level: 1 })).toBeVisible();
+  for (const name of ["Nikos Charalambous", "Andri Ioannou", "Marios Hadjigeorgiou", "Despina Stylianou"]) await expect(page.getByRole("link", { name })).toBeVisible();
+  await page.getByRole("button", { name: "Run October 2026’s payroll" }).click();
+  await expect(page.getByRole("heading", { name: "October 2026 payroll", level: 1 })).toBeVisible();
+  await expect(page.getByText("Draft", { exact: true })).toBeVisible();
+  // The salaries add up to what the bank has paid in wages each month.
+  const total = page.getByRole("row", { name: /^Total/ });
+  await expect(total).toContainText("€9,840.00");
+  await expect(page.getByRole("heading", { name: "To pay by 30 Nov 2026" })).toBeVisible();
+
+  await page.getByText("Overtime, a bonus or commission this month").click();
+  await page.getByLabel("Employee").selectOption({ label: "Andri Ioannou" });
+  await page.getByLabel("Extra pay this month").fill("250");
+  await page.getByRole("button", { name: "Work it out again" }).click();
+  await expect(total).toContainText("€10,090.00");
+
+  await page.getByRole("button", { name: "Approve and post October 2026" }).click();
+  await expect(page.getByText("Posted", { exact: true })).toBeVisible();
+  const base = "/c/aegean-blue-marine/payroll/" + page.url().split("/").pop();
+  const payslips = await page.request.get(`${base}/payslips`);
+  expect(payslips.headers()["content-type"]).toBe("application/pdf");
+  const sepa = await (await page.request.get(`${base}/sepa`)).text();
+  expect(sepa).toContain("<CtgyPurp><Cd>SALA</Cd></CtgyPurp>");
+  expect(sepa).toContain("<NbOfTxs>4</NbOfTxs>");
+  expect(sepa).toContain("Salary October 2026");
+  const figures = (await (await page.request.get(`${base}/figures`)).text()).trim().split("\n");
+  expect(figures[0]).toContain("Insurable earnings");
+  expect(figures).toHaveLength(5);
+
+  await page.getByRole("link", { name: "Payroll", exact: true }).first().click();
+  await expect(page.getByRole("row", { name: /October 2026/ })).toContainText("Posted");
+  await expect(page.getByRole("button", { name: "Run November 2026’s payroll" })).toBeVisible();
+  // A UK company's wages are coded from the bank: no Cyprus payroll there.
+  await page.goto("/c/thames-edge-joinery");
+  await expect(page.getByRole("complementary", { name: "Main navigation" }).getByRole("link", { name: "Payroll" })).toHaveCount(0);
 });

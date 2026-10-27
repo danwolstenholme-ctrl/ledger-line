@@ -10,6 +10,7 @@ import { CSV_ROLES, parseStatementFile, readCsv, type CsvLayout, type CsvRole, t
 import { formatAmount, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FormError, SubmitButton } from "@/components/common/form-fields";
+import { useCurrency } from "@/components/common/regime";
 
 const MAX_LINES = 5000;
 
@@ -26,6 +27,7 @@ async function readText(file: File) {
  * before anything is saved. Importing the same lines twice adds nothing.
  */
 export function StatementImport({ bankAccountId, bankName }: { bankAccountId: string; bankName: string }) {
+  const currency = useCurrency();
   const uid = useId();
   const [state, action] = useActionState(importStatement, idleState);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -108,8 +110,8 @@ export function StatementImport({ bankAccountId, bankName }: { bankAccountId: st
         <dl className="border-hairline divide-hairline grid grid-cols-2 divide-x divide-y rounded-md border sm:grid-cols-4 sm:divide-y-0">
           <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">Lines</dt><dd className="text-ink text-[14px] font-medium tabular-nums">{totals.count}</dd></div>
           <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">Dates</dt><dd className="text-ink text-[13px]">{totals.from ? `${formatDate(totals.from)} – ${formatDate(totals.to!)}` : "—"}</dd></div>
-          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">In · out</dt><dd className="text-ink text-[13px] tabular-nums"><span className="text-positive">{formatAmount(totals.in)}</span> · {formatAmount(Math.abs(totals.out))}</dd></div>
-          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">Bank’s closing balance</dt><dd className="text-ink text-[13px] tabular-nums">{parsed.closingBalance !== null ? formatAmount(parsed.closingBalance) : "Not in the file"}</dd></div>
+          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">In · out</dt><dd className="text-ink text-[13px] tabular-nums"><span className="text-positive">{formatAmount(totals.in, currency)}</span> · {formatAmount(Math.abs(totals.out), currency)}</dd></div>
+          <div className="px-3 py-2"><dt className="text-ink-faint text-[11px] uppercase tracking-[0.06em]">Bank’s closing balance</dt><dd className="text-ink text-[13px] tabular-nums">{parsed.closingBalance !== null ? formatAmount(parsed.closingBalance, currency) : "Not in the file"}</dd></div>
         </dl>
         <div className="border-hairline overflow-x-auto rounded-md border">
           <table className="w-full min-w-[560px] border-collapse text-[12.5px]">
@@ -119,7 +121,7 @@ export function StatementImport({ bankAccountId, bankName }: { bankAccountId: st
             <tbody className="divide-hairline divide-y">{lines.slice(0, 8).map(line => <tr key={line.external_id}>
               <td className="text-ink-muted px-3 py-1.5 whitespace-nowrap tabular-nums">{formatDate(line.date)}</td>
               <td className="max-w-[48ch] truncate px-3 py-1.5">{line.description}{line.reference ? <span className="text-ink-faint"> · {line.reference}</span> : null}</td>
-              <td className={cn("px-3 py-1.5 text-right whitespace-nowrap tabular-nums", line.amount > 0 ? "text-positive" : "text-ink")}>{line.amount > 0 ? "" : "−"}{formatAmount(Math.abs(line.amount))}</td>
+              <td className={cn("px-3 py-1.5 text-right whitespace-nowrap tabular-nums", line.amount > 0 ? "text-positive" : "text-ink")}>{line.amount > 0 ? "" : "−"}{formatAmount(Math.abs(line.amount), currency)}</td>
             </tr>)}</tbody>
           </table>
           {lines.length > 8 ? <p className="text-ink-faint border-hairline border-t px-3 py-1.5 text-[11.5px]">and {lines.length - 8} more</p> : null}

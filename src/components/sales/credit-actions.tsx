@@ -7,6 +7,7 @@ import { allocateCredit, issueCreditNote, refundCredit, setCreditNoteVoid } from
 import { idleState } from "@/lib/actions/state";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Field, FormError, NativeSelect, SubmitButton, TextInput } from "@/components/common/form-fields";
+import { useCurrency } from "@/components/common/regime";
 
 /** Issue a draft credit note. */
 export function IssueCreditNoteButton({ id }: { id: string }) {
@@ -34,6 +35,7 @@ export function CreditNoteVoidButton({ id, isVoid }: { id: string; isVoid: boole
 
 /** Set credit against another of the customer's open invoices. */
 export function AllocateCreditForm({ creditNoteId, remaining, invoices }: { creditNoteId: string; remaining: number; invoices: { id: string; number: string; balance: number; due_on: string | null }[] }) {
+  const currency = useCurrency();
   const [state, action] = useActionState(allocateCredit, idleState);
   const [invoiceId, setInvoiceId] = useState(invoices[0]?.id ?? "");
   const invoice = invoices.find(item => item.id === invoiceId);
@@ -44,7 +46,7 @@ export function AllocateCreditForm({ creditNoteId, remaining, invoices }: { cred
     <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3">
       <Field label="Invoice" error={errors.invoice_id}>
         <NativeSelect name="invoice_id" value={invoiceId} onChange={event => setInvoiceId(event.target.value)}>
-          {invoices.map(item => <option key={item.id} value={item.id}>{item.number} · {formatAmount(item.balance)} owed{item.due_on ? ` · due ${formatDate(item.due_on)}` : ""}</option>)}
+          {invoices.map(item => <option key={item.id} value={item.id}>{item.number} · {formatAmount(item.balance, currency)} owed{item.due_on ? ` · due ${formatDate(item.due_on)}` : ""}</option>)}
         </NativeSelect>
       </Field>
       <Field label="Amount" error={errors.amount}>

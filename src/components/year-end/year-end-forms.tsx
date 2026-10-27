@@ -40,8 +40,8 @@ export function YearEndDatesForm({ periodEnd, review, dates }: { periodEnd: stri
   </ActionForm>;
 }
 
-export function YearEndFiguresForm({ periodEnd, assurance, reviewAllowed, startsBeforeBooks, booksFrom, priorInBooks, values }: {
-  periodEnd: string; assurance: "audit" | "review"; reviewAllowed: boolean | null; startsBeforeBooks: boolean; booksFrom: string; priorInBooks: boolean;
+export function YearEndFiguresForm({ periodEnd, assurance, country = "CY", reviewAllowed, startsBeforeBooks, booksFrom, priorInBooks, values }: {
+  periodEnd: string; assurance: "audit" | "review" | "exempt"; country?: string; reviewAllowed: boolean | null; startsBeforeBooks: boolean; booksFrom: string; priorInBooks: boolean;
   values: { average_employees: number | null; turnover_before_books: number | null; prior_turnover: number | null; prior_total_assets: number | null };
 }) {
   const uid = useId();
@@ -53,8 +53,8 @@ export function YearEndFiguresForm({ periodEnd, assurance, reviewAllowed, starts
       <legend className="text-ink mb-1 text-[12px] font-medium">The financial statements are</legend>
       <label className="text-ink flex items-start gap-2 text-[12.5px]"><input type="radio" name="assurance" value="audit" defaultChecked={assurance === "audit"} className="accent-brand mt-0.5" />Audited by a statutory auditor</label>
       <label className={`flex items-start gap-2 text-[12.5px] ${reviewAllowed === false ? "text-ink-faint" : "text-ink"}`}>
-        <input type="radio" name="assurance" value="review" defaultChecked={assurance === "review"} disabled={reviewAllowed === false} className="accent-brand mt-0.5" />
-        <span>Reviewed under ISRE 2400 instead{reviewAllowed === false ? <span className="block text-[11.5px]">Not allowed for this year</span> : reviewAllowed === null ? <span className="text-ink-muted block text-[11.5px]">Allowed only once both years’ figures show it</span> : null}</span>
+        <input type="radio" name="assurance" value={country === "GB" ? "exempt" : "review"} defaultChecked={assurance === (country === "GB" ? "exempt" : "review")} disabled={reviewAllowed === false} className="accent-brand mt-0.5" />
+        <span>{country === "GB" ? "Exempt from audit, as a small company" : "Reviewed under ISRE 2400 instead"}{reviewAllowed === false ? <span className="block text-[11.5px]">Not allowed for this year</span> : reviewAllowed === null ? <span className="text-ink-muted block text-[11.5px]">{country === "GB" ? "Allowed once the figures show it small" : "Allowed only once both years’ figures show it"}</span> : null}</span>
       </label>
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">

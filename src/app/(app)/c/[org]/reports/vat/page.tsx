@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "@/components/navigation/navigation-link";
 
 import { requireOrg } from "@/lib/org";
-import { getVatReport } from "@/lib/data/accounts";
+import { getUkVatFigures, getVatReport } from "@/lib/data/accounts";
+import { ukVatDue } from "@/lib/domain/vat-uk";
 import { vatBoxes, vatDueDate, type VatBox } from "@/lib/domain/accounts";
 import { formatAmount, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ export default async function VatPage({ searchParams }: { searchParams: Promise<
   await requireOrg();
   const report = await getVatReport(await searchParams);
   const { period } = report;
+  if (report.uk) return <UkVatReturn report={report} uk={report.uk} />;
   const { vat, values, net } = vatBoxes(report.summary, report.breakdown);
   const due = vatDueDate(period.to);
   const query = new URLSearchParams({ range: period.range, from: period.from, to: period.to });
@@ -82,5 +84,53 @@ export default async function VatPage({ searchParams }: { searchParams: Promise<
         </p> : null}
       </section>
     </>}
+  </PageBody>;
+}
+
+const SCHEME_NOTES = { services: "Services bought from abroad", construction: "Construction services under the CIS domestic reverse charge", import: "Imports under postponed VAT accounting" } as const;
+
+/**
+ * A UK company's return: HMRC's nine boxes, by its scheme, from the same
+ * ledger. Submitting it to HMRC through Making Tax Digital comes next; until
+ * then it is filed in HMRC's own service, and recorded here.
+ */
+async function UkVatReturn({ report, uk }: { report: Awaited<ReturnType<typeof getVatReport>>; uk: NonNullable<Awaited<ReturnType<typeof getVatReport>>["uk"]> }) {
+  const { period, org } = report;
+  const flat = org.vat_flat_rate !== null;
+  const annual = org.vat_period === "annual";
+  const due = ukVatDue(period.to, annual);
+  const scheme = [flat ? `Flat Rate Scheme at ${Number(org.vat_flat_rate)}%` : null, org.vat_cash_accounting ? (flat ? "turnover as paid" : "cash accounting") : null, annual ? "annual accounting" : null].filter(Boolean).join(" · ") || "Standard accounting";
+  const query = new URLSearchParams({ range: period.range, from: period.from, to: period.to });
+  const figures = await getUkVatFigures(org, period.from, period.to);
+  const charges = (Object.keys(SCHEME_NOTES) as (keyof typeof SCHEME_NOTES)[]).filter(kind => figures.reverseCharge[kind].vat || figures.reverseCharge[kind].net);
+  return <PageBody width="5xl" className="space-y-4">
+    <RecordHeader title="VAT return" back={{ href: "/accounts/reports", label: "Reports" }}
+      description={org.vat_registered ? `HMRC’s VAT return, box by box · ${org.vat_number} · ${scheme}` : "This business is not registered for VAT: the VAT it pays is part of each cost."} />
+    <PeriodPicker action="/accounts/reports/vat" range={period.range} from={period.from} to={period.to} />
+    <ReportHeading period={periodLabel(period.from, period.to)} exportHref={`/accounts/reports/vat/export?${query}`} />
+    <section aria-label="VAT for the period" className="ll-panel overflow-hidden">
+      <div className="border-hairline flex flex-wrap items-end justify-between gap-3 border-b px-4 py-4">
+        <div>
+          <p className="ll-eyebrow">{uk.net >= 0 ? "VAT to pay HMRC" : "VAT to reclaim from HMRC"}</p>
+          <p className={cn("mt-1.5 text-[24px] leading-none font-semibold tracking-[-0.01em] tabular-nums", uk.net > 0 ? "text-ink" : "text-positive")}>{formatAmount(Math.abs(uk.net))}</p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <p className="text-ink-muted text-[12.5px]">{report.filed ? <>Filed on <span className="text-ink font-medium">{formatDate(report.filed.filed_on)}</span>; the period is locked</>
+            : <>Submit through Making Tax Digital and pay by <span className="text-ink font-medium">{formatDate(due)}</span></>}</p>
+          {!report.filed && org.vat_registered ? <FileVatReturn from={period.from} to={period.to} net={uk.net} /> : null}
+        </div>
+      </div>
+      <BoxRows title="The nine boxes" boxes={uk.boxes} />
+      <div className="border-hairline text-ink-muted space-y-2 border-t px-4 py-3 text-[12px] leading-relaxed">
+        {flat ? <p>On the Flat Rate Scheme the VAT due is {Number(org.vat_flat_rate)}% of the VAT-inclusive turnover, {formatAmount(uk.turnover)}: {formatAmount(uk.flatVat)}. VAT on everyday purchases isn’t reclaimed; only single capital purchases of £2,000 or more with VAT are. Filing moves the difference between the VAT charged to customers and the flat rate to account 265, Flat Rate Scheme surplus.</p> : null}
+        {flat && uk.unclaimable > 0 ? <p className="text-caution">{formatAmount(uk.unclaimable)} of VAT on everyday purchases is in the books, and can’t be reclaimed on the scheme: enter those costs in full, with no VAT.</p> : null}
+        {org.vat_cash_accounting && !flat ? <p>Cash accounting: VAT on sales counts when customers pay and VAT on purchases when suppliers are paid, each payment split between net and VAT as its invoice or bill was. Reverse charges count by the date of the document, as HMRC requires.</p> : null}
+        {charges.length ? <p>Reverse charges in boxes 1 and 4. {charges.map(kind => `${SCHEME_NOTES[kind]}: ${formatAmount(figures.reverseCharge[kind].vat)} on ${formatAmount(figures.reverseCharge[kind].net)}`).join("; ")}. Services from abroad count in box 6 as well; all of them in box 7.</p> : null}
+        <p>Boxes 2, 8 and 9 are Northern Ireland’s trade in goods with the EU, which Ledgerline doesn’t handle yet.</p>
+      </div>
+      {report.vatAccount ? <p className="border-hairline text-ink-muted border-t px-4 py-2.5 text-[12px]">
+        Every entry behind these figures is in <Link href={`/accounts/chart/${report.vatAccount.id}?range=custom&from=${period.from}&to=${period.to}`} className="text-brand hover:underline">{report.vatAccount.code} · {report.vatAccount.name}</Link>. A payment to or refund from HMRC is matched on the bank screen and coded to this account.
+      </p> : null}
+    </section>
   </PageBody>;
 }

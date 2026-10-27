@@ -7,6 +7,7 @@ import { allocateSupplierCredit, recordSupplierRefund, setSupplierCreditVoid } f
 import { idleState } from "@/lib/actions/state";
 import { formatAmount, formatDate } from "@/lib/format";
 import { Field, FormError, NativeSelect, SubmitButton, TextInput } from "@/components/common/form-fields";
+import { useCurrency } from "@/components/common/regime";
 
 export function SupplierCreditVoidButton({ id, isVoid }: { id: string; isVoid: boolean }) {
   const [state, action] = useActionState(setSupplierCreditVoid, idleState);
@@ -23,6 +24,7 @@ export function SupplierCreditVoidButton({ id, isVoid }: { id: string; isVoid: b
 }
 
 export function AllocateSupplierCreditForm({ creditId, remaining, bills }: { creditId: string; remaining: number; bills: { id: string; number: string | null; balance: number; due_on: string | null }[] }) {
+  const currency = useCurrency();
   const [state, action] = useActionState(allocateSupplierCredit, idleState);
   const [billId, setBillId] = useState(bills[0]?.id ?? "");
   const bill = bills.find(item => item.id === billId);
@@ -33,7 +35,7 @@ export function AllocateSupplierCreditForm({ creditId, remaining, bills }: { cre
     <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3">
       <Field label="Bill" error={errors.bill_id}>
         <NativeSelect name="bill_id" value={billId} onChange={event => setBillId(event.target.value)}>
-          {bills.map(item => <option key={item.id} value={item.id}>{item.number ?? "No number"} · {formatAmount(item.balance)} to pay{item.due_on ? ` · due ${formatDate(item.due_on)}` : ""}</option>)}
+          {bills.map(item => <option key={item.id} value={item.id}>{item.number ?? "No number"} · {formatAmount(item.balance, currency)} to pay{item.due_on ? ` · due ${formatDate(item.due_on)}` : ""}</option>)}
         </NativeSelect>
       </Field>
       <Field label="Amount" error={errors.amount}><TextInput name="amount" inputMode="decimal" key={billId} defaultValue={Math.min(remaining, bill?.balance ?? remaining).toFixed(2)} className="text-right tabular-nums" /></Field>

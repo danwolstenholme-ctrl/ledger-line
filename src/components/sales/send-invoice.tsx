@@ -7,23 +7,25 @@ import { markInvoiceSent } from "@/lib/actions/sales";
 import { formatAmount, formatDate, formatAgo } from "@/lib/format";
 import { Field, TextArea, TextInput } from "@/components/common/form-fields";
 import { recordButton, recordOutlineButton } from "@/components/records/record-layout";
+import { useCurrency } from "@/components/common/regime";
 
 export type SendInvoiceData = {
   invoiceId: string; number: string; total: number; balance: number; dueOn: string | null; customerName: string; to: string; greeting: string | null;
   company: string; sender: string; bank: { name: string; bank_details: string | null } | null; pdfHref: string; sentAt: string | null; sentTo: string | null;
 };
 
-function draft(data: SendInvoiceData) {
+function draft(data: SendInvoiceData, currency: string) {
   const bank = data.bank ? `\n\nYou can pay by bank transfer to ${data.bank.name}:\n${data.bank.bank_details ?? ""}\nPlease quote ${data.number} as the reference.` : "";
   return {
     subject: `Invoice ${data.number} from ${data.company}`,
-    body: `Dear ${data.greeting ?? data.customerName},\n\nPlease find attached invoice ${data.number} for ${formatAmount(data.balance)}${data.dueOn ? `, due by ${formatDate(data.dueOn)}` : ""}.${bank}\n\nThank you for your business.\n\nKind regards,\n${data.sender}\n${data.company}`,
+    body: `Dear ${data.greeting ?? data.customerName},\n\nPlease find attached invoice ${data.number} for ${formatAmount(data.balance, currency)}${data.dueOn ? `, due by ${formatDate(data.dueOn)}` : ""}.${bank}\n\nThank you for your business.\n\nKind regards,\n${data.sender}\n${data.company}`,
   };
 }
 
 /** Send the invoice from the person's own email: the message written, the PDF to attach, and a record that it went. */
 export function SendInvoicePanel({ data, startOpen = false, primary = false }: { data: SendInvoiceData; startOpen?: boolean; primary?: boolean }) {
-  const start = draft(data);
+  const currency = useCurrency();
+  const start = draft(data, currency);
   const [open, setOpen] = useState(startOpen);
   const [to, setTo] = useState(data.sentTo ?? data.to), [subject, setSubject] = useState(start.subject), [body, setBody] = useState(start.body);
   const [copied, setCopied] = useState(false);

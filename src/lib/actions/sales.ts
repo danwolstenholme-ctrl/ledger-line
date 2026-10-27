@@ -14,6 +14,7 @@ import { firmToday, validRecordDate } from "@/lib/domain/invoices";
 import { normalisedLine } from "@/lib/domain/line-math";
 import { getCurrentUser, requireOrg } from "@/lib/org";
 import { INVOICE_PAYMENT_METHODS, VAT_RATES, VAT_TREATMENTS } from "@/types/database";
+import { regimeOf } from "@/lib/domain/regimes";
 
 /**
  * Writes for selling. Invoices, quotes and credit notes are saved through
@@ -364,7 +365,8 @@ export async function saveItem(_previous: ActionState, form: FormData): Promise<
   const price = normalisedLine({ quantity: "1", unit_price: String(form.get("unit_price") ?? ""), vat_rate: 0 })?.unit_price;
   if (price === undefined) p.errors.unit_price = "Enter the price before VAT, e.g. 18.50.";
   const rate = Number(form.get("vat_rate"));
-  if (!VAT_RATES.includes(rate as (typeof VAT_RATES)[number])) p.errors.vat_rate = "Choose a Cyprus VAT rate.";
+  const rates = regimeOf(org.country).vatRates;
+  if (!rates.includes(rate)) p.errors.vat_rate = `Choose one of the company’s VAT rates: ${rates.slice(0, -1).join("%, ")}% or ${rates.at(-1)}%.`;
   const account = p.uuid("account_id");
   if (!account) p.errors.account_id = "Choose the income account it is sold to.";
   if (p.failed || !name || price === undefined || !account) return p.fail();

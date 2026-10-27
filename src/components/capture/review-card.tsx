@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { Field, FormError, InlineSubmit, NativeSelect, SubmitButton, TextInput } from "@/components/common/form-fields";
 import { LineEditor } from "@/components/accounts/line-editor";
 import { RecordBadge } from "@/components/records/record-layout";
+import { useCurrency } from "@/components/common/regime";
 
 export type ReviewItem = {
   id: string; fileId: string; fileName: string; mediaType: string; pages: string; language: string;
@@ -27,6 +28,7 @@ const ROUTED = { vat_number: "Matched on the customer's VAT number", name: "Matc
 const SUPPLIER = { vat_number: "existing supplier, matched on VAT number", name: "existing supplier, matched on name", new: "new supplier, added with the bill" } as Record<string, string>;
 
 export function ReviewCard({ item, clients }: { item: ReviewItem; clients: ReviewClient[] }) {
+  const currency = useCurrency();
   const [state, action] = useActionState(postCaptureItem, idleState);
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(false);
@@ -39,7 +41,7 @@ export function ReviewCard({ item, clients }: { item: ReviewItem; clients: Revie
         <p className="text-ink truncate text-[13.5px] font-semibold">{item.supplier.name_latin}{greek ? <span className="text-ink-faint ml-2 text-[12px] font-normal">{item.supplier.name}</span> : null}</p>
         <p className="text-ink-faint truncate text-[11.5px]">{item.fileName}{item.pages ? ` · page ${item.pages}` : ""} · {item.language === "el" ? "Greek" : item.language === "mixed" ? "Greek and English" : "English"}{item.photo ? " · photo" : ""}{item.number ? ` · No. ${item.number}` : ""}{item.issueDate ? ` · ${formatDate(item.issueDate)}` : ""}</p>
       </div>
-      <div className="text-right"><p className="text-ink text-[14px] font-semibold tabular-nums">{formatAmount(item.totals.total)}</p><p className="text-ink-faint text-[11px] tabular-nums">{formatAmount(item.totals.net)} + {formatAmount(item.totals.vat)} VAT</p></div>
+      <div className="text-right"><p className="text-ink text-[14px] font-semibold tabular-nums">{formatAmount(item.totals.total, currency)}</p><p className="text-ink-faint text-[11px] tabular-nums">{formatAmount(item.totals.net, currency)} + {formatAmount(item.totals.vat, currency)} VAT</p></div>
       <div className="min-w-48">
         <p className={cn("text-[12.5px] font-medium", client ? "text-ink" : "text-caution")}>{client ? `→ ${client.name}` : "Which client?"}</p>
         <p className="text-ink-faint text-[11px]">{ROUTED[item.routing.method] ?? ROUTED.none}</p>

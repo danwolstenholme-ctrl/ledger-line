@@ -7,12 +7,14 @@ import { idleState } from "@/lib/actions/state";
 import type { PickerAccount } from "@/lib/domain/accounts";
 import { priceInput } from "@/lib/domain/line-math";
 import { Field, FormError, NativeSelect, SubmitButton, TextInput } from "@/components/common/form-fields";
-import { VAT_RATES, type ItemRow } from "@/types/database";
+import type { ItemRow } from "@/types/database";
+import { useRegime } from "@/components/common/regime";
 
 const UNITS = ["", "each", "hour", "day", "kg", "litre", "bottle", "case", "box", "month", "visit", "session", "person"];
 
 /** A product or service, priced once: typing its name on an invoice line fills in the rest. */
 export function ItemForm({ item, accounts, defaultAccount }: { item?: ItemRow; accounts: PickerAccount[]; defaultAccount: string }) {
+  const { vatRates } = useRegime();
   const [state, action] = useActionState(saveItem, idleState);
   const uid = useId();
   const errors = state.fieldErrors ?? {};
@@ -33,7 +35,7 @@ export function ItemForm({ item, accounts, defaultAccount }: { item?: ItemRow; a
         <NativeSelect id={`${uid}-unit`} name="unit" defaultValue={item?.unit ?? ""}>{units.map(unit => <option key={unit} value={unit}>{unit || "—"}</option>)}</NativeSelect>
       </Field>
       <Field label="VAT rate" htmlFor={`${uid}-vat`} required error={errors.vat_rate}>
-        <NativeSelect id={`${uid}-vat`} name="vat_rate" defaultValue={String(item?.vat_rate ?? 19)}>{VAT_RATES.map(rate => <option key={rate} value={rate}>{rate}%</option>)}</NativeSelect>
+        <NativeSelect id={`${uid}-vat`} name="vat_rate" defaultValue={String(item?.vat_rate ?? vatRates[0])}>{vatRates.map(rate => <option key={rate} value={rate}>{rate}%</option>)}</NativeSelect>
       </Field>
       <Field label="Income account" htmlFor={`${uid}-account`} required error={errors.account_id}>
         <NativeSelect id={`${uid}-account`} name="account_id" defaultValue={item?.account_id ?? defaultAccount}>{accounts.map(account => <option key={account.id} value={account.id}>{account.code} · {account.name}</option>)}</NativeSelect>

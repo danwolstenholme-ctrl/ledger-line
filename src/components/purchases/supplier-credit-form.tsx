@@ -10,6 +10,7 @@ import { Field, FormError, NativeSelect, SubmitButton, TextArea, TextInput } fro
 import { LineEditor, type LineValue } from "@/components/accounts/line-editor";
 import { ReverseChargeField } from "@/components/accounts/forms";
 import Link from "@/components/navigation/navigation-link";
+import { useCurrency } from "@/components/common/regime";
 
 export type SupplierCreditBill = { id: string; number: string | null; supplier_id: string; supplier_name: string; total: number; balance: number; credited_before: number; reverse_charge: boolean; lines: LineValue[] };
 export type SupplierCreditValues = { id: string; supplier_id: string; bill_id: string | null; number: string | null; issued_on: string; reverse_charge: boolean; notes: string | null; lines: LineValue[] };
@@ -23,6 +24,7 @@ export function SupplierCreditForm({ bill, credit, suppliers, accounts, today, c
   bill: SupplierCreditBill | null; credit?: SupplierCreditValues; suppliers: { id: string; name: string; default_account_id: string | null; reverse_charge: boolean }[];
   accounts: PickerAccount[]; today: string; cancelHref: string;
 }) {
+  const currency = useCurrency();
   const [state, action] = useActionState(saveSupplierCredit, idleState);
   const uid = useId();
   const [supplier, setSupplier] = useState(credit?.supplier_id ?? bill?.supplier_id ?? "");
@@ -33,8 +35,8 @@ export function SupplierCreditForm({ bill, credit, suppliers, accounts, today, c
     {credit ? <input type="hidden" name="id" value={credit.id} /> : null}
     {bill ? <input type="hidden" name="bill_id" value={bill.id} /> : null}
     {bill ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">
-      Corrects bill <span className="text-ink font-mono font-medium">{bill.number ?? "without a number"}</span> from {bill.supplier_name} ({formatAmount(bill.total)}). Up to {formatAmount(left!)} can be credited.
-      {bill.balance > 0 ? ` It comes off the ${formatAmount(bill.balance)} still to pay; anything more is kept as credit to use or to have refunded.` : " The bill is paid, so the credit is kept to use against their next bill, or to be refunded."}
+      Corrects bill <span className="text-ink font-mono font-medium">{bill.number ?? "without a number"}</span> from {bill.supplier_name} ({formatAmount(bill.total, currency)}). Up to {formatAmount(left!, currency)} can be credited.
+      {bill.balance > 0 ? ` It comes off the ${formatAmount(bill.balance, currency)} still to pay; anything more is kept as credit to use or to have refunded.` : " The bill is paid, so the credit is kept to use against their next bill, or to be refunded."}
     </p> : null}
     <div className="grid gap-4 sm:grid-cols-3">
       <Field label="Supplier" htmlFor={`${uid}-supplier`} required error={errors.supplier_id}>

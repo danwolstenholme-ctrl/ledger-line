@@ -30,7 +30,7 @@ export const shiftMonth = (period: string, by: number) => {
 };
 
 export async function getPracticeBooks() {
-  return one<{ id: string; slug: string; name: string; default_bank_account_id: string | null; payment_terms_days: number; invoice_prefix: string }>("select id, slug, name, default_bank_account_id, payment_terms_days, invoice_prefix from organisations where is_practice");
+  return one<{ id: string; slug: string; name: string; default_bank_account_id: string | null; payment_terms_days: number; invoice_prefix: string; country: string }>("select id, slug, name, default_bank_account_id, payment_terms_days, invoice_prefix, country from organisations where is_practice");
 }
 
 /** The timer this person has running, if any: shown in the top bar on every page. */
@@ -58,7 +58,7 @@ export async function getTimeWeek(week?: string) {
 }
 
 export type FeeRow = {
-  organisation_id: string; slug: string; name: string; manager: string | null; customer_id: string;
+  organisation_id: string; slug: string; name: string; manager: string | null; customer_id: string; country: string;
   monthly_fee: number; hourly_rate: number; app_fee: number; minutes: number; extraMinutes: number; extraUnbilled: number; extraValue: number;
   fee: number; perHour: number | null; belowFloor: boolean;
   invoice: { id: string; number: string; status: string; total: number } | null;
@@ -72,8 +72,8 @@ export async function getFees(period?: string) {
   const [practice, books, clients, minutes, invoices] = await Promise.all([
     getPractice(),
     getPracticeBooks(),
-    sql<{ organisation_id: string; slug: string; name: string; manager: string | null; customer_id: string; monthly_fee: number; hourly_rate: number; app_fee: number }>(`
-      select f.organisation_id, o.slug, o.name, o.manager, f.customer_id, f.monthly_fee, f.hourly_rate, f.app_fee
+    sql<{ organisation_id: string; slug: string; name: string; manager: string | null; customer_id: string; country: string; monthly_fee: number; hourly_rate: number; app_fee: number }>(`
+      select f.organisation_id, o.slug, o.name, o.manager, f.customer_id, o.country, f.monthly_fee, f.hourly_rate, f.app_fee
         from client_fees f join organisations o on o.id = f.organisation_id order by o.name`),
     sql<{ organisation_id: string; minutes: number; extra_minutes: number; extra_unbilled: number }>(`
       select organisation_id, coalesce(sum(minutes), 0) as minutes,

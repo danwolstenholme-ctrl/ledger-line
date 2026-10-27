@@ -2,7 +2,9 @@ import "server-only";
 
 import { sql } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
-import { nextVatReturn } from "@/lib/domain/vat";
+import { nextVatReturn, vatSettingsOf } from "@/lib/domain/vat";
+import { ukVatReturn } from "@/lib/domain/vat-uk";
+import { getUkVatFigures, ukSchemeOf } from "@/lib/data/accounts";
 import { getOrganisations, getPractice } from "@/lib/org";
 
 /**
@@ -35,11 +37,14 @@ export async function getPracticeDashboard() {
   const by = <T extends { organisation_id: string }>(rows: T[]) => new Map(rows.map(row => [row.organisation_id, row]));
   const lineBy = by(lines), reviewBy = by(reviews), receivableBy = by(receivables), activityBy = by(activity);
   const vatNow = await Promise.all(organisations.map(async org => {
-    const next = nextVatReturn({ quarterEndMonth: org.vat_quarter_end_month, registered: org.vat_registered, booksFrom: "2025-07-01",
+    const next = nextVatReturn({ vat: vatSettingsOf(org), registered: org.vat_registered, booksFrom: "2025-07-01",
       filed: filed.filter(row => row.organisation_id === org.id).map(row => row.period_to), today });
     if (!next) return null;
-    const [summary] = await sql<{ output_vat: number; input_vat: number }>("select * from vat_summary($1, $2, $3)", [org.id, next.from, next.to < today ? next.to : today]);
-    return { ...next, net: Math.round(((summary?.output_vat ?? 0) - (summary?.input_vat ?? 0)) * 100) / 100,
+    const end = next.to < today ? next.to : today;
+    // A UK client's by its own scheme (the flat rate, cash accounting); a Cyprus client's, VAT out less VAT in.
+    const net = org.country === "GB" ? ukVatReturn(await getUkVatFigures(org, next.from, end), ukSchemeOf(org)).net
+      : await sql<{ output_vat: number; input_vat: number }>("select * from vat_summary($1, $2, $3)", [org.id, next.from, end]).then(([summary]) => Math.round(((summary?.output_vat ?? 0) - (summary?.input_vat ?? 0)) * 100) / 100);
+    return { ...next, net,
       lastFiled: filed.filter(row => row.organisation_id === org.id).at(-1) ?? null };
   }));
   const clients = organisations.map((org, index) => ({
@@ -62,7 +67,8 @@ export async function getPracticeDashboard() {
       bankLines: clients.reduce((sum, client) => sum + client.bankLines, 0),
       toReview: clients.reduce((sum, client) => sum + client.toReview, 0) + Number(unrouted[0]?.count ?? 0),
       unrouted: Number(unrouted[0]?.count ?? 0),
-      overdue: clients.reduce((sum, client) => sum + client.overdue, 0),
+      // In each client's own currency: euros and pounds don't add up.
+      overdue: Object.entries(clients.reduce<Record<string, number>>((sums, client) => ({ ...sums, [client.org.currency]: (sums[client.org.currency] ?? 0) + client.overdue }), {})).filter(([, sum]) => sum > 0),
       overdueCount: clients.reduce((sum, client) => sum + client.overdueCount, 0),
     },
   };

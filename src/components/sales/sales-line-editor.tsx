@@ -9,7 +9,7 @@ import type { SaleItemOption, SaleLineValue } from "@/lib/domain/sale-lines";
 import { formatAmount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { NativeSelect, TextInput } from "@/components/common/form-fields";
-import { VAT_RATES } from "@/types/database";
+import { useCurrency, useCurrencySymbol, useRegime } from "@/components/common/regime";
 
 export type { SaleItemOption, SaleLineValue } from "@/lib/domain/sale-lines";
 type Line = SaleLineValue & { key: number };
@@ -24,12 +24,15 @@ const LABEL = "text-ink-muted block text-[11.5px] xl:hidden";
  * each line. The arithmetic is exact (see line-math) and is done again by the
  * database when the document is saved.
  */
-export function SalesLineEditor({ accounts, items, initial, defaultAccount, defaultRate = 19, noVat = false, error }: {
+export function SalesLineEditor({ accounts, items, initial, defaultAccount, defaultRate, noVat = false, error }: {
   accounts: PickerAccount[]; items: SaleItemOption[]; initial?: SaleLineValue[]; defaultAccount: string; defaultRate?: number; noVat?: boolean; error?: string;
 }) {
+  const symbol = useCurrencySymbol();
+  const { vatRates } = useRegime();
+  const currency = useCurrency();
   const uid = useId();
   const nextKey = useRef(initial?.length ?? 1);
-  const blank = (key: number): Line => ({ key, item_id: null, description: "", unit: null, quantity: "1", unit_price: "", discount_pct: "", vat_rate: defaultRate, account_id: defaultAccount });
+  const blank = (key: number): Line => ({ key, item_id: null, description: "", unit: null, quantity: "1", unit_price: "", discount_pct: "", vat_rate: defaultRate ?? vatRates[0], account_id: defaultAccount });
   const [lines, setLines] = useState<Line[]>(initial?.length ? initial.map((line, key) => ({ ...line, key })) : [blank(0)]);
   const [showDiscount, setShowDiscount] = useState(() => (initial ?? []).some(line => Number(line.discount_pct) > 0));
   const byName = new Map(items.map(item => [item.name.trim().toLowerCase(), item]));
@@ -64,9 +67,9 @@ export function SalesLineEditor({ accounts, items, initial, defaultAccount, defa
       item_id: line.item_id, description: line.description, unit: line.unit, account_id: line.account_id,
       quantity: line.quantity, unit_price: line.unit_price, discount_pct: line.discount_pct || "0", vat_rate: noVat ? 0 : line.vat_rate,
     })))} />
-    <datalist id={`${uid}-items`}>{items.map(item => <option key={item.id} value={item.name}>{`${item.code ? `${item.code} · ` : ""}${formatAmount(item.unit_price)}${item.unit ? ` per ${item.unit}` : ""} · ${item.vat_rate}% VAT`}</option>)}</datalist>
+    <datalist id={`${uid}-items`}>{items.map(item => <option key={item.id} value={item.name}>{`${item.code ? `${item.code} · ` : ""}${formatAmount(item.unit_price, currency)}${item.unit ? ` per ${item.unit}` : ""} · ${item.vat_rate}% VAT`}</option>)}</datalist>
     <div aria-hidden className={cn("text-ink-faint hidden text-[11px] font-semibold tracking-[0.06em] uppercase xl:grid", ROW)}>
-      <span>Description</span><span className="text-right">Qty</span><span className="text-right">Unit price €</span><span className="text-right">{showDiscount ? "Disc %" : ""}</span><span>VAT</span><span className="text-right">Amount €</span><span />
+      <span>Description</span><span className="text-right">Qty</span><span className="text-right">Unit price {symbol}</span><span className="text-right">{showDiscount ? "Disc %" : ""}</span><span>VAT</span><span className="text-right">Amount {symbol}</span><span />
     </div>
     <ol className="space-y-3">{lines.map((line, index) => {
       const figure = figures[index];
@@ -85,17 +88,17 @@ export function SalesLineEditor({ accounts, items, initial, defaultAccount, defa
           <label className="min-w-0 space-y-1"><span aria-hidden className={LABEL}>Qty</span>
             <TextInput aria-label={`Line ${index + 1} quantity`} inputMode="decimal" value={line.quantity} onChange={event => update(line.key, { quantity: event.target.value })} className={amount} />
             {line.unit ? <span className="text-ink-faint block pr-1 text-right text-[11px]">{line.unit}</span> : null}</label>
-          <label className="min-w-0 space-y-1"><span aria-hidden className={LABEL}>Unit price €</span>
+          <label className="min-w-0 space-y-1"><span aria-hidden className={LABEL}>Unit price {symbol}</span>
             <TextInput aria-label={`Line ${index + 1} unit price`} inputMode="decimal" value={line.unit_price} onChange={event => update(line.key, { unit_price: event.target.value })} className={amount} placeholder="0.00" /></label>
           {showDiscount ? <label className="min-w-0 space-y-1"><span aria-hidden className={LABEL}>Disc %</span>
             <TextInput aria-label={`Line ${index + 1} discount percent`} inputMode="decimal" value={line.discount_pct} onChange={event => update(line.key, { discount_pct: event.target.value })} className={amount} placeholder="0" /></label>
             : <span aria-hidden className="hidden sm:block" />}
           <label className="min-w-0 space-y-1"><span aria-hidden className={LABEL}>VAT</span>
             <NativeSelect aria-label={`Line ${index + 1} VAT rate`} value={noVat ? "0" : String(line.vat_rate)} disabled={noVat} onChange={event => update(line.key, { vat_rate: Number(event.target.value) })}>
-              {VAT_RATES.map(rate => <option key={rate} value={rate}>{rate}%</option>)}
+              {vatRates.map(rate => <option key={rate} value={rate}>{rate}%</option>)}
             </NativeSelect></label>
           <p className="col-span-3 min-w-0 self-center text-right text-[13px] font-medium tabular-nums sm:col-span-1 xl:self-start xl:pt-[7px]" aria-label={`Line ${index + 1} amount`}>
-            {figure ? formatAmount(figure.net / 100) : <span className="text-critical text-[12px] font-normal">Check the figures</span>}
+            {figure ? formatAmount(figure.net / 100, currency) : <span className="text-critical text-[12px] font-normal">Check the figures</span>}
           </p>
           <button type="button" onClick={() => remove(line.key)} disabled={lines.length === 1} aria-label={`Remove line ${index + 1}`}
             className="text-ink-faint hover:text-critical inline-grid size-8 place-items-center justify-self-end rounded disabled:opacity-30 touch:size-11 xl:self-start"><X className="size-3.5" /></button>
@@ -108,12 +111,12 @@ export function SalesLineEditor({ accounts, items, initial, defaultAccount, defa
         {!showDiscount ? <button type="button" onClick={() => setShowDiscount(true)} className="text-ink-muted hover:text-brand text-[12.5px] touch:min-h-10">Give a discount</button> : null}
       </div>
       <dl className="grid min-w-56 grid-cols-[auto_auto] gap-x-6 gap-y-0.5 text-[12.5px]">
-        {discounts > 0 ? <><dt className="text-ink-muted">Discounts</dt><dd className="text-right tabular-nums">−{formatAmount(discounts / 100)}</dd></> : null}
-        <dt className="text-ink-muted">Subtotal</dt><dd className="text-right tabular-nums">{formatAmount(net / 100)}</dd>
-        {noVat ? <><dt className="text-ink-muted">No VAT charged</dt><dd className="text-right tabular-nums">{formatAmount(0)}</dd></>
-          : byRate.size ? [...byRate.entries()].sort(([a], [b]) => b - a).map(([rate, value]) => <span key={rate} className="contents"><dt className="text-ink-muted">VAT at {rate}%</dt><dd className="text-right tabular-nums">{formatAmount(value / 100)}</dd></span>)
-          : <><dt className="text-ink-muted">VAT</dt><dd className="text-right tabular-nums">{formatAmount(0)}</dd></>}
-        <dt className="text-ink font-semibold">Total</dt><dd className="text-right text-[14px] font-semibold tabular-nums">{formatAmount((net + vat) / 100)}</dd>
+        {discounts > 0 ? <><dt className="text-ink-muted">Discounts</dt><dd className="text-right tabular-nums">−{formatAmount(discounts / 100, currency)}</dd></> : null}
+        <dt className="text-ink-muted">Subtotal</dt><dd className="text-right tabular-nums">{formatAmount(net / 100, currency)}</dd>
+        {noVat ? <><dt className="text-ink-muted">No VAT charged</dt><dd className="text-right tabular-nums">{formatAmount(0, currency)}</dd></>
+          : byRate.size ? [...byRate.entries()].sort(([a], [b]) => b - a).map(([rate, value]) => <span key={rate} className="contents"><dt className="text-ink-muted">VAT at {rate}%</dt><dd className="text-right tabular-nums">{formatAmount(value / 100, currency)}</dd></span>)
+          : <><dt className="text-ink-muted">VAT</dt><dd className="text-right tabular-nums">{formatAmount(0, currency)}</dd></>}
+        <dt className="text-ink font-semibold">Total</dt><dd className="text-right text-[14px] font-semibold tabular-nums">{formatAmount((net + vat) / 100, currency)}</dd>
       </dl>
     </div>
     {error ? <p role="alert" className="text-critical text-[12px]">{error}</p> : null}

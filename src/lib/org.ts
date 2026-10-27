@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { one, sql } from "@/lib/db";
 import { booksHref } from "@/lib/domain/paths";
+import { setRequestCurrency } from "@/lib/format";
 import type { OrganisationRow, PracticeRow } from "@/types/database";
 
 /** proxy.ts names the company in the URL on every request under /c/{slug}. */
@@ -19,6 +20,8 @@ export const requireOrg = cache(async () => {
   if (!slug) notFound();
   const org = await getOrgBySlug(slug);
   if (!org) notFound();
+  // Its figures are in its own currency from here on (lib/format).
+  setRequestCurrency(org.currency);
   return org;
 });
 

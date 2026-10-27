@@ -33,7 +33,7 @@ export default async function PracticeDashboard() {
       <StatTile label="Deadlines, next 30 days" value={String(deadlines.counts.next30)} tone={deadlines.counts.overdue ? "critical" : undefined} context={deadlines.counts.overdue ? `${deadlines.counts.overdue} overdue as well` : "Nothing overdue"} href="/deadlines" />
       <StatTile label="Bank lines to reconcile" value={String(totals.bankLines)} context="Imported, not yet matched" />
       <StatTile label="Documents to review" value={String(totals.toReview)} context={totals.unrouted ? `${totals.unrouted} not yet routed to a client` : "Read by Claude, waiting for you"} href="/capture" />
-      <StatTile label="Overdue receivables" value={formatMoney(totals.overdue)} tone={totals.overdue ? "critical" : undefined} context={`${totals.overdueCount} invoice${totals.overdueCount === 1 ? "" : "s"} past due, all clients`} />
+      <StatTile label="Overdue receivables" value={totals.overdue.length ? totals.overdue.map(([currency, sum]) => formatMoney(sum, currency)).join(" · ") : formatMoney(0, "EUR")} tone={totals.overdue.length ? "critical" : undefined} context={`${totals.overdueCount} invoice${totals.overdueCount === 1 ? "" : "s"} past due, all clients`} />
     </section>
 
     {files.onboarding.length ? <section aria-label="Taking on" className="ll-panel overflow-hidden">
@@ -70,7 +70,7 @@ export default async function PracticeDashboard() {
                   {quarterLabel(vat.from, vat.to)} · due {formatDate(vat.due)}
                 </span>
                 <span className="text-ink-faint block text-[11.5px]">
-                  {vat.state === "open" ? "Quarter running" : vat.state === "overdue" ? `${-vat.daysLeft} days overdue` : `${vat.daysLeft} days left, not filed`} · {vat.net >= 0 ? `${formatAmount(vat.net)} to pay` : `${formatAmount(-vat.net)} to reclaim`}
+                  {vat.state === "open" ? "Quarter running" : vat.state === "overdue" ? `${-vat.daysLeft} days overdue` : `${vat.daysLeft} days left, not filed`} · {vat.net >= 0 ? `${formatAmount(vat.net, org.currency)} to pay` : `${formatAmount(-vat.net, org.currency)} to reclaim`}
                   {vat.lastFiled ? ` · last filed ${formatDate(vat.lastFiled.filed_on)}` : ""}
                 </span>
               </Link>}
@@ -81,7 +81,7 @@ export default async function PracticeDashboard() {
             </td>
             <td className={cn(cell, "text-right tabular-nums")}>{toReview ? <Link href="/capture" className="text-brand font-medium hover:underline">{toReview}</Link> : <span className="text-ink-faint">—</span>}</td>
             <td className={cn(cell, "text-right tabular-nums")}>
-              {overdue ? <Link href={`/c/${org.slug}/reports/aged-receivables`} className="text-critical font-medium hover:underline">{formatAmount(overdue)}</Link> : <span className="text-ink-faint">—</span>}
+              {overdue ? <Link href={`/c/${org.slug}/reports/aged-receivables`} className="text-critical font-medium hover:underline">{formatAmount(overdue, org.currency)}</Link> : <span className="text-ink-faint">—</span>}
               {overdueCount ? <span className="text-ink-faint block text-[11.5px]">{overdueCount} invoice{overdueCount === 1 ? "" : "s"}</span> : null}
             </td>
             <td className={cell}>{org.lock_date ? <span className="text-ink-muted inline-flex items-center gap-1"><Lock className="size-3" />{formatDate(org.lock_date)}</span> : <span className="text-ink-faint">Not locked</span>}</td>

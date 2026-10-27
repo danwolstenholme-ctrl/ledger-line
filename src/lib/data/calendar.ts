@@ -26,7 +26,7 @@ function deadlineHref(row: DeadlineRow) {
   const base = `/c/${row.company.slug}`;
   if (row.kind === "vat_return") return `${base}/reports/vat?range=custom&from=${row.periodStart}&to=${row.periodEnd}`;
   if (row.kind === "vies") return `${base}/reports/vies?range=custom&from=${row.periodStart}&to=${row.periodEnd}`;
-  if (row.kind === "financial_statements") return `${base}/year-end?period=${row.periodEnd}`;
+  if (row.kind === "financial_statements" || row.kind === "accounts_filing") return `${base}/year-end?period=${row.periodEnd}`;
   if (row.kind === "aml_review" && row.review) return `/clients/${row.review.fileId}`;
   return `${base}/deadlines`;
 }
@@ -43,12 +43,12 @@ export async function getCalendarItems(input: { from: string; to: string; client
       select t.id, t.title, to_char(t.due_on, 'YYYY-MM-DD') as due_on, t.owner, t.priority, t.done_at is not null as done, o.slug, o.name as company
         from crm_tasks t join organisations o on o.id = t.organisation_id
        where t.due_on is not null and (t.due_on between $1 and $2 or (t.done_at is null and t.due_on < $3)) ${scope}`, params([input.from, input.to, today])) : [],
-    want("invoice") ? sql<{ id: string; number: string; due_on: string; balance: number; customer: string; slug: string; company: string }>(`
-      select i.id, i.number, to_char(i.due_on, 'YYYY-MM-DD') as due_on, i.total - i.amount_paid - i.amount_credited as balance, c.name as customer, o.slug, o.name as company
+    want("invoice") ? sql<{ id: string; number: string; due_on: string; balance: number; customer: string; slug: string; company: string; currency: string }>(`
+      select i.id, i.number, to_char(i.due_on, 'YYYY-MM-DD') as due_on, i.total - i.amount_paid - i.amount_credited as balance, c.name as customer, o.slug, o.name as company, i.currency
         from invoices i join customers c on c.id = i.customer_id join organisations o on o.id = i.organisation_id
        where i.status in ('issued', 'part_paid') and i.due_on is not null and (i.due_on between $1 and $2 or i.due_on < $3) ${scope}`, params([input.from, input.to, today])) : [],
-    want("quote") ? sql<{ id: string; number: string; valid_until: string; total: number; customer: string; slug: string; company: string }>(`
-      select q.id, q.number, to_char(q.valid_until, 'YYYY-MM-DD') as valid_until, q.total, c.name as customer, o.slug, o.name as company
+    want("quote") ? sql<{ id: string; number: string; valid_until: string; total: number; customer: string; slug: string; company: string; currency: string }>(`
+      select q.id, q.number, to_char(q.valid_until, 'YYYY-MM-DD') as valid_until, q.total, c.name as customer, o.slug, o.name as company, o.currency
         from quotes q join customers c on c.id = q.customer_id join organisations o on o.id = q.organisation_id
        where q.status = 'sent' and q.valid_until is not null and (q.valid_until between $1 and $2 or q.valid_until < $3) ${scope}`, params([input.from, input.to, today])) : [],
   ]);
@@ -75,13 +75,13 @@ export async function getCalendarItems(input: { from: string; to: string; client
     all.push({ key: `invoice:${input.grouped ? `${first.slug}:${first.due_on}` : first.id}`, date: first.due_on, kind: "invoice", company: { slug: first.slug, name: first.company },
       state: late ? "overdue" : "due",
       title: group.length > 1 ? `${group.length} invoices ${late ? "overdue" : "due"}` : `Invoice ${first.number} ${late ? "overdue" : "due"}`,
-      detail: group.length > 1 ? `${formatAmount(total)} to collect` : `${first.customer} · ${formatAmount(total)}`,
+      detail: group.length > 1 ? `${formatAmount(total, first.currency)} to collect` : `${first.customer} · ${formatAmount(total, first.currency)}`,
       href: group.length > 1 ? `/c/${first.slug}/sales?view=${late ? "overdue" : "open"}` : `/c/${first.slug}/sales/${first.id}` });
   }
   for (const quote of quotes) {
     const gone = quote.valid_until < today;
     all.push({ key: `quote:${quote.id}`, date: quote.valid_until, kind: "quote", title: `Quote ${quote.number} ${gone ? "expired" : "expires"}`, href: `/c/${quote.slug}/quotes/${quote.id}`,
-      company: { slug: quote.slug, name: quote.company }, state: gone ? "overdue" : "due", detail: `${quote.customer} · ${formatAmount(Number(quote.total))}` });
+      company: { slug: quote.slug, name: quote.company }, state: gone ? "overdue" : "due", detail: `${quote.customer} · ${formatAmount(Number(quote.total), quote.currency)}` });
   }
 
   const order = (a: CalendarItem, b: CalendarItem) => a.date.localeCompare(b.date) || a.company.name.localeCompare(b.company.name) || a.title.localeCompare(b.title);
@@ -95,7 +95,7 @@ export async function getCalendarItems(input: { from: string; to: string; client
       const own = lateInvoices.filter(invoice => invoice.slug === slug).sort((a, b) => a.due_on.localeCompare(b.due_on));
       overdue.push({ key: `invoice:${slug}:overdue`, date: own[0].due_on, kind: "invoice", state: "overdue", company: { slug, name: own[0].company },
         title: own.length > 1 ? `${own.length} invoices overdue` : `Invoice ${own[0].number} overdue`, href: `/c/${slug}/sales?view=overdue`,
-        detail: `${formatAmount(own.reduce((sum, item) => sum + Number(item.balance), 0))} to collect${own.length > 1 ? `, the oldest due ${formatDate(own[0].due_on)}` : ` from ${own[0].customer}`}` });
+        detail: `${formatAmount(own.reduce((sum, item) => sum + Number(item.balance), 0), own[0].currency)} to collect${own.length > 1 ? `, the oldest due ${formatDate(own[0].due_on)}` : ` from ${own[0].customer}`}` });
     }
   }
   overdue.sort(order);

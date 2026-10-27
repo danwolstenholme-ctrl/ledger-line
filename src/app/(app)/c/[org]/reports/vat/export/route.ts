@@ -7,7 +7,8 @@ export async function GET(request: Request) {
   await requireOrg();
   const report = await getVatReport(searchParams(request));
   if (report.failed) return unavailable("VAT return");
-  const { vat, values } = vatBoxes(report.summary, report.breakdown);
+  // A UK company's are HMRC's nine boxes; a Cyprus company's, form VAT 4's.
+  const boxes = report.uk ? report.uk.boxes : (({ vat, values }) => [...vat, ...values])(vatBoxes(report.summary, report.breakdown));
   return csvResponse(`vat-return-${report.period.from}-to-${report.period.to}`, ["Box", "Description", "Amount"],
-    [...vat, ...values].map(box => [box.box, box.label, box.amount.toFixed(2)]));
+    boxes.map(box => [box.box, box.label, box.amount.toFixed(2)]));
 }

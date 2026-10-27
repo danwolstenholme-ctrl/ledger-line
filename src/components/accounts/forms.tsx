@@ -5,7 +5,7 @@ import Link from "@/components/navigation/navigation-link";
 import { Plus, X } from "lucide-react";
 
 import {
-  deleteBankTransaction, deleteManualJournal, recordBillPayment, saveAccountingSettings, saveBankTransaction, saveBill,
+  deleteBankTransaction, deleteManualJournal, recordBillPayment, saveAccountingSettings, saveBankTransaction, saveBill, saveVatScheme,
   saveLedgerAccount, saveManualJournal, saveSupplier, setBillVoid,
 } from "@/lib/actions/accounts";
 import { setAiSuggestions } from "@/lib/actions/bank";
@@ -19,6 +19,9 @@ import { AccountOptions, LineEditor, type LineValue } from "@/components/account
 import {
   INVOICE_PAYMENT_METHODS, type AccountingSettingsRow, type BankTransactionKind, type LedgerAccountRow, type SupplierRow,
 } from "@/types/database";
+import { useCurrency } from "@/components/common/regime";
+import { useCurrencySymbol, useRegime } from "@/components/common/regime";
+import { REVERSE_CHARGE_KINDS } from "@/lib/domain/regimes";
 
 export type BankOption = { id: string; code: string; name: string };
 const METHOD_LABELS: Record<(typeof INVOICE_PAYMENT_METHODS)[number], string> = { bank_transfer: "Bank transfer", card: "Card", cash: "Cash", cheque: "Cheque", other: "Other" };
@@ -35,14 +38,30 @@ function Saved({ state, message }: { state: ActionState; message: string }) {
 
 export type BillFormValues = {
   id: string; supplier_id: string; number: string | null; reference: string | null; issued_on: string; due_on: string | null;
-  notes: string | null; source_document: string | null; reverse_charge: boolean; lines: LineValue[];
+  notes: string | null; source_document: string | null; reverse_charge: boolean; reverse_charge_kind?: string | null; lines: LineValue[];
 };
 
-/** Reverse charge, explained where it is chosen. */
-export function ReverseChargeField({ checked, onChange, what }: { checked: boolean; onChange: (value: boolean) => void; what: string }) {
+/**
+ * Reverse charge, explained where it is chosen. In the UK, which one: each
+ * fills different boxes of the return (lib/domain/vat-uk).
+ */
+export function ReverseChargeField({ checked, onChange, what, kind }: { checked: boolean; onChange: (value: boolean) => void; what: string; kind?: string | null }) {
+  const { country } = useRegime();
+  const uid = useId();
+  const [chosen, setChosen] = useState(kind ?? "services");
+  const note = <p className="text-ink-muted text-[12px] leading-relaxed">The VAT on the lines is the company’s to account for: it goes on the return as both due and reclaimed, so it costs nothing.</p>;
+  if (country === "GB") return <div className="space-y-1">
+    <Field label="Reverse charge" htmlFor={`${uid}-rc`}>
+      <NativeSelect id={`${uid}-rc`} name="reverse_charge_kind" value={checked ? chosen : ""} onChange={event => { onChange(Boolean(event.target.value)); if (event.target.value) setChosen(event.target.value); }}>
+        <option value="">None: VAT as the supplier charged it</option>
+        {Object.entries(REVERSE_CHARGE_KINDS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      </NativeSelect>
+    </Field>
+    {checked ? <><input type="hidden" name="reverse_charge" value="on" />{note}</> : null}
+  </div>;
   return <div className="space-y-1">
     <Checkbox name="reverse_charge" checked={checked} onChange={event => onChange(event.target.checked)} label={`Reverse charge: ${what} abroad charged no VAT`} />
-    {checked ? <p className="text-ink-muted pl-6 text-[12px] leading-relaxed">The VAT on the lines is the company’s to account for: it goes on the return as both due and reclaimed, so it costs nothing.</p> : null}
+    {checked ? <div className="pl-6">{note}</div> : null}
   </div>;
 }
 
@@ -86,7 +105,7 @@ export function BillForm({ bill, defaultSupplierId, suppliers, accounts, today }
       </Field>
     </div>
     <LineEditor key={editorKey} accounts={accounts} initial={bill?.lines} defaultAccount={defaultAccount} error={errors.lines} reverseCharge={reverseCharge} />
-    <ReverseChargeField checked={reverseCharge} onChange={setReverseCharge} what="a supplier" />
+    <ReverseChargeField checked={reverseCharge} onChange={setReverseCharge} what="a supplier" kind={bill?.reverse_charge_kind} />
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Notes" htmlFor={`${uid}-notes`} hint="internal">
         <TextArea id={`${uid}-notes`} name="notes" rows={2} defaultValue={bill?.notes ?? ""} maxLength={2000} />
@@ -104,13 +123,14 @@ export function BillForm({ bill, defaultSupplierId, suppliers, accounts, today }
 }
 
 export function BillPaymentForm({ billId, balance, bankAccounts, defaultBank, today }: { billId: string; balance: number; bankAccounts: BankOption[]; defaultBank: string | null; today: string }) {
+  const currency = useCurrency();
   const [state, action] = useActionState(recordBillPayment, idleState);
   const uid = useId();
   const errors = state.fieldErrors ?? {};
   return <form action={action} onReset={keep} className="space-y-3" key={String(balance)}>
     <input type="hidden" name="bill_id" value={billId} />
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Amount paid" htmlFor={`${uid}-amount`} required hint={`${formatAmount(balance)} owed`} error={errors.amount}>
+      <Field label="Amount paid" htmlFor={`${uid}-amount`} required hint={`${formatAmount(balance, currency)} owed`} error={errors.amount}>
         <TextInput id={`${uid}-amount`} name="amount" inputMode="decimal" defaultValue={balance.toFixed(2)} className="text-right tabular-nums" />
       </Field>
       <Field label="Date paid" htmlFor={`${uid}-date`} required error={errors.paid_on}>
@@ -183,7 +203,7 @@ export function SupplierForm({ supplier, accounts }: { supplier?: SupplierRow; a
 
 export type BankTransactionValues = {
   id: string; kind: BankTransactionKind; bank_account_id: string; transfer_account_id: string | null; txn_date: string;
-  contact: string | null; reference: string | null; amount: number; reverse_charge: boolean; lines: LineValue[];
+  contact: string | null; reference: string | null; amount: number; reverse_charge: boolean; reverse_charge_kind?: string | null; lines: LineValue[];
 };
 
 const KIND_LABELS: Record<BankTransactionKind, string> = { spend: "Spend money", receive: "Receive money", transfer: "Transfer" };
@@ -232,8 +252,8 @@ export function BankTransactionForm({ transaction, initialKind = "spend", bankAc
         <TextInput id={`${uid}-amount`} name="amount" inputMode="decimal" defaultValue={transaction?.kind === "transfer" ? transaction.amount.toFixed(2) : ""} className="text-right tabular-nums" />
       </Field> : null}
     </div>
-    {kind !== "transfer" ? <LineEditor key={kind} accounts={accounts} codable="bank" initial={transaction?.kind === kind ? transaction.lines : undefined} defaultRate={kind === "spend" ? 19 : 0} error={errors.lines} reverseCharge={kind === "spend" && reverseCharge} /> : null}
-    {kind === "spend" ? <ReverseChargeField checked={reverseCharge} onChange={setReverseCharge} what="a business" /> : null}
+    {kind !== "transfer" ? <LineEditor key={kind} accounts={accounts} codable="bank" initial={transaction?.kind === kind ? transaction.lines : undefined} defaultRate={kind === "spend" ? undefined : 0} error={errors.lines} reverseCharge={kind === "spend" && reverseCharge} /> : null}
+    {kind === "spend" ? <ReverseChargeField checked={reverseCharge} onChange={setReverseCharge} what="a business" kind={transaction?.reverse_charge_kind} /> : null}
     <FormError message={state.error} />
     <div className="flex items-center gap-3">
       <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
@@ -269,6 +289,8 @@ export type JournalValues = { id: string; entry_date: string; reference: string 
 /** Opening balances and adjustments: debits on the left, credits on the right, equal before it saves. */
 /** A journal written by hand. `prefill` starts a new one from values, as a reversal starts from the journal it undoes. */
 export function JournalForm({ journal, prefill, accounts, today }: { journal?: JournalValues; prefill?: Omit<JournalValues, "id">; accounts: PickerAccount[]; today: string }) {
+  const symbol = useCurrencySymbol();
+  const currency = useCurrency();
   const [state, action] = useActionState(saveManualJournal, idleState);
   const uid = useId();
   const start = journal ?? prefill;
@@ -290,7 +312,7 @@ export function JournalForm({ journal, prefill, accounts, today }: { journal?: J
       <Field label="Reference" htmlFor={`${uid}-reference`} hint="optional"><TextInput id={`${uid}-reference`} name="reference" defaultValue={start?.reference ?? ""} maxLength={120} /></Field>
     </div>
     <div aria-hidden className={cn("text-ink-faint hidden text-[11px] font-semibold tracking-[0.06em] uppercase lg:grid", JOURNAL_ROW)}>
-      <span>Account</span><span>Description</span><span className="text-right">Debit €</span><span className="text-right">Credit €</span><span />
+      <span>Account</span><span>Description</span><span className="text-right">Debit {symbol}</span><span className="text-right">Credit {symbol}</span><span />
     </div>
     <ol className="space-y-3">{lines.map((line, index) => <li key={line.key} className={cn("border-hairline grid gap-2 border-b pb-3 last:border-b-0 last:pb-0 lg:items-start lg:border-b-0 lg:pb-0", JOURNAL_ROW)}>
       <label className="min-w-0 space-y-1"><span aria-hidden className={JOURNAL_LABEL}>Account</span>
@@ -298,18 +320,18 @@ export function JournalForm({ journal, prefill, accounts, today }: { journal?: J
       <label className="min-w-0 space-y-1"><span aria-hidden className={JOURNAL_LABEL}>Description</span>
         <TextInput aria-label={`Line ${index + 1} description`} value={line.description} maxLength={300} onChange={event => update(line.key, { description: event.target.value })} /></label>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.75rem] items-end gap-2 lg:contents">
-        <label className="min-w-0 space-y-1"><span aria-hidden className={JOURNAL_LABEL}>Debit €</span>
+        <label className="min-w-0 space-y-1"><span aria-hidden className={JOURNAL_LABEL}>Debit {symbol}</span>
           <TextInput aria-label={`Line ${index + 1} debit`} inputMode="decimal" value={line.debit} onChange={event => update(line.key, { debit: event.target.value, credit: event.target.value ? "" : line.credit })} className={amount} /></label>
-        <label className="min-w-0 space-y-1"><span aria-hidden className={JOURNAL_LABEL}>Credit €</span>
+        <label className="min-w-0 space-y-1"><span aria-hidden className={JOURNAL_LABEL}>Credit {symbol}</span>
           <TextInput aria-label={`Line ${index + 1} credit`} inputMode="decimal" value={line.credit} onChange={event => update(line.key, { credit: event.target.value, debit: event.target.value ? "" : line.debit })} className={amount} /></label>
         <button type="button" aria-label={`Remove line ${index + 1}`} disabled={lines.length <= 2} onClick={() => setLines(current => current.filter(item => item.key !== line.key))}
           className="text-ink-faint hover:text-critical inline-grid size-9 place-items-center self-end rounded disabled:opacity-30 touch:size-11 lg:self-start"><X className="size-3.5" /></button>
       </div>
     </li>)}</ol>
     <div className={cn("border-hairline-strong grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-4 border-t pt-2 text-[12.5px] font-semibold lg:grid", JOURNAL_ROW)}>
-      <span className="lg:col-span-2 lg:text-right">{debit !== credit ? <span className="text-critical font-normal">Out by {formatAmount(Math.abs(debit - credit) / 100)}</span> : debit ? <span className="text-positive font-normal">Balanced</span> : null}</span>
-      <span className="text-right tabular-nums"><span className="text-ink-muted mr-1 font-normal lg:sr-only">Debits</span>{formatAmount(debit / 100)}</span>
-      <span className="text-right tabular-nums"><span className="text-ink-muted mr-1 font-normal lg:sr-only">Credits</span>{formatAmount(credit / 100)}</span>
+      <span className="lg:col-span-2 lg:text-right">{debit !== credit ? <span className="text-critical font-normal">Out by {formatAmount(Math.abs(debit - credit) / 100, currency)}</span> : debit ? <span className="text-positive font-normal">Balanced</span> : null}</span>
+      <span className="text-right tabular-nums"><span className="text-ink-muted mr-1 font-normal lg:sr-only">Debits</span>{formatAmount(debit / 100, currency)}</span>
+      <span className="text-right tabular-nums"><span className="text-ink-muted mr-1 font-normal lg:sr-only">Credits</span>{formatAmount(credit / 100, currency)}</span>
     </div>
     <button type="button" onClick={() => { nextKey.current += 1; setLines(current => [...current, blank(nextKey.current)]); }} className="text-brand inline-flex items-center gap-1 text-[12.5px] font-medium hover:underline touch:min-h-10"><Plus className="size-3.5" />Add a line</button>
     {errors.lines ? <p role="alert" className="text-critical text-[12px]">{errors.lines}</p> : null}
@@ -389,5 +411,49 @@ export function AccountingSettingsForm({ settings, bankAccounts }: { settings: A
     <FormError message={state.error} />
     <Saved state={state} message="Settings saved." />
     <SubmitButton pendingLabel="Saving…">Save settings</SubmitButton>
+  </form>;
+}
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** A UK company's VAT: quarterly on its stagger, monthly, or annual accounting; cash accounting; the flat rate. */
+export function VatSchemeForm({ values }: { values: { vat_period: string; vat_quarter_end_month: number; vat_year_end_month: number | null; vat_annual_payments: string | null; vat_cash_accounting: boolean; vat_flat_rate: number | null } }) {
+  const [state, action] = useActionState(saveVatScheme, idleState);
+  const uid = useId();
+  const errors = state.fieldErrors ?? {};
+  const [period, setPeriod] = useState(values.vat_period);
+  const [flat, setFlat] = useState(values.vat_flat_rate === null ? "" : String(values.vat_flat_rate));
+  return <form action={action} onReset={keep} className="space-y-4" noValidate>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="VAT returns" htmlFor={`${uid}-period`} error={errors.vat_period}>
+        <NativeSelect id={`${uid}-period`} name="vat_period" value={period} onChange={event => setPeriod(event.target.value)}>
+          <option value="quarterly">Every quarter</option><option value="monthly">Every month</option><option value="annual">Once a year (annual accounting)</option>
+        </NativeSelect>
+      </Field>
+      {period === "annual" ? <>
+        <Field label="VAT year ends in" htmlFor={`${uid}-year`} error={errors.vat_year_end_month}>
+          <NativeSelect id={`${uid}-year`} name="vat_year_end_month" defaultValue={String(values.vat_year_end_month ?? 3)}>{MONTH_NAMES.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}</NativeSelect>
+        </Field>
+        <Field label="Payments on account" htmlFor={`${uid}-payments`} error={errors.vat_annual_payments} className="sm:col-span-2">
+          <NativeSelect id={`${uid}-payments`} name="vat_annual_payments" defaultValue={values.vat_annual_payments ?? "monthly"}>
+            <option value="monthly">Nine of 10%, at the end of months 4 to 12</option><option value="quarterly">Three of 25%, at the end of months 4, 7 and 10</option>
+          </NativeSelect>
+        </Field>
+      </> : null}
+      <Field label="Quarters end in" htmlFor={`${uid}-stagger`} error={errors.vat_quarter_end_month} className={period === "quarterly" ? "" : "hidden"}>
+        <NativeSelect id={`${uid}-stagger`} name="vat_quarter_end_month" defaultValue={String(values.vat_quarter_end_month)}>
+          <option value="1">January, April, July, October</option><option value="2">February, May, August, November</option><option value="3">March, June, September, December</option>
+        </NativeSelect>
+      </Field>
+      <Field label="Flat Rate Scheme" htmlFor={`${uid}-flat`} hint="the percentage, if on it" error={errors.vat_flat_rate}>
+        <TextInput id={`${uid}-flat`} name="vat_flat_rate" inputMode="decimal" value={flat} onChange={event => setFlat(event.target.value)} placeholder="Not on the scheme" />
+      </Field>
+    </div>
+    <Checkbox name="vat_cash_accounting" defaultChecked={values.vat_cash_accounting}
+      label={flat ? "Work out the flat-rate turnover on payments received (the scheme’s cash-based method)" : "Cash accounting: VAT when customers pay and suppliers are paid"} />
+    <p className="text-ink-muted text-[12px] leading-relaxed">The Flat Rate Scheme can’t be combined with the Cash Accounting Scheme, but has its own cash-based turnover; either can be combined with annual accounting. A return and its payment are due 1 month and 7 days after each period, or 2 months after an annual one.</p>
+    <FormError message={state.error} />
+    <Saved state={state} message="VAT settings saved." />
+    <SubmitButton pendingLabel="Saving…">Save VAT settings</SubmitButton>
   </form>;
 }

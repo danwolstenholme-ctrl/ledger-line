@@ -9,9 +9,10 @@ import { CREDIT_REASONS } from "@/lib/domain/credit-notes";
 import { formatAmount } from "@/lib/format";
 import { Field, FormError, NativeSelect, TextArea, TextInput } from "@/components/common/form-fields";
 import Link from "@/components/navigation/navigation-link";
-import { CustomerChoice, IntentButton, TREATMENTS, NEW_CUSTOMER, treatmentFor, type DocumentFormCustomer } from "@/components/sales/document-form";
+import { CustomerChoice, IntentButton, NEW_CUSTOMER, treatmentFor, treatmentsFor, type DocumentFormCustomer } from "@/components/sales/document-form";
 import { SalesLineEditor, type SaleItemOption, type SaleLineValue } from "@/components/sales/sales-line-editor";
 import type { VatTreatment } from "@/types/database";
+import { useCurrency, useRegime } from "@/components/common/regime";
 
 export type CreditNoteInvoice = { id: string; number: string; customer_id: string; vat_treatment: VatTreatment; total: number; balance: number; credited_before: number; lines: SaleLineValue[] };
 export type CreditNoteValues = { id: string; customer_id: string; invoice_id: string | null; number: string; issued_on: string; vat_treatment: VatTreatment; reason: string; notes: string | null; lines: SaleLineValue[] };
@@ -25,11 +26,13 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
   invoice: CreditNoteInvoice | null; document?: CreditNoteValues; customers: DocumentFormCustomer[]; accounts: PickerAccount[]; items: SaleItemOption[];
   salesAccount: string; number: string; today: string; registered: boolean; cancelHref: string;
 }) {
+  const { country } = useRegime();
+  const currency = useCurrency();
   const [state, action] = useActionState(saveCreditNote, idleState);
   const uid = useId();
   const [customerId, setCustomerId] = useState(document?.customer_id ?? invoice?.customer_id ?? (customers.length ? "" : NEW_CUSTOMER));
   const customer = customers.find(item => item.id === customerId);
-  const [treatment, setTreatment] = useState<VatTreatment>(document?.vat_treatment ?? invoice?.vat_treatment ?? treatmentFor(customer, registered));
+  const [treatment, setTreatment] = useState<VatTreatment>(document?.vat_treatment ?? invoice?.vat_treatment ?? treatmentFor(customer, registered, country));
   const [editorKey, setEditorKey] = useState(0);
   const errors = state.fieldErrors ?? {};
   const left = invoice ? Math.max(0, invoice.total - invoice.credited_before) : null;
@@ -37,13 +40,13 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
     {document ? <input type="hidden" name="id" value={document.id} /> : null}
     {invoice ? <input type="hidden" name="invoice_id" value={invoice.id} /> : null}
     {invoice ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">
-      Credits invoice <span className="text-ink font-mono font-medium">{invoice.number}</span> ({formatAmount(invoice.total)}). Up to {formatAmount(left!)} can still be credited.
-      {invoice.balance > 0 ? ` Issued, it comes off the ${formatAmount(invoice.balance)} still owed on it; anything more is kept as credit to use or refund.` : " The invoice is paid, so the credit is kept to use against another invoice or to refund."}
+      Credits invoice <span className="text-ink font-mono font-medium">{invoice.number}</span> ({formatAmount(invoice.total, currency)}). Up to {formatAmount(left!, currency)} can still be credited.
+      {invoice.balance > 0 ? ` Issued, it comes off the ${formatAmount(invoice.balance, currency)} still owed on it; anything more is kept as credit to use or refund.` : " The invoice is paid, so the credit is kept to use against another invoice or to refund."}
     </p> : null}
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <CustomerChoice uid={uid} customers={customers} value={customerId} error={errors.customer_id} locked={Boolean(invoice)} onChange={id => {
         setCustomerId(id);
-        if (!document && !invoice) { setTreatment(treatmentFor(customers.find(item => item.id === id), registered)); setEditorKey(value => value + 1); }
+        if (!document && !invoice) { setTreatment(treatmentFor(customers.find(item => item.id === id), registered, country)); setEditorKey(value => value + 1); }
       }} />
       <Field label="Credit note number" htmlFor={`${uid}-number`} required error={errors.number}>
         <TextInput id={`${uid}-number`} name="number" defaultValue={document?.number ?? number} maxLength={60} className="font-mono" />
@@ -56,7 +59,7 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
       </Field>
       {registered ? <Field label="VAT" htmlFor={`${uid}-vat`} hint={invoice ? "as on the invoice" : undefined}>
         <NativeSelect id={`${uid}-vat`} name={invoice ? undefined : "vat_treatment"} value={treatment} disabled={Boolean(invoice)} onChange={event => setTreatment(event.target.value as VatTreatment)}>
-          {TREATMENTS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+          {treatmentsFor(country).map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
         </NativeSelect>
         {invoice ? <input type="hidden" name="vat_treatment" value={treatment} /> : null}
       </Field> : <input type="hidden" name="vat_treatment" value="exempt" />}
@@ -65,7 +68,7 @@ export function CreditNoteForm({ invoice, document, customers, accounts, items, 
       <p className="text-ink text-[12.5px] font-medium">What is credited</p>
       <p className="text-ink-faint text-[11.5px]">{invoice ? "The invoice's lines, to start with. Remove what is not being credited, or lower a quantity or a price." : "As on an invoice: each line takes its net back off its income account."}</p>
       <SalesLineEditor key={`${editorKey}-${customerId}`} accounts={accounts} items={items} initial={document?.lines ?? invoice?.lines} noVat={treatment !== "standard"}
-        defaultAccount={customer?.default_account_id ?? salesAccount} defaultRate={19} error={errors.lines} />
+        defaultAccount={customer?.default_account_id ?? salesAccount} error={errors.lines} />
     </div>
     <Field label="Notes" htmlFor={`${uid}-notes`} hint="printed on the credit note">
       <TextArea id={`${uid}-notes`} name="notes" rows={2} defaultValue={document?.notes ?? ""} maxLength={2000} placeholder="e.g. Two cases returned damaged on delivery." />

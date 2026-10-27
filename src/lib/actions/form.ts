@@ -127,6 +127,12 @@ export class FormParser {
   }
 }
 
+/** Which reverse charge a UK purchase is under: services from abroad, construction (CIS) or imports; services when not said. */
+export function reverseChargeKind(form: FormData) {
+  const value = String(form.get("reverse_charge_kind") ?? "");
+  return ["services", "construction", "import"].includes(value) ? value : null;
+}
+
 /**
  * Turns a Postgres error into something a person can act on, without leaking
  * row contents into the browser.
@@ -242,7 +248,7 @@ export function describeDbError(
         return "The VAT on a line does not match its rate. Check each line's VAT figure.";
       }
       if (error.message.includes("ledger_vat_rate")) {
-        return "Use one of the Cyprus VAT rates: 19%, 9%, 5%, 3% or 0%.";
+        return error.message.includes("GB") ? "Use one of the UK VAT rates: 20%, 5% or 0%." : "Use one of the Cyprus VAT rates: 19%, 9%, 5%, 3% or 0%.";
       }
       if (error.message.includes("ledger_lines_required")) {
         return "Each line needs a description, an account and an amount.";
@@ -311,6 +317,10 @@ export function describeDbError(
       if (error.message.includes("bank_statement_lines")) {
         return "The file has no lines to import, or more than 5,000.";
       }
+      // Payroll.
+      if (error.message.includes("employees_dates")) return "The leaving date can’t be before the start date.";
+      if (error.message.includes("employees_iban_check")) return "That IBAN is not in the right form.";
+      if (error.message.includes("payslips_net")) return "A payslip’s net pay must be its gross pay less what is withheld. Work the month out again.";
       if (error.message.includes("bank_statement_line")) {
         const position = error.message.match(/line (\d+)/)?.[1];
         return `Line ${position ?? "?"} of the statement has no readable date, amount or description.`;
@@ -327,6 +337,7 @@ export function describeDbError(
       if (error.message.includes("suppliers_name_unique")) return "There is already a supplier with that name.";
       if (error.message.includes("bills_supplier_number_unique")) return "This supplier's invoice with that number is already recorded.";
       if (error.message.includes("bank_line_matches_")) return "That payment or entry is already matched to another bank line.";
+      if (error.message.includes("payroll_runs_organisation_id_period")) return "That month’s payroll is already started. Open it from the list.";
       return "That record already exists.";
     case "23503":
       return "That refers to something that no longer exists. Reload and try again.";

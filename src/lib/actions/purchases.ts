@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { asDbError, one, sql, transaction } from "@/lib/db";
-import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
+import { FormParser, describeDbError, type ActionState, reverseChargeKind } from "@/lib/actions/form";
 import { firmToday, validRecordDate } from "@/lib/domain/invoices";
 import { requireOrg } from "@/lib/org";
 import { VAT_RATES } from "@/types/database";
@@ -63,8 +63,8 @@ export async function saveSupplierCredit(_previous: ActionState, form: FormData)
   if (p.failed || !supplier || !issued || !lines) return p.fail();
   let creditId: string;
   try {
-    creditId = (await one<{ id: string }>("select save_supplier_credit($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9) as id",
-      [org.id, id, supplier, bill, number, issued, p.text("notes", { max: 2000 }), JSON.stringify(lines), p.boolean("reverse_charge")]))!.id;
+    creditId = (await one<{ id: string }>("select save_supplier_credit($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10) as id",
+      [org.id, id, supplier, bill, number, issued, p.text("notes", { max: 2000 }), JSON.stringify(lines), p.boolean("reverse_charge"), reverseChargeKind(form)]))!.id;
   } catch (error) { return fail(error, "The credit note could not be saved."); }
   refresh();
   redirect(`/c/${org.slug}/supplier-credits/${creditId}${id ? "" : "?recorded=1"}`);

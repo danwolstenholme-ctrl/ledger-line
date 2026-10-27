@@ -1,4 +1,4 @@
-import { addDays, addMonths, taxReturnDue } from "@/lib/domain/deadlines";
+import { addDays, addMonths, filingMonths, taxReturnDue } from "@/lib/domain/deadlines";
 import { extendedDue } from "@/lib/domain/extensions";
 
 /**
@@ -96,6 +96,47 @@ export function yearEndSteps(periodEnd: string, assurance: "audit" | "review", p
     { key: "filed_on" as const, label: "Filed with the Registrar, with the annual return", due: addDays(addMonths(addDays(periodEnd, 1), 12), -1), why: "Within 12 months of the year end (s.142(2))" },
     { key: "tax_return_filed_on" as const, label: "Company tax return filed", due: taxReturn.due,
       why: taxReturn.extension ? `Extended by ${taxReturn.extension.by}` : taxYear <= 2025 ? "31 March, two years on" : "31 January, two years on, with the balance of tax" },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// The UK (Companies Act 2006; GOV.UK, "Audit exemptions for private limited companies", checked 27 Oct 2026)
+// ---------------------------------------------------------------------------
+
+/** A small company's limits, for the audit exemption: at least 2 of the 3. £15m and £7.5m for years beginning on or after 6 April 2025; £10.2m and £5.1m before. */
+export const ukSmallLimits = (yearStart: string) => yearStart >= "2025-04-06" ? { turnover: 15_000_000, assets: 7_500_000, employees: 50 } : { turnover: 10_200_000, assets: 5_100_000, employees: 50 };
+
+/** May a UK private company's accounts go unaudited? A small company may; not one regulated (banking, insurance, e-money, investment firms) or a subsidiary without its own exemption. */
+export function ukAuditExemption(input: { year: YearFigures & { employees: number | null }; regulated: boolean; group: boolean }): ReviewCheck {
+  const reasons: string[] = [];
+  let allowed: boolean | null = true;
+  if (input.regulated) { reasons.push("A regulated company (banking, insurance, e-money or investment): it must be audited."); allowed = false; }
+  if (input.group) { reasons.push("A subsidiary, or part of a group: it must be audited unless it qualifies for a group exemption."); allowed = false; }
+  const limits = ukSmallLimits(input.year.yearStart);
+  if (input.year.turnover === null || input.year.assets === null) {
+    reasons.push("Turnover or total assets not known yet."); if (allowed) allowed = null;
+  } else {
+    const over = [input.year.turnover > limits.turnover, input.year.assets > limits.assets, input.year.employees !== null && input.year.employees > limits.employees].filter(Boolean).length;
+    if (over >= 2) { reasons.push(`Over two of the small company limits (turnover ${pounds(limits.turnover)}, assets ${pounds(limits.assets)}, ${limits.employees} employees): it must be audited.`); allowed = false; }
+    else if (input.year.employees === null && input.year.turnover <= limits.turnover && input.year.assets <= limits.assets) reasons.push("Within the turnover and asset limits: small, whatever the number of employees.");
+    else if (input.year.employees === null && allowed) { reasons.push("Over one limit: the average number of employees decides it."); allowed = null; }
+  }
+  if (allowed) reasons.push("A small company: exempt from audit, unless its articles require one or shareholders with 10% or more ask for one at least a month before the year end.");
+  return { allowed, reasons };
+}
+const pounds = (value: number) => `£${(value / 1_000_000).toLocaleString("en-GB")}m`;
+
+export const UK_FRAMEWORK_NOTE = "FRS 102, with the reduced disclosures of its Section 1A for a small company; a micro-entity may use FRS 105.";
+
+/** A UK company's year end: no annual general meeting for a private company, accounts to Companies House within 9 months, the CT600 within 12. */
+export function ukYearEndSteps(periodEnd: string, audited: boolean) {
+  return [
+    { key: "books_closed" as const, label: "Books closed for the year", due: null as string | null, why: "Lock the period, so nothing can change under the accounts" },
+    ...(audited ? [{ key: "sent_to_auditor_on" as const, label: "Accounts to the auditor", due: null, why: "For the audit" }] : []),
+    { key: "approved_on" as const, label: "Approved by the board", due: null, why: audited ? "The directors approve and sign the accounts first" : "With the directors’ statement that the company is exempt from audit" },
+    ...(audited ? [{ key: "report_signed_on" as const, label: "Auditor’s report signed", due: null, why: "On or after the board’s approval" }] : []),
+    { key: "filed_on" as const, label: "Filed with Companies House", due: filingMonths(periodEnd, 9), why: "Within 9 months of the year end" },
+    { key: "tax_return_filed_on" as const, label: "Company Tax Return (CT600) filed", due: filingMonths(periodEnd, 12), why: `With Corporation Tax paid by ${new Date(`${addDays(filingMonths(periodEnd, 9), 1)}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}` },
   ];
 }
 

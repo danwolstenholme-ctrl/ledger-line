@@ -22,6 +22,8 @@ export type LedgerSystemRole = (typeof LEDGER_SYSTEM_ROLES)[number];
 export type LedgerAccountRow = {
   id: string; code: string; name: string; type: LedgerAccountType; system_role: LedgerSystemRole | null;
   description: string | null; bank_details: string | null; is_active: boolean; created_at: string; updated_at: string;
+  /** Never on a VAT return: wages, social insurance, PAYE, dividends. */
+  outside_vat: boolean;
 };
 export type AccountingSettingsRow = {
   id: boolean; lock_date: string | null; default_bank_account_id: string | null; year_end_month: number;
@@ -48,9 +50,10 @@ export type BillRow = {
   amount_credited: number | string;
   status: BillStatus; notes: string | null; source_document: string | null; created_by: string; created_at: string; updated_at: string;
   /** The supplier charged no VAT; `reverse_charge_vat` is what the firm accounts for itself, due and reclaimed. `vat_amount` is then 0. */
-  reverse_charge: boolean; reverse_charge_vat: number | string;
+  reverse_charge: boolean; reverse_charge_vat: number | string; reverse_charge_kind: "services" | "construction" | "import" | null;
 };
-export const VAT_RATES = [19, 9, 5, 3, 0] as const;
+/** Every VAT rate Ledgerline knows, Cyprus's and the UK's: the database holds each line to its own company's (lib/domain/regimes). */
+export const VAT_RATES = [20, 19, 9, 5, 3, 0] as const;
 export type BillLineRow = {
   id: string; bill_id: string; position: number; description: string; account_id: string;
   net: number | string; vat_rate: number | string; vat_amount: number | string;
@@ -66,7 +69,7 @@ export type BankTransactionRow = {
   id: string; kind: BankTransactionKind; bank_account_id: string; transfer_account_id: string | null; txn_date: string;
   contact: string | null; reference: string | null; amount: number | string; net: number | string; vat_amount: number | string;
   /** Spending only: as on a bill, the VAT the firm accounts for itself. */
-  reverse_charge: boolean; reverse_charge_vat: number | string;
+  reverse_charge: boolean; reverse_charge_vat: number | string; reverse_charge_kind: "services" | "construction" | "import" | null;
   /** A refund of a customer's credit note: posts against receivables and has no lines. */
   credit_note_id: string | null;
   /** A refund received from a supplier against their credit note: posts against payables and has no lines. */
@@ -78,7 +81,7 @@ export type BankTransactionLineRow = {
   net: number | string; vat_rate: number | string; vat_amount: number | string;
 };
 export type BankTransactionDirectoryRow = BankTransactionRow & { bank_account_name: string; transfer_account_name: string | null };
-export const JOURNAL_SOURCES = ["invoice", "invoice_payment", "bill", "bill_payment", "bank", "manual", "credit_note", "supplier_credit"] as const;
+export const JOURNAL_SOURCES = ["invoice", "invoice_payment", "bill", "bill_payment", "bank", "manual", "credit_note", "supplier_credit", "payroll"] as const;
 export type JournalSource = (typeof JOURNAL_SOURCES)[number];
 /** Written only by the posting functions and save_manual_journal(). */
 export type JournalEntryRow = {
@@ -177,6 +180,11 @@ export type OrganisationRow = {
   books_from: string | null;
   /** Company law: incorporation (its annual return dates follow), its auditor, and what rules out a review instead of an audit. */
   incorporated_on: string | null; auditor_name: string | null; auditor_is_practice: boolean; regulated: boolean; consolidated_group: boolean;
+  /** Its country (lib/domain/regimes) and the currency its books are kept in; a company or a sole trader. */
+  country: "CY" | "GB"; currency: "EUR" | "GBP"; entity: "company" | "sole_trader";
+  /** How VAT is returned: quarterly on the stagger, monthly, or annually (UK annual accounting); and the UK schemes. */
+  vat_period: "quarterly" | "monthly" | "annual"; vat_year_end_month: number | null; vat_annual_payments: "monthly" | "quarterly" | null;
+  vat_cash_accounting: boolean; vat_flat_rate: number | null;
   created_at: string;
 };
 export type CustomerRow = { id: string; organisation_id: string; name: string; email: string | null; phone: string | null; vat_number: string | null; country: string; address: string | null; eu_business: boolean; default_account_id: string | null;
@@ -218,7 +226,7 @@ export type RepeatingInvoiceRow = {
 /** A credit note from a supplier, recorded as they sent it. */
 export type SupplierCreditRow = {
   id: string; organisation_id: string; supplier_id: string; bill_id: string | null; number: string | null; issued_on: string; net: number; vat_amount: number; total: number;
-  reverse_charge: boolean; reverse_charge_vat: number; amount_allocated: number; amount_refunded: number; status: "recorded" | "void"; notes: string | null; created_at: string;
+  reverse_charge: boolean; reverse_charge_vat: number; reverse_charge_kind: "services" | "construction" | "import" | null; amount_allocated: number; amount_refunded: number; status: "recorded" | "void"; notes: string | null; created_at: string;
 };
 export type SupplierCreditDirectoryRow = SupplierCreditRow & { remaining: number; supplier_name: string; bill_number: string | null };
 export type CreditNoteDirectoryRow = CreditNoteRow & { remaining: number; client_name: string; client_vat_number: string | null; client_country: string; invoice_number: string | null };

@@ -11,11 +11,12 @@ import {
 import { RESULT_TYPES, ageing, booksChecks, monthlyFigures, positions, results, topExpenses, trailingMonths } from "@/lib/domain/accounts-insights";
 import { toCents } from "@/lib/domain/invoice-math";
 import { firmToday } from "@/lib/domain/invoices";
-import { nextVatReturn, quarterContaining } from "@/lib/domain/vat";
+import { nextVatReturn, periodContaining, vatSettingsOf } from "@/lib/domain/vat";
+import { ukVatReturn, type UkVatFigures } from "@/lib/domain/vat-uk";
 import { formatAmount, formatDate } from "@/lib/format";
 import type {
   AccountingSettingsRow, BankTransactionDirectoryRow, BankTransactionLineRow, BillDirectoryRow, BillLineRow, BillPaymentRow,
-  CashMovementRow, JournalEntryRow, JournalLineViewRow, LedgerAccountRow, LedgerBalanceRow, SupplierRow, VatBreakdownRow, VatSummaryRow,
+  CashMovementRow, JournalEntryRow, JournalLineViewRow, LedgerAccountRow, LedgerBalanceRow, OrganisationRow, SupplierRow, VatBreakdownRow, VatSummaryRow,
 } from "@/types/database";
 
 /**
@@ -101,11 +102,25 @@ export async function getVatSummary(from: string, to: string) {
 
 const PURCHASE_TYPES = new Set(["direct_costs", "expense", "depreciation", "fixed_asset", "current_asset"]);
 
+type UkFiguresRow = Record<"sales_vat" | "purchase_vat" | "sales_net" | "purchases_net" | "rc_services_net" | "rc_services_vat" | "rc_construction_net" | "rc_construction_vat" | "rc_import_net" | "rc_import_vat" | "capital_net" | "capital_vat", number>;
+
+/** A UK company's VAT figures for a period, by invoice date or, under cash accounting, as money moved (uk_vat_figures in the schema). */
+export async function getUkVatFigures(org: Pick<OrganisationRow, "id" | "vat_cash_accounting">, from: string, to: string): Promise<UkVatFigures> {
+  const row = await one<UkFiguresRow>("select * from uk_vat_figures($1, $2, $3, $4)", [org.id, from, to, org.vat_cash_accounting]);
+  const n = (key: keyof UkFiguresRow) => Math.round(Number(row?.[key] ?? 0) * 100) / 100;
+  return {
+    salesVat: n("sales_vat"), purchaseVat: n("purchase_vat"), salesNet: n("sales_net"), purchasesNet: n("purchases_net"),
+    reverseCharge: { services: { net: n("rc_services_net"), vat: n("rc_services_vat") }, construction: { net: n("rc_construction_net"), vat: n("rc_construction_vat") }, import: { net: n("rc_import_net"), vat: n("rc_import_vat") } },
+    capital: { net: n("capital_net"), vat: n("capital_vat") },
+  };
+}
+export const ukSchemeOf = (org: Pick<OrganisationRow, "vat_flat_rate" | "vat_cash_accounting">) => ({ flatRate: org.vat_flat_rate === null ? null : Number(org.vat_flat_rate), cash: org.vat_cash_accounting });
+
 export async function getVatReport(params: Params) {
   const org = await requireOrg();
   // With no period asked for, the return that needs attention, on the company's own staggered quarters.
   const filedPeriods = (await sql<{ period_to: string }>("select period_to from vat_returns where organisation_id = $1", [org.id])).map(row => row.period_to);
-  const next = nextVatReturn({ quarterEndMonth: org.vat_quarter_end_month, registered: true, booksFrom: "2025-07-01", filed: filedPeriods, today: firmToday() });
+  const next = nextVatReturn({ vat: vatSettingsOf(org), registered: true, booksFrom: "2025-07-01", filed: filedPeriods, today: firmToday() });
   const period = params.range ? await getReportPeriod(params, "last_quarter") : { ...(await getReportPeriod({ range: "custom", from: next!.from, to: next!.to })), range: "custom" as ReportRange };
   const [summary, accounts, lines] = await Promise.all([
     getVatSummary(period.from, period.to),
@@ -118,14 +133,16 @@ export async function getVatReport(params: Params) {
   const purchases = new Map<string, number>();
   for (const line of lines) {
     const account = byId.get(line.account_id);
-    if (!account || account.system_role || !PURCHASE_TYPES.has(line.account_type)) continue;
+    if (!account || account.system_role || account.outside_vat || !PURCHASE_TYPES.has(line.account_type)) continue;
     purchases.set(line.account_id, (purchases.get(line.account_id) ?? 0) + toCents(line.debit) - toCents(line.credit));
   }
   const boxSeven = [...purchases.entries()].filter(([, amount]) => amount !== 0)
     .map(([id, amount]) => ({ id, code: byId.get(id)!.code, name: byId.get(id)!.name, amount: amount / 100 }))
     .sort((a, b) => b.amount - a.amount);
   const filed = await one<{ filed_on: string }>("select filed_on from vat_returns where organisation_id = $1 and period_to = $2", [org.id, period.to]);
-  return { period, summary: summary.row, breakdown: summary.breakdown, boxSeven, filed, org,
+  // A UK company's nine boxes, from the same ledger by its own rules and scheme.
+  const uk = org.country === "GB" ? ukVatReturn(await getUkVatFigures(org, period.from, period.to), ukSchemeOf(org)) : null;
+  return { period, summary: summary.row, breakdown: summary.breakdown, boxSeven, filed, org, uk,
     vatAccount: accounts.rows.find(account => account.system_role === "vat") ?? null, failed: false };
 }
 
@@ -139,6 +156,7 @@ export function sourceHref(line: Pick<JournalLineViewRow, "source" | "source_id"
     case "manual": return `/accounts/journals/${line.entry_id}`;
     case "credit_note": return line.source_id ? `/accounts/credit-notes/${line.source_id}` : null;
     case "supplier_credit": return line.source_id ? `/accounts/supplier-credits/${line.source_id}` : null;
+    case "payroll": return line.source_id ? `/accounts/payroll/${line.source_id}` : null;
   }
 }
 
@@ -384,7 +402,7 @@ export async function getAccountsDashboard() {
   const months = trailingMonths(today);
   const trendFrom = `${months[0]}-01`;
   // The company's own VAT quarter: Cyprus staggers them, so this is not always the calendar quarter.
-  const quarterStart = quarterContaining(org.vat_quarter_end_month, today).from;
+  const quarterStart = periodContaining(vatSettingsOf(org), today).from;
   const [thisYear, priorYear, trailing, cash, lines, vat, invoices, bills, unreconciled] = await Promise.all([
     getLedgerBalances(year.from, today),
     getLedgerBalances(lastYear.from, lastYear.to),

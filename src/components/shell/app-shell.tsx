@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "@/components/navigation/navigation-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeCheck, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, CalendarDays, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
+  BadgeCheck, Banknote, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, CalendarDays, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
   LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, Truck, Users, X, type LucideIcon,
 } from "lucide-react";
 
@@ -18,7 +18,7 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { motion } from "motion/react";
 
 export type ShellPractice = { name: string; initials: string; brand_color: string; tagline: string | null };
-export type ShellClient = { id: string; slug: string; name: string; industry: string; practice: boolean; toReview: number };
+export type ShellClient = { id: string; slug: string; name: string; industry: string; practice: boolean; toReview: number; country: string };
 /** The person signed in. `role`: their role at the practice, or what they are to their company. `demo`: the laptop demo's sign-in. */
 export type ShellUser = { name: string; initials: string; email: string; role: string; demo: boolean };
 
@@ -72,6 +72,8 @@ function companyNav(base: string, client: ShellClient): NavGroup[] {
       { href: `${base}/capture`, label: "Upload receipts", icon: ScanText, title: "Upload receipts", badge: client.toReview },
       { href: `${base}/bills`, label: "Bills", icon: Receipt, title: "Bills", also: [`${base}/supplier-credits`] },
       { href: `${base}/suppliers`, label: "Suppliers", icon: Truck, title: "Suppliers" },
+      // Cyprus payroll: a UK company's wages are coded from the bank until UK payroll is built.
+      ...(client.country === "CY" ? [{ href: `${base}/payroll`, label: "Payroll", icon: Banknote, title: "Payroll" }] : []),
     ] },
     { label: "Reports & tax", items: [
       { href: `${base}/reports`, label: "Reports", icon: BarChart3, title: "Reports" },

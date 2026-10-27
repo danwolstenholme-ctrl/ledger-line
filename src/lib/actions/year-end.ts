@@ -89,7 +89,7 @@ export async function saveYearEndFigures(_previous: ActionState, form: FormData)
   const period = String(form.get("period_end") ?? "");
   const current = await getYearEnd(period);
   if (current.periodEnd !== period) return { ok: false, error: "That financial year could not be found. Reload and try again." };
-  const assurance = p.enum("assurance", ["audit", "review"] as const, { fallback: "audit", label: "Audit or review" })!;
+  const assurance = p.enum("assurance", current.org.country === "GB" ? ["audit", "exempt"] as const : ["audit", "review"] as const, { fallback: "audit", label: "Audit or review" })!;
   const employees = p.text("average_employees", { max: 6, label: "Average employees" });
   if (employees && !/^\d{1,5}$/.test(employees)) p.errors.average_employees = "Average employees must be a whole number.";
   const turnoverBefore = current.startsBeforeBooks ? p.money("turnover_before_books", "Turnover before the books") : null;
@@ -110,12 +110,13 @@ export async function saveYearEndFigures(_previous: ActionState, form: FormData)
 
   // A review only where the law allows it, judged on the figures just saved.
   const data = await getYearEnd(period);
-  if (assurance === "review" && data.review.allowed !== true) {
+  if (assurance !== "audit" && data.review.allowed !== true) {
     refresh();
+    if (assurance === "exempt") return { ok: false, error: data.review.allowed === false ? "This year must be audited: the company is not small, or can’t be exempt (see the reasons)." : "Exemption needs the year’s turnover and total assets, and the average number of employees if it is over one limit." };
     return { ok: false, error: data.review.allowed === false ? "This year must be audited: it is outside what a review allows (see the reasons)." : "A review needs both years’ turnover and total assets: enter the ones Ledgerline doesn’t have." };
   }
   const changes: string[] = [];
-  if (assurance !== current.assurance) changes.push(assurance === "review" ? "Review under ISRE 2400 instead of an audit" : "Audit");
+  if (assurance !== current.assurance) changes.push(assurance === "review" ? "Review under ISRE 2400 instead of an audit" : assurance === "exempt" ? "Exempt from audit as a small company" : "Audit");
   const before = current.row;
   if ((before?.average_employees ?? null) !== values.average_employees) changes.push(`Average employees: ${values.average_employees ?? "cleared"}`);
   for (const [key, label] of [["turnover_before_books", "Turnover before the books"], ["prior_turnover", "The year before’s turnover"], ["prior_total_assets", "The year before’s total assets"]] as const) {

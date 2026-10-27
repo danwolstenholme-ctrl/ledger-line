@@ -5,8 +5,10 @@ import { useActionState } from "react";
 import { createEnquiry } from "@/lib/actions/crm";
 import { idleState } from "@/lib/actions/state";
 import { Field, FormError, NativeSelect, SubmitButton, TextArea, TextInput } from "@/components/common/form-fields";
+import { useCurrencySymbol } from "@/components/common/regime";
 
 export function NewEnquiryForm() {
+  const symbol = useCurrencySymbol();
   const [state, action] = useActionState(createEnquiry, idleState);
   const errors = state.fieldErrors ?? {};
   return <form action={action} className="space-y-4" noValidate>
@@ -17,7 +19,7 @@ export function NewEnquiryForm() {
       <Field label="Phone" htmlFor="enquiry-phone"><TextInput id="enquiry-phone" name="phone" maxLength={40} /></Field>
       <Field label="What they want" htmlFor="enquiry-service" className="sm:col-span-2"><TextInput id="enquiry-service" name="service" maxLength={300} /></Field>
       <Field label="Source" htmlFor="enquiry-source"><NativeSelect id="enquiry-source" name="source" defaultValue="Website">{["Website", "Referral", "Phone", "Email", "Walk-in", "Trade fair"].map(source => <option key={source}>{source}</option>)}</NativeSelect></Field>
-      <Field label="Likely value" htmlFor="enquiry-value" hint="€, optional" error={errors.value}><TextInput id="enquiry-value" name="value" inputMode="decimal" className="text-right tabular-nums" /></Field>
+      <Field label="Likely value" htmlFor="enquiry-value" hint={`${symbol}, optional`} error={errors.value}><TextInput id="enquiry-value" name="value" inputMode="decimal" className="text-right tabular-nums" /></Field>
       <Field label="Summary" htmlFor="enquiry-summary" className="sm:col-span-2"><TextArea id="enquiry-summary" name="summary" rows={3} maxLength={2000} /></Field>
     </div>
     <FormError message={state.error} />

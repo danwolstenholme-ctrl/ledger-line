@@ -16,7 +16,7 @@ import { InlineSubmit, SubmitButton } from "@/components/common/form-fields";
 import { Postings } from "@/components/accounts/postings";
 import { RecordDetail, RecordHeader, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
 import { InvoiceStatusButton, RecordPaymentForm, RestoreInvoiceButton } from "@/components/sales/sale-actions";
-import { DocumentLines, InvoiceStatusBadge, PdfLinks, TREATMENT_DETAIL, TREATMENT_LABELS } from "@/components/sales/sales-parts";
+import { DocumentLines, InvoiceStatusBadge, PdfLinks, TREATMENT_LABELS, treatmentDetail } from "@/components/sales/sales-parts";
 import { ReminderPanel } from "@/components/sales/reminder";
 import { SendInvoicePanel, type SendInvoiceData } from "@/components/sales/send-invoice";
 import { answerView, latestChecks, vatKey } from "@/lib/vies";
@@ -133,7 +133,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
         <RecordSection title="Details">
           <dl className="divide-hairline divide-y px-4">
             <RecordDetail label="Customer" value={<Link href={`/accounts/customers/${invoice.customer_id}`} className="text-brand hover:underline">{invoice.client_name}</Link>} />
-            <RecordDetail label="VAT" value={TREATMENT_DETAIL[org.vat_registered ? invoice.vat_treatment : "exempt"]} />
+            <RecordDetail label="VAT" value={treatmentDetail(org.vat_registered ? invoice.vat_treatment : "exempt", org.country)} />
             {quote ? <RecordDetail label="From quote" value={<Link href={`/accounts/quotes/${quote.id}`} className="text-brand font-mono hover:underline">{quote.number}</Link>} /> : null}
             {invoice.repeating_id ? <RecordDetail label="Repeating" value={<Link href={`/accounts/repeating/${invoice.repeating_id}`} className="text-brand hover:underline">Raised on a schedule</Link>} /> : null}
             <RecordDetail label="Pays into" value={banks.find(bank => bank.id === org.default_bank_account_id)?.name ?? null} />

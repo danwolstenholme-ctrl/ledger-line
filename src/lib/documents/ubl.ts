@@ -12,7 +12,8 @@ import type { DocumentPdfData } from "./pdf";
 
 const esc = (value: string | number | null | undefined) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const money = (value: number) => (Math.round(value * 100) / 100).toFixed(2);
-const amount = (tag: string, value: number) => `<cbc:${tag} currencyID="EUR">${money(value)}</cbc:${tag}>`;
+/** An amount in the document's currency: the company's own. */
+const amountIn = (currency: string) => (tag: string, value: number) => `<cbc:${tag} currencyID="${currency}">${money(value)}</cbc:${tag}>`;
 
 /** Electronic address schemes (EAS) for EU VAT numbers, so a Peppol access point can route the document. */
 const EAS: Record<string, string> = {
@@ -48,7 +49,7 @@ function category(data: DocumentPdfData, rate: number) {
   const treatment = data.org.vat_registered ? data.document.vat_treatment : "outside_scope";
   if (treatment === "reverse_charge") return { id: "AE", rate: 0, code: "VATEX-EU-AE", reason: "Reverse charge" };
   if (treatment === "exempt") return { id: "E", rate: 0, code: null, reason: "Exempt from VAT" };
-  if (treatment === "outside_scope") return { id: "O", rate: 0, code: "VATEX-EU-O", reason: data.org.vat_registered ? "Outside the scope of Cyprus VAT" : "The seller is not registered for VAT" };
+  if (treatment === "outside_scope") return { id: "O", rate: 0, code: "VATEX-EU-O", reason: data.org.vat_registered ? `Outside the scope of ${data.org.country === "GB" ? "UK" : "Cyprus"} VAT` : "The seller is not registered for VAT" };
   return rate > 0 ? { id: "S", rate, code: null, reason: null } : { id: "Z", rate: 0, code: null, reason: null };
 }
 const taxCategory = (tag: "TaxCategory" | "ClassifiedTaxCategory", item: ReturnType<typeof category>, withReason: boolean) =>
@@ -60,6 +61,7 @@ const taxCategory = (tag: "TaxCategory" | "ClassifiedTaxCategory", item: ReturnT
 export function documentUbl(data: DocumentPdfData) {
   const { kind, org, document, lines, customer, bank, corrects } = data;
   if (kind === "quote") throw new Error("A quote is not an e-invoice.");
+  const currency = ("currency" in document && document.currency) || org.currency, amount = amountIn(currency);
   const credit = kind === "credit_note";
   const root = credit ? "CreditNote" : "Invoice";
   const lineTag = credit ? "CreditNoteLine" : "InvoiceLine", quantityTag = credit ? "CreditedQuantity" : "InvoicedQuantity";
@@ -90,11 +92,11 @@ export function documentUbl(data: DocumentPdfData) {
     credit ? `<cbc:CreditNoteTypeCode>381</cbc:CreditNoteTypeCode>` : `<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>`,
     document.notes ? `<cbc:Note>${esc(document.notes)}</cbc:Note>` : "",
     credit && "reason" in document ? `<cbc:Note>${esc(`Reason: ${document.reason}`)}</cbc:Note>` : "",
-    `<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>`,
+    `<cbc:DocumentCurrencyCode>${currency}</cbc:DocumentCurrencyCode>`,
     `<cbc:BuyerReference>${esc(buyerReference)}</cbc:BuyerReference>`,
     corrects ? `<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>${esc(corrects.number)}</cbc:ID><cbc:IssueDate>${corrects.issued_on}</cbc:IssueDate></cac:InvoiceDocumentReference></cac:BillingReference>` : "",
-    `<cac:AccountingSupplierParty>${party({ name: org.name, vat: org.vat_registered && !outside ? org.vat_number : null, country: "CY", address: org.address, email: org.contact_email, registration: org.he_number })}</cac:AccountingSupplierParty>`,
-    `<cac:AccountingCustomerParty>${party({ name: customer?.name ?? document.client_name, vat: outside ? null : customer?.vat_number ?? null, country: customer?.country ?? "CY", address: customer?.address ?? null, email: customer?.email ?? null })}</cac:AccountingCustomerParty>`,
+    `<cac:AccountingSupplierParty>${party({ name: org.name, vat: org.vat_registered && !outside ? org.vat_number : null, country: org.country, address: org.address, email: org.contact_email, registration: org.he_number })}</cac:AccountingSupplierParty>`,
+    `<cac:AccountingCustomerParty>${party({ name: customer?.name ?? document.client_name, vat: outside ? null : customer?.vat_number ?? null, country: customer?.country ?? org.country, address: customer?.address ?? null, email: customer?.email ?? null })}</cac:AccountingCustomerParty>`,
     !credit && iban ? `<cac:PaymentMeans><cbc:PaymentMeansCode name="Credit transfer">58</cbc:PaymentMeansCode><cbc:PaymentID>${esc(document.number)}</cbc:PaymentID><cac:PayeeFinancialAccount><cbc:ID>${esc(iban)}</cbc:ID>${bank ? `<cbc:Name>${esc(bank.name)}</cbc:Name>` : ""}</cac:PayeeFinancialAccount></cac:PaymentMeans>` : "",
     !credit && due ? `<cac:PaymentTerms><cbc:Note>${esc(`Due ${due}`)}</cbc:Note></cac:PaymentTerms>` : "",
     `<cac:TaxTotal>${amount("TaxAmount", tax)}${[...groups.values()].map(group => `<cac:TaxSubtotal>${amount("TaxableAmount", group.taxable)}${amount("TaxAmount", group.tax)}${taxCategory("TaxCategory", group.item, true)}</cac:TaxSubtotal>`).join("")}</cac:TaxTotal>`,
@@ -106,7 +108,7 @@ export function documentUbl(data: DocumentPdfData) {
       return `<cac:${lineTag}><cbc:ID>${index + 1}</cbc:ID><cbc:${quantityTag} unitCode="${unitCode(line.unit)}">${Number(quantity.toFixed(3))}</cbc:${quantityTag}>${amount("LineExtensionAmount", Number(line.net))}`
         + (discount > 0 ? `<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode>95</cbc:AllowanceChargeReasonCode><cbc:AllowanceChargeReason>Discount</cbc:AllowanceChargeReason><cbc:MultiplierFactorNumeric>${Number(line.discount_pct)}</cbc:MultiplierFactorNumeric>${amount("Amount", discount)}${amount("BaseAmount", gross)}</cac:AllowanceCharge>` : "")
         + `<cac:Item><cbc:Name>${esc(line.description)}</cbc:Name>${taxCategory("ClassifiedTaxCategory", category(data, Number(line.vat_rate)), false)}</cac:Item>`
-        + `<cac:Price><cbc:PriceAmount currencyID="EUR">${Number(price.toFixed(4))}</cbc:PriceAmount></cac:Price></cac:${lineTag}>`;
+        + `<cac:Price><cbc:PriceAmount currencyID="${currency}">${Number(price.toFixed(4))}</cbc:PriceAmount></cac:Price></cac:${lineTag}>`;
     }),
   ].filter(Boolean).join("\n  ");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<${root} xmlns="urn:oasis:names:specification:ubl:schema:xsd:${root}-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">\n  ${body}\n</${root}>\n`;

@@ -3,6 +3,7 @@ import Link from "@/components/navigation/navigation-link";
 import { markDeadlineDone, reopenDeadline } from "@/lib/actions/deadlines";
 import { DEADLINE_VIEWS, getDeadlines, type DeadlineRow } from "@/lib/data/deadlines";
 import { formatAmount, formatDate } from "@/lib/format";
+import { getOrgBySlug } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import { PageBody, Panel } from "@/components/common/primitives";
 import { InlineSubmit, SubmitButton } from "@/components/common/form-fields";
@@ -23,7 +24,7 @@ function Detail({ row }: { row: DeadlineRow }) {
   const base = `/c/${row.company.slug}`;
   if (row.state === "done") return <span>{row.kind === "vat_return" ? row.doneBy : `Marked done by ${row.doneBy}`}</span>;
   if (row.kind === "vat_return") {
-    if (row.state === "running") return <span>The quarter ends {formatDate(row.periodEnd)}</span>;
+    if (row.state === "running") return <span>The period ends {formatDate(row.periodEnd)}</span>;
     const { bankLines, documents } = row.ready ?? { bankLines: 0, documents: 0 };
     if (!bankLines && !documents) return <span className="text-positive">Ready to file: every bank line in the quarter is matched</span>;
     return <span>{bankLines ? <Link href={`${base}/bank`} className="hover:text-brand underline-offset-2 hover:underline">{bankLines} bank line{bankLines === 1 ? "" : "s"} to match</Link> : null}
@@ -31,6 +32,12 @@ function Detail({ row }: { row: DeadlineRow }) {
   }
   if (row.kind === "vies") return <span>{formatAmount(row.amount)} of services to EU businesses</span>;
   if (row.kind === "provisional_tax") return <span>Estimate the year’s profit and pay the instalment</span>;
+  // A UK company's.
+  if (row.kind === "vat_payment") return <span>A payment on account under annual accounting</span>;
+  if (row.kind === "accounts_filing") return <span>To Companies House: 9 months after the year end</span>;
+  if (row.kind === "confirmation_statement") return <span>To Companies House, within 14 days of its date</span>;
+  if (row.company.country === "GB" && row.kind === "tax_payment") return <span>To HMRC: 9 months and a day after the year end</span>;
+  if (row.company.country === "GB" && row.kind === "tax_return") return <span>The CT600 with the accounts and computations, 12 months after the year end</span>;
   if (row.kind === "aml_review") return <span>Check the due diligence is current, screen again and rate the risk</span>;
   if (row.kind === "tax_payment") return <span>Pay what the provisional tax didn’t cover, on a self-assessment</span>;
   if (row.kind === "financial_statements") return <span>Audited or reviewed, with the annual return</span>;
@@ -52,7 +59,7 @@ function Action({ row }: { row: DeadlineRow }) {
   if (row.kind === "vat_return") return row.state === "done" ? null
     : <Link href={`${base}/reports/vat?range=custom&from=${row.periodStart}&to=${row.periodEnd}`} className={recordOutlineButton}>Open the return</Link>;
   if (row.kind === "aml_review") return row.review ? <Link href={`/clients/${row.review.fileId}`} className={recordOutlineButton}>Open the file</Link> : null;
-  if (row.kind === "financial_statements") return <Link href={`${base}/year-end?period=${row.periodEnd}`} className={recordOutlineButton}>Open the year end</Link>;
+  if (row.kind === "financial_statements" || row.kind === "accounts_filing") return <Link href={`${base}/year-end?period=${row.periodEnd}`} className={recordOutlineButton}>Open the year end</Link>;
   if (row.state === "done") return <form action={reopenDeadline}>{hidden}<InlineSubmit title="Open this deadline again">Undo</InlineSubmit></form>;
   return <div className="flex flex-wrap items-center justify-end gap-2">
     {row.kind === "vies" ? <Link href={`${base}/reports/vies?range=custom&from=${row.periodStart}&to=${row.periodEnd}`} className="text-brand text-[12px] hover:underline">Statement</Link> : null}
@@ -69,6 +76,7 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
   const data = await getDeadlines({ view, client: company ?? query.client });
   const path = company ? `/c/${company}/deadlines` : "/deadlines";
   const client = company ? null : data.clients.find(item => item.slug === query.client);
+  const country = company ? (await getOrgBySlug(company))?.country ?? "CY" : "CY";
   const groups = new Map<string, DeadlineRow[]>();
   for (const row of data.rows) {
     const group = row.state === "overdue" ? "Overdue" : monthOf(row.due);
@@ -84,7 +92,7 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
 
   return <PageBody className="space-y-4">
     <RecordHeader title={client ? `Deadlines: ${client.name}` : "Deadlines"}
-      description={company ? "This company’s deadlines with the Tax Department and the Registrar, and its AML review: worked out from its VAT quarters, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it, as does the year end recording the accounts filed; mark the rest done as you go." : "Every client’s deadlines with the Tax Department and the Registrar of Companies, and the practice’s AML reviews: worked out from each company’s VAT quarters, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it, as does a year end recording the accounts filed; mark the rest done as you go."} />
+      description={company ? `This company’s deadlines with ${country === "GB" ? "HMRC and Companies House" : "the Tax Department and the Registrar"}, and its AML review: worked out from its VAT periods, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it${country === "GB" ? "" : ", as does the year end recording the accounts filed"}; mark the rest done as you go.` : "Every client’s deadlines with the tax authority and the companies register of its country (the Tax Department and the Registrar in Cyprus; HMRC and Companies House in the UK), and the practice’s AML reviews: worked out from each company’s VAT periods, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it, as does a year end recording the accounts filed; mark the rest done as you go."} />
 
     <section aria-label="Deadlines at a glance" className="ll-panel bg-hairline grid grid-cols-2 gap-px overflow-hidden lg:grid-cols-4 [&>*]:bg-surface">
       <StatTile label="Overdue" value={String(data.counts.overdue)} tone={data.counts.overdue ? "critical" : undefined} context={data.counts.overdue ? "Past the date, still open" : "Nothing past its date"} href={href({ view: "overdue" })} />
@@ -112,6 +120,6 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
         <span className="sm:text-right"><Action row={row} /></span>
       </li>)}</ul>
     </Panel>) : <Panel><RecordEmpty title={view === "overdue" ? "Nothing is overdue" : "No deadlines here"}>{view === "overdue" ? "Every deadline past its date has been dealt with." : "Nothing falls due in the next three months for this choice."}</RecordEmpty></Panel>}
-    <p className="text-ink-faint text-[12px]">Showing what is overdue and what falls due by {formatDate(data.until)}. VIES statements appear for the months a company sold services to businesses in other EU states.</p>
+    <p className="text-ink-faint text-[12px]">Showing what is overdue and what falls due by {formatDate(data.until)}.{country === "GB" ? "" : " VIES statements appear for the months a company sold services to businesses in other EU states."}</p>
   </PageBody>;
 }

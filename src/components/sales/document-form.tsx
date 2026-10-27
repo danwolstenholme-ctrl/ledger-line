@@ -14,25 +14,38 @@ import { Checkbox, Field, FormError, NativeSelect, TextArea, TextInput } from "@
 import Link from "@/components/navigation/navigation-link";
 import { SalesLineEditor, type SaleItemOption, type SaleLineValue } from "@/components/sales/sales-line-editor";
 import { INVOICE_PAYMENT_METHODS, type VatTreatment } from "@/types/database";
+import { useRegime } from "@/components/common/regime";
 
 export type DocumentFormCustomer = { id: string; name: string; vat_number: string | null; country: string; eu_business: boolean; default_account_id: string | null; payment_terms_days?: number | null };
 export type DocumentFormValues = { id: string; status: string; customer_id: string; number: string; issued_on: string; due_on: string | null; vat_treatment: VatTreatment; notes: string | null; lines: SaleLineValue[]; reference?: string | null };
 /** A copy: what a new document starts from, with its own number and dates. */
 export type DocumentPrefill = Pick<DocumentFormValues, "customer_id" | "vat_treatment" | "notes" | "lines">;
 
-export const TREATMENTS: { key: VatTreatment; label: string; note: string }[] = [
-  { key: "standard", label: "Standard VAT", note: "" },
-  { key: "reverse_charge", label: "Reverse charge (EU)", note: "No VAT charged: the customer accounts for it (Article 196). Goes in box 8B and on the VIES statement." },
-  { key: "exempt", label: "Exempt", note: "No VAT charged: an exempt supply, in box 6 only." },
-  { key: "outside_scope", label: "Outside the scope", note: "No VAT charged: a customer outside the EU. Box 10." },
-];
+const TREATMENT_OPTIONS: Record<"CY" | "GB", { key: VatTreatment; label: string; note: string }[]> = {
+  CY: [
+    { key: "standard", label: "Standard VAT", note: "" },
+    { key: "reverse_charge", label: "Reverse charge (EU)", note: "No VAT charged: the customer accounts for it (Article 196). Goes in box 8B and on the VIES statement." },
+    { key: "exempt", label: "Exempt", note: "No VAT charged: an exempt supply, in box 6 only." },
+    { key: "outside_scope", label: "Outside the scope", note: "No VAT charged: a customer outside the EU. Box 10." },
+  ],
+  GB: [
+    { key: "standard", label: "Standard VAT", note: "" },
+    { key: "reverse_charge", label: "Domestic reverse charge (CIS)", note: "No VAT charged: construction services to a VAT-registered contractor, who pays the VAT to HMRC. Box 6; the invoice says so." },
+    { key: "exempt", label: "Exempt", note: "No VAT charged: an exempt supply, in box 6." },
+    { key: "outside_scope", label: "Outside the scope of UK VAT", note: "No VAT charged: services supplied abroad (the place of supply is outside the UK). Box 6." },
+  ],
+};
+export const treatmentsFor = (country: string) => TREATMENT_OPTIONS[country === "GB" ? "GB" : "CY"];
+/** Cyprus's options: what forms outside a company start from. */
+export const TREATMENTS = TREATMENT_OPTIONS.CY;
 const METHODS: Record<(typeof INVOICE_PAYMENT_METHODS)[number], string> = { bank_transfer: "Bank transfer", card: "Card", cash: "Cash", cheque: "Cheque", other: "Other" };
 
 export const NEW_CUSTOMER = "new";
 
 /** Which treatment a sale to this customer starts from. */
-export function treatmentFor(customer: DocumentFormCustomer | undefined, registered: boolean): VatTreatment {
+export function treatmentFor(customer: DocumentFormCustomer | undefined, registered: boolean, country = "CY"): VatTreatment {
   if (!registered) return "exempt";
+  if (country === "GB") return customer && customer.country !== "GB" ? "outside_scope" : "standard";
   if (customer?.eu_business) return "reverse_charge";
   if (customer && !EU_COUNTRIES.has(customer.country)) return "outside_scope";
   return "standard";
@@ -79,12 +92,13 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
   /** The company's payment terms in days: an invoice is due this long after its date, unless the customer has terms of their own. */
   terms: number; registered: boolean; presetCustomer?: string | null; cancelHref: string;
 }) {
+  const { country } = useRegime();
   const [state, action] = useActionState(kind === "invoice" ? saveInvoice : saveQuote, idleState);
   const uid = useId();
   const start = document ?? prefill;
   const [customerId, setCustomerId] = useState(start?.customer_id ?? (customers.some(item => item.id === presetCustomer) ? presetCustomer! : customers.length ? "" : NEW_CUSTOMER));
   const customer = customers.find(item => item.id === customerId);
-  const [treatment, setTreatment] = useState<VatTreatment>(start?.vat_treatment ?? treatmentFor(customer, registered));
+  const [treatment, setTreatment] = useState<VatTreatment>(start?.vat_treatment ?? treatmentFor(customer, registered, country));
   const [editorKey, setEditorKey] = useState(0);
   const [paidNow, setPaidNow] = useState(false);
   // The due date follows the date and the customer's terms until someone sets it themselves.
@@ -94,7 +108,7 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
   const follow = (issued: string, next: DocumentFormCustomer | undefined) => { if (kind === "invoice" && !dueTouched && issued) setDueOn(addDays(issued, next?.payment_terms_days ?? terms)); };
   const customerTerms = kind === "invoice" ? customer?.payment_terms_days ?? terms : null;
   const errors = state.fieldErrors ?? {};
-  const note = TREATMENTS.find(item => item.key === treatment)?.note;
+  const note = treatmentsFor(country).find(item => item.key === treatment)?.note;
   const canTakePayment = kind === "invoice" && (!document || document.status === "draft") && banks.length > 0;
   return <form action={action} className="space-y-5" noValidate>
     {document ? <input type="hidden" name="id" value={document.id} /> : null}
@@ -104,7 +118,7 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
         setCustomerId(id);
         follow(issuedOn, next);
         // A new customer's VAT position decides the treatment, unless lines are already written for this document.
-        if (!start) { setTreatment(treatmentFor(next, registered)); setEditorKey(value => value + 1); }
+        if (!start) { setTreatment(treatmentFor(next, registered, country)); setEditorKey(value => value + 1); }
       }} />
       <Field label={kind === "invoice" ? "Invoice number" : "Quote number"} htmlFor={`${uid}-number`} required error={errors.number}>
         <TextInput id={`${uid}-number`} name="number" defaultValue={document?.number ?? number} maxLength={60} className="font-mono" />
@@ -117,7 +131,7 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
       </Field>
       {registered ? <Field label="VAT" htmlFor={`${uid}-vat`}>
         <NativeSelect id={`${uid}-vat`} name="vat_treatment" value={treatment} onChange={event => setTreatment(event.target.value as VatTreatment)}>
-          {TREATMENTS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+          {treatmentsFor(country).map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
         </NativeSelect>
       </Field> : <input type="hidden" name="vat_treatment" value="exempt" />}
     </div>
@@ -127,7 +141,7 @@ export function DocumentForm({ kind, document, prefill, customers, accounts, ite
     {registered ? note ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">{note}</p> : null
       : <p className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px]">Not registered for VAT: no VAT is charged, and the invoice says so.</p>}
     <SalesLineEditor key={`${editorKey}-${customerId}`} accounts={accounts} items={items} initial={start?.lines} noVat={treatment !== "standard"}
-      defaultAccount={customer?.default_account_id ?? salesAccount} defaultRate={19} error={errors.lines} />
+      defaultAccount={customer?.default_account_id ?? salesAccount} error={errors.lines} />
     <Field label="Notes" htmlFor={`${uid}-notes`} hint="printed on the document">
       <TextArea id={`${uid}-notes`} name="notes" rows={2} defaultValue={start?.notes ?? ""} maxLength={2000} placeholder={kind === "invoice" ? "e.g. Thank you for your business." : "e.g. Prices held for 30 days."} />
     </Field>

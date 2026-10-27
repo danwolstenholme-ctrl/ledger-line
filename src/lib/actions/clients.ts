@@ -7,7 +7,8 @@ import { redirect } from "next/navigation";
 import { asDbError, one, sql, transaction } from "@/lib/db";
 import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
 import { approverFor, getClientFile, getStaff } from "@/lib/data/clients";
-import { OPENING_ACCOUNTS, STANDARD_CHART } from "@/lib/domain/chart";
+import { OPENING_ACCOUNTS, chartFor } from "@/lib/domain/chart";
+import { regimeOf } from "@/lib/domain/regimes";
 import { PERSON_COUNTRIES } from "@/lib/domain/countries";
 import { euVatNumber } from "@/lib/domain/eu-vat";
 import { firmToday } from "@/lib/domain/invoices";
@@ -123,7 +124,8 @@ export async function saveClientDetails(_previous: ActionState, form: FormData):
   const yearEnd = Number(p.text("year_end_month", { max: 2 }) ?? 12);
   if (!Number.isInteger(yearEnd) || yearEnd < 1 || yearEnd > 12) p.errors.year_end_month = "Choose the month the financial year ends.";
   const registered = p.boolean("vat_registered");
-  const vat = euVatNumber(p.text("vat_number", { max: 20, label: "VAT number" }), "CY");
+  const country = p.enum("country", ["CY", "GB"] as const, { fallback: "CY", label: "Country" })!;
+  const vat = euVatNumber(p.text("vat_number", { max: 20, label: "VAT number" }), country);
   if (vat.problem) p.errors.vat_number = vat.problem;
   if (registered && !vat.value) p.errors.vat_number = "A VAT-registered company has a VAT number.";
   const booksMonth = p.text("books_from", { max: 7 });
@@ -137,8 +139,8 @@ export async function saveClientDetails(_previous: ActionState, form: FormData):
   if (p.failed || !name) return p.fail();
   try {
     await sql(`update client_files set company_name = $2, he_number = $3, incorporated_on = $4, registered_address = $5, business = $6, contact_name = $7, contact_email = $8, contact_phone = $9,
-        vat_registered = $10, vat_number = $11, vat_quarter_end_month = $12, year_end_month = $13, books_from = $14, manager = $15, face_to_face = $16, introduced_by = $17 where id = $1`,
-      [file.id, name, he, incorporated, address, business, contact, email, phone, registered, registered ? vat.value : null, quarter, yearEnd, booksMonth ? `${booksMonth}-01` : null, manager, faceToFace, introducedBy]);
+        vat_registered = $10, vat_number = $11, vat_quarter_end_month = $12, year_end_month = $13, books_from = $14, manager = $15, face_to_face = $16, introduced_by = $17, country = $18 where id = $1`,
+      [file.id, name, he, incorporated, address, business, contact, email, phone, registered, registered ? vat.value : null, quarter, yearEnd, booksMonth ? `${booksMonth}-01` : null, manager, faceToFace, introducedBy, country]);
     // Once signed, the services and fees are what the client agreed to: they are not changed here.
     if (!file.signed_at) await sql("update client_files set services = $2, monthly_fee = $3, hourly_rate = $4, app_fee = $5 where id = $1", [file.id, services, fee, rate, app]);
     await syncRequests(file.id);
@@ -374,14 +376,16 @@ export async function openBooks(_previous: ActionState, form: FormData): Promise
     await transaction(async run => {
       const org = randomUUID(), bank = randomUUID();
       const practiceOrg = (await run<{ id: string }>("select id from organisations where is_practice limit 1"))[0];
+      // In its own country's terms: currency, chart of accounts, VAT and deadlines.
       await run(`insert into organisations (id, practice_id, slug, name, industry, he_number, vat_number, vat_registered, vat_quarter_end_month, year_end_month, contact_name, contact_email, address,
-          invoice_prefix, manager, books_from) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          invoice_prefix, manager, books_from, incorporated_on, country, currency) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         [org, file.practice_id, slug, file.company_name, file.business || "Client company", file.he_number, file.vat_registered ? file.vat_number : null, file.vat_registered,
-         file.vat_quarter_end_month, file.year_end_month, file.contact_name, file.contact_email, file.registered_address, prefixFor(file.company_name), file.manager ?? user.name, booksFrom]);
-      const accounts = [...OPENING_ACCOUNTS, ...STANDARD_CHART].map(account => ({ id: account.code === "090" ? bank : randomUUID(), organisation_id: org, code: account.code, name: account.name,
-        type: account.type, system_role: account.role ?? null, description: account.description ?? null, bank_details: null }));
-      await run(`insert into ledger_accounts (id, organisation_id, code, name, type, system_role, description, bank_details)
-        select id, organisation_id, code, name, type, system_role, description, bank_details from jsonb_populate_recordset(null::ledger_accounts, $1::jsonb)`, [JSON.stringify(accounts)]);
+         file.vat_quarter_end_month, file.year_end_month, file.contact_name, file.contact_email, file.registered_address, prefixFor(file.company_name), file.manager ?? user.name, booksFrom,
+         file.incorporated_on, file.country, regimeOf(file.country).currency]);
+      const accounts = [...OPENING_ACCOUNTS, ...chartFor(file.country)].map(account => ({ id: account.code === "090" ? bank : randomUUID(), organisation_id: org, code: account.code, name: account.name,
+        type: account.type, system_role: account.role ?? null, description: account.description ?? null, bank_details: null, outside_vat: Boolean(account.outsideVat) }));
+      await run(`insert into ledger_accounts (id, organisation_id, code, name, type, system_role, description, bank_details, outside_vat)
+        select id, organisation_id, code, name, type, system_role, description, bank_details, outside_vat from jsonb_populate_recordset(null::ledger_accounts, $1::jsonb)`, [JSON.stringify(accounts)]);
       await run("update organisations set default_bank_account_id = $2 where id = $1", [org, bank]);
       if (practiceOrg) {
         const fees = (await run<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [practiceOrg.id]))[0];

@@ -1,5 +1,6 @@
 import { extendedDue, type ExtendedDue } from "@/lib/domain/extensions";
 import { quarterLabel, vatQuarters } from "@/lib/domain/vat";
+import { ukAnnualPayments, ukVatPeriods, type UkVatSettings } from "@/lib/domain/vat-uk";
 
 /**
  * A company's Cyprus deadlines, worked out from what is already known about
@@ -25,16 +26,23 @@ import { quarterLabel, vatQuarters } from "@/lib/domain/vat";
  *   the first reference date is the day after 18 months from incorporation, then each year on.
  *
  * And the practice's own: the AML review of each client, every 1, 2 or 3 years by risk (from its client file).
+ *
+ * A UK company's (ukObligations, checked on GOV.UK on 27 Oct 2026): the VAT return and its payment, 1 month
+ * and 7 days after each period (annual accounting: 2 months, with payments on account); annual accounts to
+ * Companies House 9 months after the year end (the first, the later of 21 months from incorporation and 3 months
+ * after the period); Corporation Tax 9 months and a day after it, the Company Tax Return 12 months after; and the
+ * confirmation statement within 14 days of each anniversary of incorporation.
  */
 
-export const DEADLINE_KINDS = ["vat_return", "vies", "provisional_tax", "tax_return", "tax_payment", "financial_statements", "annual_return", "payroll", "employer_return", "aml_review"] as const;
+export const DEADLINE_KINDS = ["vat_return", "vat_payment", "vies", "provisional_tax", "tax_return", "tax_payment", "financial_statements", "accounts_filing", "annual_return", "confirmation_statement", "payroll", "employer_return", "aml_review"] as const;
 export type DeadlineKind = (typeof DEADLINE_KINDS)[number];
 export const DEADLINE_LABELS: Record<DeadlineKind, string> = {
   vat_return: "VAT return", vies: "VIES statement", provisional_tax: "Provisional tax", tax_return: "Company tax return", tax_payment: "Corporation tax",
   financial_statements: "Financial statements", annual_return: "Annual return (HE32)", payroll: "Payroll returns", employer_return: "Employer’s return", aml_review: "AML review",
+  vat_payment: "VAT payment on account", accounts_filing: "Annual accounts", confirmation_statement: "Confirmation statement",
 };
-/** Closed by marking them done (a VAT return closes when filed, financial statements when the year end records them filed, an AML review when the next is approved). */
-export const MARKED_KINDS = ["vies", "provisional_tax", "tax_return", "tax_payment", "annual_return", "payroll", "employer_return"] as const;
+/** Closed by marking them done (a VAT return closes when filed, financial statements and UK annual accounts when the year end records them filed, an AML review when the next is approved). */
+export const MARKED_KINDS = ["vies", "provisional_tax", "tax_return", "tax_payment", "annual_return", "payroll", "employer_return", "vat_payment", "confirmation_statement"] as const;
 
 export type Obligation = { kind: DeadlineKind; periodStart: string | null; periodEnd: string; due: string; title: string; extension: ExtendedDue["extension"] };
 
@@ -121,6 +129,57 @@ export function obligations(input: ObligationInput): Obligation[] {
   if (input.incorporatedOn) {
     for (const date of annualReturnDates(input.incorporatedOn, input.booksFrom, input.until)) {
       push({ kind: "annual_return", periodStart: null, periodEnd: date, due: addDays(date, 28), title: `Annual return (HE32), made up to ${longDate(date)}` });
+    }
+  }
+  return out.filter(item => item.due <= input.until).sort((a, b) => a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
+}
+
+/**
+ * `months` after a date as the Companies Act counts a filing period (s.443): the same day of the month, or from
+ * the last day of a month, the last day of the month it lands in. 30 June and 9 months is 31 March.
+ */
+export function filingMonths(date: string, months: number) {
+  const [year, month] = date.split("-").map(Number);
+  return date === iso(year, month + 1, 0) ? iso(year, month + months + 1, 0) : addMonths(date, months);
+}
+
+export type UkObligationInput = {
+  registered: boolean; vat: UkVatSettings & { annualPayments: "monthly" | "quarterly" | null }; booksFrom: string; until: string;
+  yearEndMonth: number; incorporatedOn: string | null; entity: "company" | "sole_trader";
+};
+
+/** A UK company's or sole trader's deadlines with HMRC and Companies House. */
+export function ukObligations(input: UkObligationInput): Obligation[] {
+  const out: Obligation[] = [];
+  const push = (item: Omit<Obligation, "extension">) => out.push({ ...item, extension: null });
+  const year = (end: string) => input.yearEndMonth === 12 ? end.slice(0, 4) : `the year to ${longDate(end)}`;
+  if (input.registered) {
+    for (const period of ukVatPeriods(input.vat, input.booksFrom, input.until)) {
+      const annual = input.vat.period === "annual";
+      push({ kind: "vat_return", periodStart: period.from, periodEnd: period.to, due: period.due,
+        title: annual ? `VAT return (annual), year to ${longDate(period.to)}` : input.vat.period === "monthly" ? `VAT return, ${monthName(period.to)}` : `VAT return, ${quarterLabel(period.from, period.to)}` });
+      if (annual && input.vat.annualPayments) for (const payment of ukAnnualPayments(period, input.vat.annualPayments)) {
+        if (payment.due >= input.booksFrom) push({ kind: "vat_payment", periodStart: period.from, periodEnd: payment.due, due: payment.due, title: `VAT payment on account, ${payment.share}% (year to ${longDate(period.to)})` });
+      }
+    }
+  }
+  if (input.entity === "company") {
+    for (const end of financialYearEnds(input.yearEndMonth, input.booksFrom, input.until)) {
+      // A first accounting period runs more than 6 months and at most 18: a year end sooner after incorporation isn't one.
+      if (input.incorporatedOn && end < addMonths(input.incorporatedOn, 6)) continue;
+      // The first accounts, for a first period of more than a year: the later of 21 months from incorporation and 3 months after it.
+      const first = input.incorporatedOn && addMonths(end, -12) < addMonths(input.incorporatedOn, 6) && end > addMonths(input.incorporatedOn, 12);
+      const accounts = first ? [addMonths(input.incorporatedOn!, 21), filingMonths(end, 3)].sort().at(-1)! : filingMonths(end, 9);
+      push({ kind: "accounts_filing", periodStart: null, periodEnd: end, due: accounts, title: `Annual accounts to Companies House, ${year(end)}` });
+      push({ kind: "tax_payment", periodStart: null, periodEnd: end, due: addDays(filingMonths(end, 9), 1), title: `Corporation Tax for ${year(end)}` });
+      push({ kind: "tax_return", periodStart: null, periodEnd: end, due: filingMonths(end, 12), title: `Company Tax Return (CT600), ${year(end)}` });
+    }
+    if (input.incorporatedOn) {
+      for (let years = 1; years < 200; years++) {
+        const date = addMonths(input.incorporatedOn, 12 * years);
+        if (date > input.until) break;
+        if (addDays(date, 14) >= input.booksFrom) push({ kind: "confirmation_statement", periodStart: null, periodEnd: date, due: addDays(date, 14), title: `Confirmation statement, made up to ${longDate(date)}` });
+      }
     }
   }
   return out.filter(item => item.due <= input.until).sort((a, b) => a.due.localeCompare(b.due) || a.title.localeCompare(b.title));

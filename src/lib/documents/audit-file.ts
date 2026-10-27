@@ -6,7 +6,8 @@ import { sql } from "@/lib/db";
 import { getBalanceSheetReport, getGeneralLedger, getJournalReport, getLedgerBalances, getProfitAndLossReport } from "@/lib/data/accounts";
 import { getYearEnd, yearStartOf } from "@/lib/data/year-end";
 import { ACCOUNT_TYPES, JOURNAL_SOURCE_LABELS, statementCsvHeader, statementCsvRows, trialBalance } from "@/lib/domain/accounts";
-import { FRAMEWORK_NOTE, INDEPENDENCE_NOTE, JOURNAL_FLAGS, OPINIONS, SIZE_LABELS } from "@/lib/domain/audit";
+import { FRAMEWORK_NOTE, INDEPENDENCE_NOTE, JOURNAL_FLAGS, OPINIONS, SIZE_LABELS, UK_FRAMEWORK_NOTE } from "@/lib/domain/audit";
+import { regimeOf } from "@/lib/domain/regimes";
 import { toCsv } from "@/lib/domain/billing";
 import { getCurrentUser, getPractice } from "@/lib/org";
 import { zip } from "@/lib/documents/zip";
@@ -134,12 +135,12 @@ export async function auditFile(requested: string) {
       ])) },
   ];
 
-  const review = data.assurance === "review";
+  const review = data.assurance === "review", uk = org.country === "GB", regime = regimeOf(org.country);
   const today = data.today;
   const steps = data.steps.filter(step => step.doneOn).map(step => `- ${step.label}: ${long(step.doneOn!)}`);
   const lines = [
     org.name + (org.greek_name ? ` (${org.greek_name})` : ""),
-    [org.he_number ? `Registration ${org.he_number}` : null, org.tic ? `Tax identification ${org.tic}` : null, org.vat_number ? `VAT ${org.vat_number}` : null].filter(Boolean).join(" · "),
+    [org.he_number ? `${regime.labels.registration} ${org.he_number}` : null, org.tic ? `${regime.labels.taxId} ${org.tic}` : null, org.vat_number ? `VAT ${org.vat_number}` : null].filter(Boolean).join(" · "),
     `Financial year ${long(yearStart)} to ${long(periodEnd)}`,
     "",
     `Prepared in Ledgerline by ${user.name}, ${practice.name}, on ${long(today)}.`,
@@ -147,10 +148,11 @@ export async function auditFile(requested: string) {
     data.startsBeforeBooks ? `The books in Ledgerline begin on ${long(data.booksFrom)}, with opening balances; the year's earlier months are in the previous records.` : null,
     "",
     "THE YEAR END",
-    review ? "- Review: the company has chosen a review under ISRE 2400 instead of an audit (Companies Law, Cap. 113, s.152A(1)(d))." : "- Audit by a statutory auditor or audit firm (Companies Law, Cap. 113, s.152A).",
+    uk ? (data.assurance === "exempt" ? "- Exempt from audit as a small company (Companies Act 2006): these accounts are for the directors and Companies House." : "- Audit by a registered auditor (Companies Act 2006).")
+      : review ? "- Review: the company has chosen a review under ISRE 2400 instead of an audit (Companies Law, Cap. 113, s.152A(1)(d))." : "- Audit by a statutory auditor or audit firm (Companies Law, Cap. 113, s.152A).",
     ...data.review.reasons.map(reason => `  ${reason}`),
     data.size ? `- Size (s.141A): ${SIZE_LABELS[data.size.size]}${data.size.certain ? "" : ", subject to the average number of employees"}.` : null,
-    `- Framework: ${FRAMEWORK_NOTE}`,
+    `- Framework: ${uk ? UK_FRAMEWORK_NOTE : FRAMEWORK_NOTE}`,
     org.auditor_name ? `- ${review ? "Reviewer" : "Auditor"}: ${org.auditor_name}${org.auditor_is_practice ? `, the practice itself. ${INDEPENDENCE_NOTE}` : ""}` : null,
     data.row?.opinion ? `- ${review ? "Conclusion" : "Opinion"}: ${OPINIONS[data.row.opinion]}${data.row.report_signed_on ? `, signed ${long(data.row.report_signed_on)}` : ""}.` : null,
     ...steps,

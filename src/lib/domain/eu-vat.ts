@@ -90,6 +90,21 @@ const CHECKS: Record<string, (number: string) => boolean> = {
   SK: number => BigInt(number) % BigInt(11) === BigInt(0),
 };
 
+/**
+ * A UK VAT number, GB and then 9 digits (12 for a branch; GD or HA and 3 digits for a government department or a
+ * health authority). The 9-digit core's check: the first 7 digits weighted 8 down to 2, plus the last two as a
+ * number, divisible by 97; or, for numbers issued since 2009, divisible by 97 once 55 is added.
+ */
+export function checkUkVatNumber(input: string): { ok: true; display: string } | { ok: false; problem: string } {
+  const clean = input.toUpperCase().replace(/[\s.\-/]/g, "").replace(/^GB/, "");
+  if (/^GD[0-4]\d{2}$/.test(clean) || /^HA[5-9]\d{2}$/.test(clean)) return { ok: true, display: `GB${clean}` };
+  if (!/^(\d{9}|\d{12})$/.test(clean)) return { ok: false, problem: "A UK VAT number is GB followed by 9 digits (12 for a branch)." };
+  const core = clean.slice(0, 9);
+  const sum = weighted(digits(core.slice(0, 7)), [8, 7, 6, 5, 4, 3, 2]) + Number(core.slice(7));
+  if (sum % 97 !== 0 && (sum + 55) % 97 !== 0) return { ok: false, problem: "The check digits of this UK VAT number don’t match: a digit is probably mistyped." };
+  return { ok: true, display: `GB${clean}` };
+}
+
 export type VatNumberCheck =
   | { ok: true; country: string; number: string; display: string; countryName: string; checked: boolean }
   | { ok: false; country: string | null; number: string; problem: string };
@@ -111,6 +126,10 @@ export function checkVatNumber(input: string, fallbackCountry?: string | null): 
   const country = split.country ?? (fallbackCountry ? (fallbackCountry === "GR" ? "EL" : fallbackCountry) : null);
   const number = split.number;
   if (!number) return { ok: false, country, number, problem: "Write the VAT number, with or without its country prefix." };
+  if (country === "GB" || (!country && /^GB/.test(input.trim().toUpperCase()))) {
+    const uk = checkUkVatNumber(input);
+    return { ok: false, country: "GB", number, problem: uk.ok ? "A UK VAT number, and its check digits agree. VIES holds EU numbers only: HMRC’s own check comes with Making Tax Digital." : uk.problem };
+  }
   if (!country || !VIES_COUNTRIES[country]) return { ok: false, country, number, problem: "Start it with the country’s two letters, such as DE or FR: VIES checks EU VAT numbers only." };
   const [shape, described] = SHAPES[country];
   if (!shape.test(number)) return { ok: false, country, number, problem: `A ${VIES_COUNTRIES[country]} VAT number is ${country} followed by ${described}.` };
@@ -128,6 +147,11 @@ export function checkVatNumber(input: string, fallbackCountry?: string | null): 
 export function euVatNumber(input: string | null | undefined, country?: string | null): { value: string | null; problem: string | null } {
   const typed = input?.trim() ?? "";
   if (!typed) return { value: null, problem: null };
+  // A UK number is held to its own check digits.
+  if (/^GB/i.test(typed.replace(/\s+/g, "")) || (country === "GB" && /^\d[\d\s]{8,}$/.test(typed))) {
+    const uk = checkUkVatNumber(typed);
+    return uk.ok ? { value: uk.display, problem: null } : { value: typed, problem: uk.problem };
+  }
   const split = splitVatNumber(typed);
   const fallback = country === "GR" ? "EL" : country ?? null;
   const foreignPrefix = !split.country && /^[A-Z]{2}/.test(split.number) && !(fallback && VIES_COUNTRIES[fallback] && SHAPES[fallback][0].test(split.number));

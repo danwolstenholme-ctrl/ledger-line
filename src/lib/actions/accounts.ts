@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { asDbError, one, sql } from "@/lib/db";
+import { asDbError, one, sql, transaction } from "@/lib/db";
+import { getUkVatFigures, ukSchemeOf } from "@/lib/data/accounts";
+import { ukVatReturn } from "@/lib/domain/vat-uk";
 import { euVatNumber } from "@/lib/domain/eu-vat";
-import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
+import { FormParser, describeDbError, reverseChargeKind, type ActionState } from "@/lib/actions/form";
 import { compactIban, validBic, validIban } from "@/lib/domain/iban";
 import { validRecordDate } from "@/lib/domain/invoices";
 import { orgPath, requireOrg } from "@/lib/org";
@@ -103,8 +105,8 @@ export async function saveBill(_previous: ActionState, form: FormData): Promise<
   let billId: string;
   try {
     if (!supplier && newSupplier) supplier = (await one<{ id: string }>("insert into suppliers (organisation_id, name) values ($1, $2) returning id", [org.id, newSupplier]))!.id;
-    billId = (await one<{ id: string }>("select save_bill($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) as id",
-      [org.id, id, supplier, number, reference, issued, due, notes, source, JSON.stringify(lines), p.boolean("reverse_charge")]))!.id;
+    billId = (await one<{ id: string }>("select save_bill($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12) as id",
+      [org.id, id, supplier, number, reference, issued, due, notes, source, JSON.stringify(lines), p.boolean("reverse_charge"), reverseChargeKind(form)]))!.id;
   } catch (error) { return dbFailure(error, "The bill could not be saved."); }
   refresh();
   redirect(await orgPath(`/accounts/bills/${billId}`));
@@ -167,8 +169,8 @@ export async function saveBankTransaction(_previous: ActionState, form: FormData
   if (p.failed || !kind || !bank || !when || !lines) return p.fail();
   let saved: string;
   try {
-    saved = (await one<{ id: string }>("select save_bank_transaction($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) as id",
-      [org.id, id, kind, bank, kind === "transfer" ? other : null, when, contact, reference, amount, kind === "transfer" ? null : JSON.stringify(lines), kind === "spend" && p.boolean("reverse_charge")]))!.id;
+    saved = (await one<{ id: string }>("select save_bank_transaction($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12) as id",
+      [org.id, id, kind, bank, kind === "transfer" ? other : null, when, contact, reference, amount, kind === "transfer" ? null : JSON.stringify(lines), kind === "spend" && p.boolean("reverse_charge"), reverseChargeKind(form)]))!.id;
   } catch (error) { return dbFailure(error, "The transaction could not be saved."); }
   refresh();
   redirect(await orgPath(`/accounts/bank/transactions/${saved}`));
@@ -259,19 +261,69 @@ export async function saveAccountingSettings(_previous: ActionState, form: FormD
   return { ok: true, error: null };
 }
 
-/** File the return for a period: record it and lock the books up to its last day. */
+/** How a UK company returns VAT: its period, its stagger or VAT year, and its schemes (lib/domain/vat-uk). */
+export async function saveVatScheme(_previous: ActionState, form: FormData): Promise<ActionState> {
+  const org = await requireOrg();
+  if (org.country !== "GB") return { ok: false, error: "VAT schemes here are the UK’s." };
+  const p = new FormParser(form);
+  const period = p.enum("vat_period", ["quarterly", "monthly", "annual"] as const, { fallback: "quarterly", label: "VAT period" })!;
+  const stagger = Number(form.get("vat_quarter_end_month"));
+  if (![1, 2, 3].includes(stagger)) p.errors.vat_quarter_end_month = "Choose the months the VAT quarters end in.";
+  const yearEnd = period === "annual" ? Number(form.get("vat_year_end_month")) : null;
+  if (period === "annual" && !(Number.isInteger(yearEnd) && yearEnd! >= 1 && yearEnd! <= 12)) p.errors.vat_year_end_month = "Choose the month the VAT year ends.";
+  const payments = period === "annual" ? p.enum("vat_annual_payments", ["monthly", "quarterly"] as const, { required: true, label: "Payments on account" }) : null;
+  const cash = p.boolean("vat_cash_accounting");
+  const flatText = p.text("vat_flat_rate", { max: 6, label: "Flat rate" });
+  const flat = flatText ? Number(flatText.replace("%", "")) : null;
+  if (flat !== null && !(Number.isFinite(flat) && flat > 0 && flat <= 16.5)) p.errors.vat_flat_rate = "A flat rate is a percentage from HMRC’s list, at most 16.5% (the limited cost business rate).";
+  if (p.failed) return p.fail();
+  try {
+    await sql(`update organisations set vat_period = $2, vat_quarter_end_month = $3, vat_year_end_month = $4, vat_annual_payments = $5, vat_cash_accounting = $6, vat_flat_rate = $7 where id = $1`,
+      [org.id, period, stagger, yearEnd, payments, cash, flat]);
+  } catch (error) { return dbFailure(error, "The VAT settings could not be saved."); }
+  refresh();
+  return { ok: true, error: null };
+}
+
+/**
+ * File the return for a period: record it and lock the books up to its last day. A UK return is worked out again
+ * here, and its nine boxes kept exactly as filed; on the flat rate, the difference between the VAT charged and the
+ * flat rate paid is moved from the VAT account to the scheme's surplus, so the VAT account shows what HMRC is owed.
+ */
 export async function fileVatReturn(_previous: ActionState, form: FormData): Promise<ActionState> {
   const org = await requireOrg();
   const p = new FormParser(form);
   const from = date(p, "from", "Period start"), to = date(p, "to", "Period end");
-  const net = Number(form.get("net"));
+  let net = Number(form.get("net"));
   if (p.failed || !from || !to || !Number.isFinite(net)) return { ok: false, error: "That period could not be read." };
+  let boxes: Record<string, number> = {};
+  let flatRateShift = 0;
+  if (org.country === "GB") {
+    const figures = await getUkVatFigures(org, from, to);
+    const uk = ukVatReturn(figures, ukSchemeOf(org));
+    net = uk.net;
+    boxes = Object.fromEntries(uk.boxes.map(box => [box.box, box.amount]));
+    if (org.vat_flat_rate !== null) flatRateShift = Math.round(((figures.salesVat - figures.purchaseVat) - (uk.flatVat - figures.capital.vat)) * 100) / 100;
+  }
   try {
-    await sql("insert into vat_returns (organisation_id, period_from, period_to, filed_on, net_vat) values ($1, $2, $3, (now() at time zone 'Asia/Nicosia')::date, $4) on conflict (organisation_id, period_to) do nothing", [org.id, from, to, net]);
-    await sql("update organisations set lock_date = greatest(coalesce(lock_date, $2::date), $2::date) where id = $1", [org.id, to]);
+    await transaction(async run => {
+      if (flatRateShift) {
+        const [vat, surplus] = await Promise.all([
+          run<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'vat'", [org.id]),
+          run<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and code = '265'", [org.id]),
+        ]);
+        if (!vat[0] || !surplus[0]) throw Object.assign(new Error("flat_rate_accounts: the VAT account or the Flat Rate Scheme surplus account (265) is missing"), { code: "23514" });
+        const amount = Math.abs(flatRateShift), up = flatRateShift > 0;
+        await run("select save_manual_journal($1, null, $2, $3, $4, $5::jsonb)", [org.id, to, `FRS ${to}`, `Flat Rate Scheme: VAT charged less the ${org.vat_flat_rate}% flat rate, ${from} to ${to}`,
+          JSON.stringify([{ account_id: vat[0].id, debit: up ? amount : 0, credit: up ? 0 : amount }, { account_id: surplus[0].id, debit: up ? 0 : amount, credit: up ? amount : 0 }])]);
+      }
+      await run("insert into vat_returns (organisation_id, period_from, period_to, filed_on, net_vat, boxes) values ($1, $2, $3, (now() at time zone 'Asia/Nicosia')::date, $4, $5::jsonb) on conflict (organisation_id, period_to) do nothing",
+        [org.id, from, to, net, JSON.stringify(boxes)]);
+      await run("update organisations set lock_date = greatest(coalesce(lock_date, $2::date), $2::date) where id = $1", [org.id, to]);
+    });
   } catch (error) { return dbFailure(error, "The return could not be recorded."); }
   refresh();
-  return { ok: true, error: null, notice: "Filed, and the books are locked to the end of the period." };
+  return { ok: true, error: null, notice: flatRateShift ? "Filed, the flat rate surplus posted, and the books locked to the end of the period." : "Filed, and the books are locked to the end of the period." };
 }
 
 export async function setSupplierActive(form: FormData): Promise<void> {

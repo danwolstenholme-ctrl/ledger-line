@@ -47,7 +47,7 @@ export function StartClientForm() {
 type DetailsFile = {
   id: string; company_name: string; he_number: string | null; incorporated_on: string | null; registered_address: string | null; business: string; contact_name: string | null;
   contact_email: string | null; contact_phone: string | null; services: Service[]; monthly_fee: number; hourly_rate: number; app_fee: number; vat_registered: boolean; vat_number: string | null;
-  vat_quarter_end_month: number; year_end_month: number; books_from: string | null; manager: string | null; face_to_face: boolean; introduced_by: string | null; signed_at: string | null;
+  vat_quarter_end_month: number; year_end_month: number; books_from: string | null; manager: string | null; face_to_face: boolean; introduced_by: string | null; signed_at: string | null; country?: string;
 };
 
 export function ClientDetailsForm({ file, staff, locked }: { file: DetailsFile; staff: string[]; locked: boolean }) {
@@ -61,7 +61,8 @@ export function ClientDetailsForm({ file, staff, locked }: { file: DetailsFile; 
       <legend className="text-ink-faint mb-1 text-[11px] font-semibold tracking-[0.06em] uppercase">The company</legend>
       <Field label="Company name" htmlFor={`${uid}-name`} required error={errors.company_name}><TextInput id={`${uid}-name`} name="company_name" defaultValue={file.company_name} maxLength={200} /></Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Registration number" htmlFor={`${uid}-he`} error={errors.he_number}><TextInput id={`${uid}-he`} name="he_number" defaultValue={file.he_number ?? ""} placeholder="HE 431776" className="font-mono" /></Field>
+        <Field label="Country" htmlFor={`${uid}-country`} hint="its tax and company law" error={errors.country}><NativeSelect id={`${uid}-country`} name="country" defaultValue={file.country ?? "CY"}><option value="CY">Cyprus</option><option value="GB">United Kingdom</option></NativeSelect></Field>
+        <Field label="Registration number" htmlFor={`${uid}-he`} hint="HE, or Companies House" error={errors.he_number}><TextInput id={`${uid}-he`} name="he_number" defaultValue={file.he_number ?? ""} placeholder="HE 431776" className="font-mono" /></Field>
         <Field label="Incorporated" htmlFor={`${uid}-inc`} error={errors.incorporated_on}><TextInput id={`${uid}-inc`} name="incorporated_on" type="date" defaultValue={file.incorporated_on ?? ""} /></Field>
       </div>
       <Field label="Registered office" htmlFor={`${uid}-address`}><TextInput id={`${uid}-address`} name="registered_address" defaultValue={file.registered_address ?? ""} maxLength={500} /></Field>

@@ -7,6 +7,7 @@ import { logReminder } from "@/lib/actions/sales";
 import { formatAmount, formatDate, formatAgo } from "@/lib/format";
 import { Field, TextArea, TextInput } from "@/components/common/form-fields";
 import { recordButton, recordOutlineButton } from "@/components/records/record-layout";
+import { useCurrency } from "@/components/common/regime";
 
 export type ReminderData = {
   customerId: string; customerName: string; to: string; greeting: string | null; company: string; sender: string;
@@ -14,13 +15,13 @@ export type ReminderData = {
   bank: { name: string; bank_details: string | null } | null; statementHref: string; lastSent: string | null;
 };
 
-function draft(data: ReminderData) {
+function draft(data: ReminderData, currency: string) {
   const total = data.overdue.reduce((sum, invoice) => sum + Number(invoice.balance), 0);
-  const list = data.overdue.map(invoice => `• ${invoice.number}, dated ${formatDate(invoice.issued_on)}: ${formatAmount(invoice.balance)}, due ${formatDate(invoice.due_on)} (${invoice.days_overdue} days ago)`).join("\n");
+  const list = data.overdue.map(invoice => `• ${invoice.number}, dated ${formatDate(invoice.issued_on)}: ${formatAmount(invoice.balance, currency)}, due ${formatDate(invoice.due_on)} (${invoice.days_overdue} days ago)`).join("\n");
   const bank = data.bank ? `\n\nYou can pay by bank transfer to ${data.bank.name}:\n${data.bank.bank_details ?? ""}\nPlease quote the invoice numbers as the reference.` : "";
   return {
     subject: `${data.overdue.length === 1 ? `Invoice ${data.overdue[0].number}` : `${data.overdue.length} invoices`} overdue · ${data.company}`,
-    body: `Dear ${data.greeting ?? data.customerName},\n\nOur records show ${data.overdue.length === 1 ? "this invoice is" : "these invoices are"} now overdue:\n\n${list}\n\nTotal overdue: ${formatAmount(total)}. Your statement is attached.${bank}\n\nIf you have already paid, thank you, and please ignore this reminder.\n\nKind regards,\n${data.sender}\n${data.company}`,
+    body: `Dear ${data.greeting ?? data.customerName},\n\nOur records show ${data.overdue.length === 1 ? "this invoice is" : "these invoices are"} now overdue:\n\n${list}\n\nTotal overdue: ${formatAmount(total, currency)}. Your statement is attached.${bank}\n\nIf you have already paid, thank you, and please ignore this reminder.\n\nKind regards,\n${data.sender}\n${data.company}`,
   };
 }
 
@@ -30,14 +31,15 @@ function draft(data: ReminderData) {
  * app to send, and logged on the customer's timeline.
  */
 export function ReminderPanel({ data }: { data: ReminderData }) {
-  const start = draft(data);
+  const currency = useCurrency();
+  const start = draft(data, currency);
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(data.to), [subject, setSubject] = useState(start.subject), [body, setBody] = useState(start.body);
   const [copied, setCopied] = useState(false);
   const [logged, setLogged] = useState(false);
   const [, startTransition] = useTransition();
   if (!data.overdue.length) return null;
-  const summary = `${data.overdue.map(invoice => invoice.number).join(", ")} (${formatAmount(data.overdue.reduce((sum, invoice) => sum + Number(invoice.balance), 0))} overdue)`;
+  const summary = `${data.overdue.map(invoice => invoice.number).join(", ")} (${formatAmount(data.overdue.reduce((sum, invoice) => sum + Number(invoice.balance), 0), currency)} overdue)`;
   const record = () => { setLogged(true); startTransition(() => logReminder(data.customerId, summary)); };
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={recordOutlineButton}><Mail className="size-3.5" />Send a reminder</button>;
   return <section aria-label="Payment reminder" className="ll-panel basis-full space-y-3 px-4 py-3.5">

@@ -43,7 +43,7 @@ export default async function BankTransactionPage({ params }: { params: Promise<
       <div className="p-4 sm:p-5">
         <BankTransactionForm accounts={accounts.rows} bankAccounts={banks.rows} defaultBank={settings.settings.default_bank_account_id} today={settings.today}
           transaction={{ id: item.id, kind: item.kind, bank_account_id: item.bank_account_id, transfer_account_id: item.transfer_account_id, txn_date: item.txn_date,
-            contact: item.contact, reference: item.reference, amount: Number(item.amount), reverse_charge: item.reverse_charge,
+            contact: item.contact, reference: item.reference, amount: Number(item.amount), reverse_charge: item.reverse_charge, reverse_charge_kind: item.reverse_charge_kind,
             lines: result.lines.map(line => ({ description: line.description, account_id: line.account_id, net: plain(line.net), vat_rate: Number(line.vat_rate), vat_amount: plain(line.vat_amount) })) }} />
       </div>
       <RecordDisclosure title="Remove this transaction"><RemoveForm kind="bank" id={item.id} label="Remove from the books" /></RecordDisclosure>

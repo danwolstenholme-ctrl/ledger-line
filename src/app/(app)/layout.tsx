@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppShell practice={{ name: practice.name, initials: practice.initials, brand_color: practice.brand_color, tagline: practice.tagline }}
       user={{ name: user.name, initials: user.initials, email: user.email, role, demo: AUTH_MODE === "demo" }} member={membership.practice} toReview={toReview}
       timer={running ? { company: running.company, slug: running.slug, work: running.work, started_at: running.started_at } : null}
-      clients={organisations.map(org => ({ id: org.id, slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, toReview: Number(reviews.find(row => row.organisation_id === org.id)?.count ?? 0) }))}>
+      clients={organisations.map(org => ({ id: org.id, slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, country: org.country, toReview: Number(reviews.find(row => row.organisation_id === org.id)?.count ?? 0) }))}>
       {children}
     </AppShell>
   </>;
