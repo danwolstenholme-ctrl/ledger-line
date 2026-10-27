@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { asDbError, one, sql, transaction } from "@/lib/db";
-import { getUkVatFigures, ukSchemeOf } from "@/lib/data/accounts";
+import { getUkVatFigures, getVatReport, ukSchemeOf } from "@/lib/data/accounts";
+import { vatBoxes } from "@/lib/domain/accounts";
 import { ukVatReturn } from "@/lib/domain/vat-uk";
 import { euVatNumber } from "@/lib/domain/eu-vat";
 import { FormParser, describeDbError, reverseChargeKind, type ActionState } from "@/lib/actions/form";
@@ -296,8 +297,15 @@ export async function fileVatReturn(_previous: ActionState, form: FormData): Pro
   const from = date(p, "from", "Period start"), to = date(p, "to", "Period end");
   let net = Number(form.get("net"));
   if (p.failed || !from || !to || !Number.isFinite(net)) return { ok: false, error: "That period could not be read." };
+  const reference = String(form.get("reference") ?? "").trim().replace(/\s+/g, " ").slice(0, 60) || null;
   let boxes: Record<string, number> = {};
   let flatRateShift = 0;
+  if (org.country !== "GB") {
+    // The boxes as filed, kept with the filing: what the Tax Department was told.
+    const report = await getVatReport({ range: "custom", from, to });
+    const { vat, values } = vatBoxes(report.summary, report.breakdown);
+    boxes = Object.fromEntries([...vat, ...values].map(box => [box.box, box.amount]));
+  }
   if (org.country === "GB") {
     const figures = await getUkVatFigures(org, from, to);
     const uk = ukVatReturn(figures, ukSchemeOf(org));
@@ -317,8 +325,8 @@ export async function fileVatReturn(_previous: ActionState, form: FormData): Pro
         await run("select save_manual_journal($1, null, $2, $3, $4, $5::jsonb)", [org.id, to, `FRS ${to}`, `Flat Rate Scheme: VAT charged less the ${org.vat_flat_rate}% flat rate, ${from} to ${to}`,
           JSON.stringify([{ account_id: vat[0].id, debit: up ? amount : 0, credit: up ? 0 : amount }, { account_id: surplus[0].id, debit: up ? 0 : amount, credit: up ? amount : 0 }])]);
       }
-      await run("insert into vat_returns (organisation_id, period_from, period_to, filed_on, net_vat, boxes) values ($1, $2, $3, (now() at time zone 'Asia/Nicosia')::date, $4, $5::jsonb) on conflict (organisation_id, period_to) do nothing",
-        [org.id, from, to, net, JSON.stringify(boxes)]);
+      await run("insert into vat_returns (organisation_id, period_from, period_to, filed_on, net_vat, boxes, reference) values ($1, $2, $3, (now() at time zone 'Asia/Nicosia')::date, $4, $5::jsonb, $6) on conflict (organisation_id, period_to) do nothing",
+        [org.id, from, to, net, JSON.stringify(boxes), reference]);
       await run("update organisations set lock_date = greatest(coalesce(lock_date, $2::date), $2::date) where id = $1", [org.id, to]);
     });
   } catch (error) { return dbFailure(error, "The return could not be recorded."); }

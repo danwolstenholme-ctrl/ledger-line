@@ -81,7 +81,6 @@ function lines(text: string | null | undefined) {
 // Registration numbers are kept as the company writes them, "HE 395540", or as the bare number. A UK company's is its Companies House number.
 const heOf = (org: OrganisationRow) => !org.he_number ? null : org.country === "GB" ? `Company no. ${org.he_number}` : /^HE/i.test(org.he_number) ? org.he_number : `HE ${org.he_number}`;
 
-/** The company's own colour, and a text colour that reads on it: dark on a light accent, white on a dark one. */
 /** The issuing company across the top: its logo or its name, and what it prints about itself. */
 function CompanyHeader({ org, logo }: { org: OrganisationRow; logo: string | null }) {
   // A UK company's UTR is HMRC's business, not its customers': it isn't printed.
@@ -117,7 +116,7 @@ function Footer({ org, title }: { org: OrganisationRow; title: string }) {
   </View>;
 }
 
-/** What the document says about VAT when it charges none. */
+/** The word across the top of a document that is not simply open: paid, void, a draft, accepted. */
 function stampFor(data: DocumentPdfData) {
   const { kind, document } = data;
   if (kind === "invoice") {

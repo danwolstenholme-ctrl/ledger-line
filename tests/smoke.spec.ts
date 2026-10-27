@@ -42,8 +42,19 @@ test("reports agree and the VAT return files and locks", async ({ page }) => {
     await expect(page.getByText("We couldn’t load")).toHaveCount(0);
   }
   await page.goto("/c/aegean-blue-marine/reports/vat");
+  // Tax For All takes it box by box: each amount copies as it is typed there, and the steps say what comes next.
+  await expect(page.getByText("File it on Tax For All, step by step")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Tax For All" })).toHaveAttribute("href", "https://taxforall.mof.gov.cy");
+  await expect(page.getByRole("button", { name: "Copy box 1", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy box 8B" })).toBeVisible();
+  await page.getByLabel(/Tax For All’s reference for the return/).fill("TFA-2026-118842");
+  const filed = { from: await page.locator('input[type="hidden"][name="from"]').inputValue(), to: await page.locator('input[type="hidden"][name="to"]').inputValue() };
   await page.getByRole("button", { name: "Mark as filed and lock the period" }).click();
   await expect(page.getByText(/locked to the end of the period/)).toBeVisible();
+  // The return filed: with nothing asked for, the page moves on to the next one due.
+  await page.goto(`/c/aegean-blue-marine/reports/vat?range=custom&from=${filed.from}&to=${filed.to}`);
+  await expect(page.getByText(/Filed on .*, reference TFA-2026-118842; the period is locked/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy box 1", exact: true })).toHaveCount(0);
   await page.goto("/c/aegean-blue-marine/audit");
   await expect(page.getByText("The chain is intact")).toBeVisible();
 });

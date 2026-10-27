@@ -447,10 +447,16 @@ to reconcile.
 
 ### 4. Reports, 3 minutes
 - **VAT return** (Reports → VAT return): the Jul–Sep return is on screen,
-  box by box, due 10 Nov. **Mark as filed and lock the period**: the lock date
-  moves to 30 Sep and nothing in the quarter can change any more (the database
-  refuses, whatever the route). Back on the dashboard the return shows as
-  filed.
+  box by box, due 10 Nov. Returns are filed in the Tax Department's own
+  portal, Tax For All (https://taxforall.mof.gov.cy, signed in to with CY
+  Login), which has no way in but its own screens: so beside every box is a
+  copy button that gives the amount as Tax For All takes it (2068.79), and
+  **File it on Tax For All, step by step** says what to do in order, with
+  **Copy every box** for the file. Type Tax For All's reference beside
+  **Mark as filed and lock the period**: the lock date moves to 30 Sep and
+  nothing in the quarter can change any more (the database refuses, whatever
+  the route); the return keeps the boxes as filed and the reference, and the
+  audit trail records both. Back on the dashboard the return shows as filed.
 - **Pixelforge Studio** VAT return: services to EU clients in box 8B, the
   reverse charge on its Dutch cloud supplier in 1, 4, 7 and 11B. Its **VIES
   statement** (Reports) lists the same sales by customer VAT number, as the

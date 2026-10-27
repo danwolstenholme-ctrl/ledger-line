@@ -13,10 +13,11 @@ import { PeriodPicker } from "@/components/accounts/period-picker";
 import { ReportHeading, periodLabel } from "@/components/accounts/report-parts";
 import { RecordFailure, RecordHeader } from "@/components/records/record-layout";
 import { FileVatReturn } from "@/components/accounts/file-vat-return";
+import { CopyBox, TaxForAllSteps } from "@/components/accounts/tax-for-all";
 
 export const metadata: Metadata = { title: "VAT return" };
 
-function BoxRows({ title, boxes }: { title: string; boxes: VatBox[] }) {
+function BoxRows({ title, boxes, copy = false }: { title: string; boxes: VatBox[]; copy?: boolean }) {
   return <section aria-label={title}>
     <h3 className="text-ink-faint border-hairline border-b px-4 pt-3 pb-2 text-[11.5px] font-semibold tracking-[0.06em] uppercase">{title}</h3>
     <dl className="divide-hairline divide-y">
@@ -28,7 +29,8 @@ function BoxRows({ title, boxes }: { title: string; boxes: VatBox[] }) {
             {box.hint ? <span className="text-ink-faint block text-[12px]">{box.hint}</span> : null}
           </span>
         </dt>
-        <dd className={cn("text-ink shrink-0 pt-0.5 text-right text-[13.5px] tabular-nums", box.box === "5" ? "font-semibold" : box.amount === 0 ? "text-ink-faint" : "font-medium")}>{formatAmount(box.amount)}</dd>
+        <dd className={cn("text-ink flex shrink-0 items-start gap-1 pt-0.5 text-right text-[13.5px] tabular-nums", box.box === "5" ? "font-semibold" : box.amount === 0 ? "text-ink-faint" : "font-medium")}>
+          {formatAmount(box.amount)}{copy ? <span className="-mt-1 -mr-1.5"><CopyBox box={box.box} amount={box.amount} /></span> : null}</dd>
       </div>)}
     </dl>
   </section>;
@@ -47,6 +49,8 @@ export default async function VatPage({ searchParams }: { searchParams: Promise<
   if (report.uk) return <UkVatReturn report={report} uk={report.uk} />;
   const { vat, values, net } = vatBoxes(report.summary, report.breakdown);
   const due = vatDueDate(period.to);
+  // A return to file: Tax For All takes it box by box, so each figure can be copied as it is typed there.
+  const fileable = Boolean(report.org.vat_registered && !report.filed && due);
   const query = new URLSearchParams({ range: period.range, from: period.from, to: period.to });
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title="VAT return" description={report.org.vat_registered ? `Form VAT 4, box by box · ${report.org.vat_number}` : "This company is not registered for VAT: its purchase VAT is part of each cost."} back={{ href: "/accounts/reports", label: "Reports" }} />
@@ -61,14 +65,19 @@ export default async function VatPage({ searchParams }: { searchParams: Promise<
             <p className={cn("mt-1.5 text-[24px] leading-none font-semibold tracking-[-0.01em] tabular-nums", net > 0 ? "text-ink" : "text-positive")}>{formatAmount(Math.abs(net))}</p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            {due ? <p className="text-ink-muted text-[13px]">{report.filed ? <>Filed on <span className="text-ink font-medium">{formatDate(report.filed.filed_on)}</span>; the period is locked</> : <>File and pay through Tax For All by <span className="text-ink font-medium">{formatDate(due)}</span></>}</p> : null}
+            {due ? <p className="text-ink-muted text-[13px]">{report.filed ? <>Filed on <span className="text-ink font-medium">{formatDate(report.filed.filed_on)}</span>{report.filed.reference ? <>, reference <span className="text-ink font-mono">{report.filed.reference}</span></> : null}; the period is locked</> : <>File and pay through Tax For All by <span className="text-ink font-medium">{formatDate(due)}</span></>}</p> : null}
             {!report.filed && due && report.org.vat_registered ? <FileVatReturn from={period.from} to={period.to} net={net} /> : null}
           </div>
         </div>
         <div className="grid lg:grid-cols-2 lg:divide-x divide-hairline">
-          <BoxRows title="VAT" boxes={vat} />
-          <div className="border-hairline border-t lg:border-t-0"><BoxRows title="Values before VAT" boxes={values} /></div>
+          <BoxRows title="VAT" boxes={vat} copy={fileable} />
+          <div className="border-hairline border-t lg:border-t-0"><BoxRows title="Values before VAT" boxes={values} copy={fileable} /></div>
         </div>
+        {fileable && due ? <details open className="border-hairline border-t">
+          <summary className="text-brand cursor-pointer px-4 py-2.5 text-[13px] font-medium touch:py-3">File it on Tax For All, step by step</summary>
+          <TaxForAllSteps company={report.org.name} vatNumber={report.org.vat_number ?? ""} period={periodLabel(period.from, period.to)} net={net} due={due}
+            boxes={[...vat, ...values].map(box => ({ box: box.box, label: box.label, amount: box.amount }))} />
+        </details> : null}
         {report.boxSeven.length ? <details className="border-hairline border-t">
           <summary className="text-brand cursor-pointer px-4 py-2.5 text-[13px] font-medium touch:py-3">What makes up box 7</summary>
           <ul className="divide-hairline divide-y pb-1">{report.boxSeven.map(line => <li key={line.id}>
@@ -117,7 +126,7 @@ async function UkVatReturn({ report, uk }: { report: Awaited<ReturnType<typeof g
         <div className="flex flex-col items-end gap-2">
           <p className="text-ink-muted text-[13px]">{report.filed ? <>Filed on <span className="text-ink font-medium">{formatDate(report.filed.filed_on)}</span>; the period is locked</>
             : <>Submit through Making Tax Digital and pay by <span className="text-ink font-medium">{formatDate(due)}</span></>}</p>
-          {!report.filed && org.vat_registered ? <FileVatReturn from={period.from} to={period.to} net={uk.net} /> : null}
+          {!report.filed && org.vat_registered ? <FileVatReturn from={period.from} to={period.to} net={uk.net} authority="HMRC" /> : null}
         </div>
       </div>
       <BoxRows title="The nine boxes" boxes={uk.boxes} />

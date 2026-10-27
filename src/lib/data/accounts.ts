@@ -142,7 +142,7 @@ export async function getVatReport(params: Params) {
   const boxSeven = [...purchases.entries()].filter(([, amount]) => amount !== 0)
     .map(([id, amount]) => ({ id, code: byId.get(id)!.code, name: byId.get(id)!.name, amount: amount / 100 }))
     .sort((a, b) => b.amount - a.amount);
-  const filed = await one<{ filed_on: string }>("select filed_on from vat_returns where organisation_id = $1 and period_to = $2", [org.id, period.to]);
+  const filed = await one<{ filed_on: string; reference: string | null }>("select filed_on, reference from vat_returns where organisation_id = $1 and period_to = $2", [org.id, period.to]);
   // A UK company's nine boxes, from the same ledger by its own rules and scheme.
   const uk = org.country === "GB" ? ukVatReturn(await getUkVatFigures(org, period.from, period.to), ukSchemeOf(org)) : null;
   return { period, summary: summary.row, breakdown: summary.breakdown, boxSeven, filed, org, uk,

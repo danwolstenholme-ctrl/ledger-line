@@ -2181,6 +2181,8 @@ create table vat_returns (
   filed_on        date not null,
   net_vat         numeric(14, 2) not null,
   boxes           jsonb not null default '{}'::jsonb,
+  -- The tax authority's own number for the submission (Tax For All's, HMRC's), when it was noted.
+  reference       text check (reference is null or length(btrim(reference)) between 1 and 60),
   unique (organisation_id, period_to)
 );
 
@@ -2299,7 +2301,7 @@ create trigger organisations_audit after update on organisations for each row ex
 
 create function audit_vat_return() returns trigger language plpgsql as $$
 begin
-  perform audit_append(new.organisation_id, 'filed', 'vat_return', new.id, jsonb_build_object('from', new.period_from, 'to', new.period_to, 'net_vat', new.net_vat));
+  perform audit_append(new.organisation_id, 'filed', 'vat_return', new.id, jsonb_build_object('from', new.period_from, 'to', new.period_to, 'net_vat', new.net_vat, 'reference', new.reference));
   return new;
 end $$;
 create trigger vat_returns_audit after insert on vat_returns for each row execute function audit_vat_return();
