@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { CheckCircle2, FileDown, Upload } from "lucide-react";
+import { CheckCircle2, FileDown, Upload, UserPlus } from "lucide-react";
 import Link from "@/components/navigation/navigation-link";
 
 import { importClients, type ClientImportState } from "@/lib/actions/client-import";
@@ -10,7 +10,7 @@ import { businessType } from "@/lib/domain/business-types";
 import { CLIENT_FIELDS, clientKeys, clientTemplate, guessClientColumns, readClientRow } from "@/lib/domain/client-import";
 import { cn } from "@/lib/utils";
 import { Field, FormError, NativeSelect, SubmitButton, TextArea } from "@/components/common/form-fields";
-import { recordOutlineButton } from "@/components/records/record-layout";
+import { recordButton, recordOutlineButton } from "@/components/records/record-layout";
 
 const monthLabel = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -50,7 +50,8 @@ export function ClientImportForm({ existing, staff, today }: { existing: string[
     </p>
     {state.problems?.length ? <ul className="text-ink-muted list-disc space-y-0.5 pl-5 text-[12px]">{state.problems.slice(0, 30).map(problem => <li key={problem.row}>Row {problem.row}: {problem.problem}</li>)}</ul> : null}
     {state.added?.length ? <ul className="ll-panel divide-hairline max-h-80 divide-y overflow-auto">{state.added.map(client => <li key={client.slug}><Link href={`/c/${client.slug}`} className="text-ink hover:bg-surface-sunken hover:text-brand block px-4 py-2 text-[12.5px]">{client.name}</Link></li>)}</ul> : null}
-    <div className="flex flex-wrap gap-2"><Link href="/" className={recordOutlineButton}>Go to the dashboard</Link><Link href="/clients" className={recordOutlineButton}>See the client files</Link></div>
+    <div className="flex flex-wrap gap-2">{state.added?.length ? <Link href="/clients/owners?view=todo" className={recordButton}><UserPlus className="size-3.5" />Next: invite their owners</Link> : null}
+      <Link href="/" className={recordOutlineButton}>Go to the dashboard</Link><Link href="/clients" className={recordOutlineButton}>See the client files</Link></div>
   </div>;
 
   return <form action={action} className="space-y-4">

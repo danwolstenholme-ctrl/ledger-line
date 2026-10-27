@@ -31,6 +31,14 @@ export const idleVatCheck: VatCheckState = { ok: false, error: null };
 export interface InviteState extends ActionState { link?: string; email?: string; name?: string; scope?: string }
 export const idleInvite: InviteState = { ok: false, error: null };
 
+/** Owners invited in one go: one link per person, shown once, to send from the practice's own email. */
+export interface OwnerInvitesState extends ActionState {
+  sent?: { name: string; email: string; companies: string[]; link: string }[];
+  skipped?: { company: string; why: string }[];
+  expires?: string;
+}
+export const idleOwnerInvites: OwnerInvitesState = { ok: false, error: null };
+
 /** What making a calendar link hands back: the link, shown once. */
 export interface FeedState extends ActionState { link?: string }
 export const idleFeed: FeedState = { ok: false, error: null };

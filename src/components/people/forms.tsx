@@ -6,22 +6,27 @@ import { Mail, UserPlus } from "lucide-react";
 import { sendPasswordLink, setNewPassword, signInWithPassword } from "@/lib/actions/auth";
 import { acceptInvitation, invitePerson } from "@/lib/actions/people";
 import { idleInvite, idleState } from "@/lib/actions/state";
+import { firstName } from "@/lib/format";
 import { Checkbox, Field, FormError, NativeSelect, SubmitButton, TextInput } from "@/components/common/form-fields";
 import { CopyBlock } from "@/components/crm/forms";
 import { recordButton } from "@/components/records/record-layout";
 
 /** Ask someone to join: the practice, or one client company. The link is shown once, to copy or to send from your own email. */
-export function InviteForm({ organisationId, roles, mlco = false, from }: { organisationId?: string; roles: { value: string; label: string }[]; mlco?: boolean; from: string }) {
+export function InviteForm({ organisationId, roles, mlco = false, from, defaults }: {
+  organisationId?: string; roles: { value: string; label: string }[]; mlco?: boolean; from: string;
+  /** Who to invite when the page already knows: a company's contact, before its owner has joined. */
+  defaults?: { name: string | null; email: string | null };
+}) {
   const [state, action] = useActionState(invitePerson, idleInvite);
   const uid = useId();
   const errors = state.fieldErrors ?? {};
-  const body = state.link ? `Dear ${state.name?.split(" ")[0] ?? ""},\n\nYou're invited to ${state.scope} on Ledgerline. Open this link to make your account and join (it works for 14 days, and only for ${state.email}):\n\n${state.link}\n\n${from}` : "";
+  const body = state.link ? `Dear ${firstName(state.name)},\n\nYou're invited to ${state.scope} on Ledgerline. Open this link to make your account and join (it works for 14 days, and only for ${state.email}):\n\n${state.link}\n\n${from}` : "";
   return <div className="space-y-3">
     <form action={action} className="space-y-3" noValidate>
       {organisationId ? <input type="hidden" name="organisation_id" value={organisationId} /> : null}
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_10rem]">
-        <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}><TextInput id={`${uid}-name`} name="name" maxLength={200} autoComplete="off" /></Field>
-        <Field label="Email" htmlFor={`${uid}-email`} required error={errors.email}><TextInput id={`${uid}-email`} name="email" type="email" autoComplete="off" /></Field>
+        <Field label="Name" htmlFor={`${uid}-name`} required error={errors.name}><TextInput id={`${uid}-name`} name="name" maxLength={200} autoComplete="off" defaultValue={defaults?.name ?? undefined} /></Field>
+        <Field label="Email" htmlFor={`${uid}-email`} required error={errors.email}><TextInput id={`${uid}-email`} name="email" type="email" autoComplete="off" defaultValue={defaults?.email ?? undefined} /></Field>
         <Field label="Role" htmlFor={`${uid}-role`} error={errors.role}><NativeSelect id={`${uid}-role`} name="role" defaultValue={roles[0]?.value}>{roles.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}</NativeSelect></Field>
       </div>
       {mlco ? <Checkbox name="mlco" label="Money laundering compliance officer: approves low and normal risk clients" /> : null}

@@ -4,13 +4,11 @@ import { AUTH_MODE } from "@/lib/auth/config";
 import { one, sql } from "@/lib/db";
 import { headers } from "next/headers";
 import { ORG_HEADER, getCurrentUser, getMembership, getPractice } from "@/lib/org";
-import { getShellCompany } from "@/lib/data/shell";
+import { companyRoleLabel, getShellCompany } from "@/lib/data/shell";
 import { AppShell } from "@/components/shell/app-shell";
 import { getRunningTimer } from "@/lib/data/work";
 
 export const dynamic = "force-dynamic";
-
-const COMPANY_ROLE: Record<string, string> = { owner: "Owner", staff: "Team", viewer: "Can look", auditor: "Auditor" };
 
 export async function generateMetadata(): Promise<Metadata> {
   const practice = await getPractice();
@@ -33,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   const toReview = Number(reviews[0]?.count ?? 0);
   const running = membership.practice ? await getRunningTimer(user.name) : null;
-  const role = membership.practice ? membership.role ?? "Practice" : membership.companies[0] ? `${COMPANY_ROLE[membership.companies[0].role] ?? "Team"}, ${membership.companies[0].name.replace(/ (Ltd|Limited)$/, "")}` : "";
+  const role = membership.practice ? membership.role ?? "Practice" : membership.companies[0] ? companyRoleLabel(membership.companies[0].role, membership.companies[0].name) : "";
   // The practice's colour at the root, where the whole brand ramp is mixed from it. The database only holds #rrggbb.
   const brand = /^#[0-9a-fA-F]{6}$/.test(practice.brand_color) ? practice.brand_color : "#0d6e6e";
   return <>

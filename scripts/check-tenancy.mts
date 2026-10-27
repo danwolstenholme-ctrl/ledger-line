@@ -141,6 +141,13 @@ expect("Nor in Maria's name", await count(nikos, "insert into calendar_feeds (us
 expect("Nikos sees his own link, not Maria's", await count(nikos, "select count(*) as n from calendar_feeds"), is(1));
 expect("Nobody signed in sees no calendar link", await count(null, "select count(*) as n from calendar_feeds"), is(0));
 
+// A company's first steps, put away: each person's own, at a company they can see.
+const dismissMine = "insert into user_dismissals (user_id, organisation_id, what) values (app_user_id(), $1, 'getting_started') returning user_id";
+expect("Nikos puts Pixelforge's first steps away", await count(nikos, dismissMine, [pixelforge]), is(1));
+expect("But not Aegean Blue's, which he can't see", await count(nikos, dismissMine, [aegean]), refused);
+expect("Nor for Maria", await count(nikos, "insert into user_dismissals (user_id, organisation_id, what) values ($1, $2, 'getting_started') returning user_id", [mariaId, pixelforge]), refused);
+expect("Maria doesn't see what Nikos put away", await count(maria, "select count(*) as n from user_dismissals"), is(0));
+
 // Payroll: the people a company employs and what they are paid, for that company's books and nobody else's.
 expect("Maria sees Aegean Blue's 4 employees", await count(maria, "select count(*) as n from employees where organisation_id = $1", [aegean]), is(4));
 expect("Eva sees no employee of Saltlake's clients", await count(eva, "select count(*) as n from employees"), is(0));

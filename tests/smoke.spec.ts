@@ -1105,3 +1105,63 @@ test("a practice brings its client list over from a spreadsheet: each company's 
   await expect(menu.getByRole("link", { name: "Treatment plans" })).toBeVisible();
 });
 
+
+test("brought-over clients' owners are invited in one go: one link for someone who runs two companies, who joins both and starts from the steps", async ({ page, browser }) => {
+  const csv = [
+    "Company name,Country,Registration number,What it does,Contact,Email",
+    "Larnaca Bay Holdings Ltd,Cyprus,HE 455401,Holding company,Eleni Charalambous,eleni@larnacabay.example",
+    "Larnaca Bay Trading Ltd,Cyprus,HE 455402,Wholesale of building materials,Eleni Charalambous,Eleni@LarnacaBay.example",
+    "Larnaca Bay Marina Cafe Ltd,Cyprus,HE 455403,Cafe,Petros Ioannou,",
+  ].join("\n");
+  await page.goto("/clients/import");
+  await page.getByLabel("Client list file").setInputFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page.getByRole("button", { name: "Bring over 3 clients" }).click();
+  await page.getByRole("link", { name: "Next: invite their owners" }).click({ timeout: 60_000 });
+  await expect(page).toHaveURL(/\/clients\/owners\?view=todo$/);
+  await expect(page.getByRole("checkbox", { name: "Invite Christos Panayiotou of Aegean Blue Marine Services Ltd" })).toBeChecked();
+  // Just these three (a practice with more than twenty clients finds them with the search).
+  await page.goto("/clients/owners?view=todo&q=Larnaca%20Bay");
+  await expect(page.getByRole("row", { name: /Larnaca Bay Marina Cafe Ltd/ })).toContainText("No email: add one to the client file");
+  await expect(page.getByRole("checkbox", { name: "Invite Eleni Charalambous of Larnaca Bay Holdings Ltd" })).toBeChecked();
+  await page.getByRole("button", { name: "Invite 2 owners" }).click();
+  const made = page.getByRole("status").filter({ hasText: "invited, for" });
+  await expect(made).toContainText("1 person invited, for 2 companies.");
+  await expect(made).toContainText("Larnaca Bay Holdings Ltd and Larnaca Bay Trading Ltd");
+  const merge = await made.getByRole("link", { name: "Download for a mail merge" }).getAttribute("href");
+  const file = decodeURIComponent(merge!.slice(merge!.indexOf(",") + 1));
+  expect(file).toContain("\"First name\",\"Name\",\"Email\",\"Companies\",\"Link\"");
+  expect(file).toContain("\"Eleni\",\"Eleni Charalambous\",\"eleni@larnacabay.example\",\"Larnaca Bay Holdings Ltd and Larnaca Bay Trading Ltd\"");
+  const link = file.match(/https?:\/\/[^"]+\/join\/[A-Za-z0-9_-]{32}/)![0];
+  expect(await made.getByRole("link", { name: "Email Eleni Charalambous their link" }).getAttribute("href")).toContain(encodeURIComponent(link));
+
+  // The practice sees it on the company's own home, as the first of its steps.
+  await page.goto("/c/larnaca-bay-holdings");
+  const steps = page.getByRole("region", { name: "Getting started" });
+  await expect(steps).toContainText("Invite Eleni Charalambous to the books");
+  await expect(steps).toContainText(/A link went on .*: not joined yet/);
+
+  const fresh = await browser.newContext();
+  const owner = await fresh.newPage();
+  await owner.goto(link);
+  await expect(owner.getByRole("heading", { name: /^Join Larnaca Bay Holdings Ltd’s books and 1 more, kept by / })).toBeVisible();
+  await expect(owner.getByRole("listitem").filter({ hasText: "Larnaca Bay Trading Ltd" })).toContainText("as the owner");
+  await owner.getByRole("button", { name: "Join as Eleni Charalambous" }).click();
+  await expect(owner).toHaveURL(/\/c\/larnaca-bay-holdings\?joined=1$/);
+  await expect(owner.getByText("Welcome to Ledgerline, Eleni.")).toBeVisible();
+  const hers = owner.getByRole("region", { name: "Getting started" });
+  await expect(hers).toContainText("0 of 5 done");
+  await expect(hers.getByRole("link", { name: /Upload the logo/ })).toBeVisible();
+  await expect(hers).not.toContainText("Invite");
+  await hers.getByRole("button", { name: "Hide" }).click();
+  await expect(owner.getByRole("region", { name: "Getting started" })).toHaveCount(0);
+  // The same link joined her to the other company too, and to nothing else.
+  expect((await owner.goto("/c/larnaca-bay-trading"))?.status()).toBe(200);
+  await expect(owner.getByRole("region", { name: "Getting started" })).toBeVisible();
+  await expect(owner.getByRole("button", { name: /Eleni Charalambous: account/ })).toContainText("Owner, Larnaca Bay Trading");
+  expect((await owner.goto("/c/larnaca-bay-marina-cafe"))?.status()).toBe(404);
+  await fresh.close();
+
+  await page.goto("/clients/owners?view=joined&q=Larnaca%20Bay");
+  await expect(page.getByRole("row", { name: /Larnaca Bay Trading Ltd/ })).toContainText("On Ledgerline");
+  await expect(page.getByRole("row", { name: /Larnaca Bay Holdings Ltd/ })).toContainText("Eleni Charalambous · since");
+});

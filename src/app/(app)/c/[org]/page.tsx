@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "@/components/navigation/navigation-link";
 import { AlertTriangle, ArrowDownLeft, ArrowRight, ArrowUpRight, BadgeCheck, CalendarClock, CheckCircle2, FilePen, FileText, Inbox, Landmark, Percent, Receipt, Repeat, ScanText, type LucideIcon } from "lucide-react";
 
-import { getCompanyHome } from "@/lib/data/home";
+import { getCompanyHome, getGettingStarted } from "@/lib/data/home";
 import { getDeadlines } from "@/lib/data/deadlines";
-import { getMembership } from "@/lib/org";
+import { getCurrentUser, getMembership, getPractice } from "@/lib/org";
 import { quarterLabel } from "@/lib/domain/vat";
-import { formatAgo, formatAmount, formatDate } from "@/lib/format";
+import { firstName, formatAgo, formatAmount, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody, Panel, PanelHeader } from "@/components/common/primitives";
 import { AddTodo, TaskCheck } from "@/components/crm/forms";
@@ -15,6 +15,7 @@ import { uses } from "@/lib/domain/business-types";
 import { dueTone } from "@/components/crm/badges";
 import { StatTile } from "@/components/reports/report-charts";
 import { RecordHeader } from "@/components/records/record-layout";
+import { GettingStartedSteps } from "@/components/home/getting-started";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -30,7 +31,8 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
   const [home, query, membership] = await Promise.all([getCompanyHome(), searchParams, getMembership()]);
   const deadlines = (await getDeadlines({ client: home.org.slug })).rows.filter(row => row.kind !== "vat_return" && (row.state === "overdue" || (row.state === "due" && row.daysLeft <= 14)));
   const { org, today, cash, receivables, payables, vat } = home;
-  const workspace = await getWorkspace(org.id);
+  const [workspace, start] = await Promise.all([getWorkspace(org.id), getGettingStarted(org)]);
+  const welcome = query.joined && !membership.practice ? await Promise.all([getCurrentUser(), getPractice()]) : null;
   const capture = `/c/${org.slug}/capture`;
   const actions: Action[] = [
     { href: "/invoices/new", label: "Raise an invoice", hint: "Bill a customer, get the PDF", icon: FileText },
@@ -75,10 +77,17 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
   return <PageBody width="6xl" className="space-y-5">
     <RecordHeader title={org.name} description={`${org.industry}${org.vat_registered ? ` · VAT ${org.vat_number}` : " · not registered for VAT"}`} />
 
+    {welcome ? <p role="status" className="border-positive-line bg-positive-soft flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2.5 text-[12.5px]">
+      <CheckCircle2 className="text-positive size-4 shrink-0" /><span className="text-positive font-medium">Welcome to Ledgerline, {firstName(welcome[0].name)}.</span>
+      <span className="text-ink-muted">{welcome[1].name} keeps {org.name}’s books, and you see them here as they stand.{start ? " The steps below get you going." : ""}</span>
+    </p> : null}
+
     {query.opened ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2.5 text-[12.5px]">
       <CheckCircle2 className="size-4 shrink-0" /><span className="font-medium">{org.name} is taken on, and its books are open{org.books_from ? ` from ${formatDate(String(org.books_from).slice(0, 10))}` : ""}.</span>
       <span className="text-ink-muted">Its deadlines and fee are set. Next: <Link href={`/c/${org.slug}/journals/new`} className="text-brand font-medium hover:underline">bring in the opening balances</Link>, or <Link href={`/c/${org.slug}/bank`} className="text-brand font-medium hover:underline">import the first bank statement</Link>.</span>
     </p> : null}
+
+    {start ? <GettingStartedSteps start={start} org={org} practice={Boolean(membership.practice)} customers={workspace.labels.customer[1]} /> : null}
 
     <nav aria-label="Everyday actions" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
       {actions.map((action, index) => <Link key={action.label} href={action.href}

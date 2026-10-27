@@ -13,10 +13,16 @@ import { getMembership, getOrgBySlug } from "@/lib/org";
  * it is opened (/api/shell/companies), so no page carries every client.
  */
 
+const COMPANY_ROLE: Record<string, string> = { owner: "Owner", staff: "Team", viewer: "Can look", auditor: "Auditor" };
+/** What someone at a client company is there, for the account menu: "Owner, Larnaca Bay Trading". */
+export const companyRoleLabel = (role: string, company: string) => `${COMPANY_ROLE[role] ?? "Team"}, ${company.replace(/ (Ltd|Limited)$/, "")}`;
+
 export type ShellCompany = {
   slug: string; name: string; industry: string; practice: boolean; country: string; toReview: number;
   /** The person may see its payroll: the practice, and the company's owner and auditor. */
   payroll: boolean;
+  /** What the person is at this company, when they are one of its own people rather than the practice's. */
+  role: string | null;
   nav: { customers: string; deals: string; jobs: string; modules: string[] };
 };
 
@@ -28,9 +34,11 @@ export const getShellCompany = cache(async (slug: string): Promise<ShellCompany 
     one<{ count: number }>("select count(*) as count from capture_items where organisation_id = $1 and status = 'review'", [org.id]),
     getMembership(),
   ]);
+  const mine = membership.practice ? null : membership.companies.find(company => company.slug === slug);
   return {
     slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, country: org.country, toReview: Number(review?.count ?? 0),
     payroll: membership.practice || membership.companies.some(company => company.slug === slug && (company.role === "owner" || company.role === "auditor")),
+    role: mine ? companyRoleLabel(mine.role, org.name) : null,
     nav: settings ? { customers: settings.customer_many, deals: settings.deal_many, jobs: settings.job_many, modules: settings.modules } : { customers: "Customers", deals: "Enquiries", jobs: "Jobs", modules: [...MODULES] },
   };
 });

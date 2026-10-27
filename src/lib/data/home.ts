@@ -65,3 +65,32 @@ export async function getCompanyHome() {
     tasks: work.tasks,
   };
 }
+
+/** How long a company counts as new to Ledgerline: its first steps show on its home until then. */
+const NEW_FOR_DAYS = 90;
+
+export type GettingStarted = {
+  logo: boolean; customers: boolean; invoiced: boolean; receipts: boolean; bank: boolean;
+  /** Whether the company's owner has joined, and when a link to them was sent if not. */
+  owner: boolean; invitedAt: string | null;
+};
+
+/**
+ * A company's first steps in Ledgerline, each done when its books show it:
+ * nobody ticks a box. Asked only while the company is new here, and for
+ * someone who hasn't put the steps away.
+ */
+export async function getGettingStarted(org: { id: string; is_practice: boolean; created_at: string }): Promise<GettingStarted | null> {
+  if (org.is_practice || Date.parse(org.created_at) < Date.now() - NEW_FOR_DAYS * 86_400_000) return null;
+  const row = await one<{ hidden: boolean; logo: boolean; customers: boolean; invoiced: boolean; receipts: boolean; bank: boolean; owner: boolean; invited_at: string | null }>(`select
+      exists (select 1 from user_dismissals where user_id = app_user_id() and organisation_id = $1 and what = 'getting_started') as hidden,
+      exists (select 1 from organisation_logos where organisation_id = $1) as logo,
+      exists (select 1 from customers where organisation_id = $1) as customers,
+      exists (select 1 from invoices where organisation_id = $1 and status not in ('draft', 'void')) as invoiced,
+      exists (select 1 from capture_items where organisation_id = $1) or exists (select 1 from bills where organisation_id = $1) as receipts,
+      exists (select 1 from bank_statement_imports where organisation_id = $1) or exists (select 1 from bank_transactions where organisation_id = $1) as bank,
+      exists (select 1 from company_members where organisation_id = $1 and role = 'owner') as owner,
+      (select max(created_at) from invitations where organisation_id = $1 and role = 'owner' and accepted_at is null and revoked_at is null and expires_at > now()) as invited_at`, [org.id]);
+  if (!row || row.hidden) return null;
+  return { logo: row.logo, customers: row.customers, invoiced: row.invoiced, receipts: row.receipts, bank: row.bank, owner: row.owner, invitedAt: row.invited_at };
+}

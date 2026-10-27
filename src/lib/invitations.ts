@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
 
-import { asService, one, transaction } from "@/lib/db";
+import { asService, one, sql, transaction } from "@/lib/db";
 
 /**
  * Invitations: a link that lets one person join the practice, or a client
@@ -22,12 +22,23 @@ export type InvitationView = {
   practice_name: string; company_name: string | null; company_slug: string | null; invited_by_name: string | null;
   /** Someone with this email already uses Ledgerline (and has signed in before). */
   has_account: boolean;
+  /** The practice's other open invitations to this address, each to a company of its own: joining from this link joins those too. */
+  others: { id: string; company_name: string; role: string }[];
   state: "open" | "expired" | "accepted" | "revoked";
 };
 
+/**
+ * A practice's other open company invitations to the same address. One person
+ * often runs several of its clients (a holding company and the companies under
+ * it); the link that reached their address proves it for all of them.
+ */
+const OTHERS = `from invitations i join organisations o on o.id = i.organisation_id
+  where i.practice_id = $1 and i.email = $2 and i.id <> $3 and i.organisation_id is not null
+    and i.accepted_at is null and i.revoked_at is null and i.expires_at > now()`;
+
 export async function findInvitation(token: string): Promise<InvitationView | null> {
   if (!TOKEN.test(token)) return null;
-  const row = await asService("opening an invitation link", () => one<Omit<InvitationView, "state">>(`
+  const row = await asService("opening an invitation link", () => one<Omit<InvitationView, "state" | "others">>(`
     select i.id, i.practice_id, i.organisation_id, i.email, i.name, i.role, i.mlco, i.expires_at, i.accepted_at, i.revoked_at,
            p.name as practice_name, o.name as company_name, o.slug as company_slug, inviter.name as invited_by_name,
            exists (select 1 from app_users u where u.email = i.email and u.auth_id is not null) as has_account
@@ -35,7 +46,9 @@ export async function findInvitation(token: string): Promise<InvitationView | nu
      where i.token_hash = $1`, [tokenHash(token)]));
   if (!row) return null;
   const state = row.accepted_at ? "accepted" : row.revoked_at ? "revoked" : Date.parse(row.expires_at) < Date.now() ? "expired" : "open";
-  return { ...row, state };
+  const others = state === "open" && row.organisation_id
+    ? await asService("opening an invitation link", () => sql<{ id: string; company_name: string; role: string }>(`select i.id, o.name as company_name, i.role ${OTHERS} order by o.name`, [row.practice_id, row.email, row.id])) : [];
+  return { ...row, others, state };
 }
 
 /** Make the person a member, as the invitation says, and close it. */
@@ -54,8 +67,14 @@ export async function grantInvitation(invitation: InvitationView, userId: string
         if (!linked.length) await run(`insert into practice_staff (practice_id, name, role, mlco, user_id) values ($1, $2, $3, $4, $5)
           on conflict (practice_id, user_id) do update set role = excluded.role, mlco = excluded.mlco`, [invitation.practice_id, invitation.name, invitation.role, invitation.mlco, userId]);
       }
+      // The practice's other companies invited at the same address, each in the role it was offered.
+      const others = invitation.organisation_id
+        ? await run<{ id: string; organisation_id: string; role: string }>(`select i.id, i.organisation_id, i.role ${OTHERS} for update of i`,
+          [invitation.practice_id, invitation.email, invitation.id]) : [];
+      for (const other of others) await run(`insert into company_members (organisation_id, user_id, role) values ($1, $2, $3)
+        on conflict (organisation_id, user_id) do update set role = excluded.role`, [other.organisation_id, userId, other.role]);
       // On the trail as the person joining.
       await run("select set_config('ledgerline.actor', (select name from app_users where id = $1), true)", [userId]);
-      await run("update invitations set accepted_at = now(), accepted_by = $2 where id = $1", [invitation.id, userId]);
+      await run("update invitations set accepted_at = now(), accepted_by = $2 where id = any($1::uuid[])", [[invitation.id, ...others.map(other => other.id)], userId]);
     }));
 }

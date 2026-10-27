@@ -439,6 +439,8 @@ export async function seedDemo(pg: PGlite, options: { companies?: number } = {})
       default_bank_account_id: bankId, contact_name: profile.contact, contact_email: profile.email, address: profile.address,
       invoice_prefix: profile.prefix, payment_terms_days: base(profile.slug) === "larnaka-roast" ? 14 : 30,
       manager: MANAGERS[profile.slug] ?? (TEMPLATE.has(profile.slug) ? STAFF[ALL_PROFILES.indexOf(profile) % STAFF.length].name : "Maria Antoniou"),
+      // On Ledgerline since its books were opened, the day its client file says.
+      created_at: "2025-06-30T11:20:00.000Z",
     });
     const acc = (code: string) => { const id = accounts.get(code); if (!id) throw new Error(`${profile.slug}: no account ${code}`); return id; };
     const movements: Movement[] = [];

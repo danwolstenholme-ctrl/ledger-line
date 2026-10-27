@@ -8,12 +8,13 @@ import { AUTH_MODE, DEMO_COOKIE } from "@/lib/auth/config";
 import { DEMO_COOKIE_OPTIONS, demoCookieFor } from "@/lib/auth/demo-cookie";
 import { passwordProblem } from "@/lib/auth/password";
 import { supabaseAdmin, supabaseServer } from "@/lib/auth/supabase";
-import { asDbError, asService, one, sql } from "@/lib/db";
+import { asDbError, asService, one, sql, transaction } from "@/lib/db";
 import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
-import type { InviteState } from "@/lib/actions/state";
+import type { InviteState, OwnerInvitesState } from "@/lib/actions/state";
+import { OWNER_CONTACT, OWNER_CONTACT_COLUMNS } from "@/lib/data/people";
 import { findInvitation, grantInvitation, newInvitationToken, tokenHash } from "@/lib/invitations";
 import { siteOrigin } from "@/lib/site";
-import { getCurrentUser, getMembership, getPractice } from "@/lib/org";
+import { getCurrentUser, getMembership, getPractice, requirePracticeMember } from "@/lib/org";
 
 /**
  * The people who use Ledgerline: inviting them, withdrawing an invitation,
@@ -25,6 +26,7 @@ import { getCurrentUser, getMembership, getPractice } from "@/lib/org";
 const PRACTICE_ROLES = ["Partner", "Manager", "Accountant", "Assistant"] as const;
 const COMPANY_ROLES = ["owner", "staff", "viewer", "auditor"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 
 export async function invitePerson(_previous: InviteState, form: FormData): Promise<InviteState> {
@@ -58,6 +60,66 @@ export async function invitePerson(_previous: InviteState, form: FormData): Prom
   }
   revalidatePath("/", "layout");
   return { ok: true, error: null, link: `${await siteOrigin()}/join/${token}`, email, name, scope: company?.name ?? practice.name };
+}
+
+/**
+ * The owners of many client companies invited in one go, each at the contact
+ * on its client file. Each person gets one link: someone who runs several of
+ * the companies joins them all from it. A new link replaces any sent before.
+ */
+export async function inviteOwners(_previous: OwnerInvitesState, form: FormData): Promise<OwnerInvitesState> {
+  await requirePracticeMember();
+  const ids = [...new Set(form.getAll("organisation_id").map(String))].filter(id => UUID.test(id));
+  if (!ids.length) return { ok: false, error: "Choose the companies whose owners to invite." };
+  if (ids.length > 500) return { ok: false, error: "Invite up to 500 owners at a time." };
+  const [user, practice] = await Promise.all([getCurrentUser(), getPractice()]);
+  const rows = await sql<{ id: string; name: string; contact_name: string | null; contact_email: string | null; joined: boolean; has_access: boolean }>(`
+    select o.id, o.name, ${OWNER_CONTACT_COLUMNS},
+      exists (select 1 from company_members m where m.organisation_id = o.id and m.role = 'owner') as joined,
+      exists (select 1 from company_members m join app_users u on u.id = m.user_id where m.organisation_id = o.id
+        and u.email = lower(coalesce(nullif(btrim(f.contact_email), ''), nullif(btrim(o.contact_email), '')))) as has_access
+    from organisations o ${OWNER_CONTACT}
+    where o.id = any($1::uuid[]) and o.practice_id = $2 and not o.is_practice order by o.name`, [ids, practice.id]);
+  const skipped: { company: string; why: string }[] = [];
+  const people = new Map<string, { name: string; companies: { id: string; name: string; contact: string }[] }>();
+  for (const row of rows) {
+    if (row.joined) skipped.push({ company: row.name, why: "Its owner is on Ledgerline already" });
+    else if (!row.contact_email || !EMAIL.test(row.contact_email)) skipped.push({ company: row.name, why: "No email for its contact: add one to its client file" });
+    else if (row.has_access) skipped.push({ company: row.name, why: `${row.contact_email} uses its books already` });
+    else {
+      // An invitation names who it is for: the contact, or failing that their address's name.
+      const contact = [row.contact_name, row.contact_email.split("@")[0]].find(name => (name ?? "").trim().length >= 2)?.trim() ?? "Owner";
+      const person = people.get(row.contact_email) ?? { name: contact, companies: [] };
+      person.companies.push({ id: row.id, name: row.name, contact });
+      people.set(row.contact_email, person);
+    }
+  }
+  if (!people.size) return { ok: false, error: "None of those can be invited.", skipped };
+  const origin = await siteOrigin();
+  const sent: NonNullable<OwnerInvitesState["sent"]> = [];
+  let expires: string | undefined;
+  try {
+    await transaction(async run => {
+      for (const [email, person] of people) {
+        const companies = person.companies.map(company => company.id);
+        // A link sent before stops working: only the newest one reaches them.
+        await run("update invitations set revoked_at = now() where organisation_id = any($1::uuid[]) and email = $2 and accepted_at is null and revoked_at is null", [companies, email]);
+        const tokens = person.companies.map(() => newInvitationToken());
+        const made = await run<{ expires_at: string }>(`insert into invitations (practice_id, organisation_id, email, name, role, token_hash, invited_by)
+            select $1, company, $2, contact, 'owner', hash, $3 from unnest($4::uuid[], $5::text[], $6::text[]) as t (company, contact, hash) returning expires_at`,
+          [practice.id, email, user.id, companies, person.companies.map(company => company.contact), tokens.map(tokenHash)]);
+        expires ??= made[0]?.expires_at;
+        // Any one of the links joins all of them; the first is the one sent.
+        sent.push({ name: person.name, email, companies: person.companies.map(company => company.name), link: `${origin}/join/${tokens[0]}` });
+      }
+    });
+  } catch (error) {
+    const failure = asDbError(error);
+    console.error("[owner invitations] failed", failure.code);
+    return { ok: false, error: describeDbError(failure, "The invitations could not be made. Nothing was sent."), skipped };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, error: null, sent, skipped, expires };
 }
 
 export async function revokeInvitation(form: FormData) {

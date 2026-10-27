@@ -2438,6 +2438,15 @@ create table invitations (
 create unique index invitations_open on invitations (practice_id, coalesce(organisation_id, '00000000-0000-0000-0000-000000000000'::uuid), email)
   where accepted_at is null and revoked_at is null;
 
+-- What one person has put away for themselves at a company: its getting-started steps, once they no longer need them.
+create table user_dismissals (
+  user_id         uuid not null references app_users (id) on delete cascade,
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  what            text not null check (what in ('getting_started')),
+  dismissed_at    timestamptz not null default now(),
+  primary key (user_id, organisation_id, what)
+);
+
 -- What a client company pays the practice: a monthly fee, and a rate for extra work billed on top of it.
 -- customer_id is that client as a customer in the practice's own books.
 create table client_fees (
@@ -3151,6 +3160,7 @@ alter table employees enable row level security;
 alter table payroll_runs enable row level security;
 alter table payslips enable row level security;
 alter table invitations enable row level security;
+alter table user_dismissals enable row level security;
 alter table invoice_lines enable row level security;
 alter table invoice_payments enable row level security;
 alter table invoices enable row level security;
@@ -3389,6 +3399,9 @@ create policy invitations_access on invitations for all to authenticated
   using (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]))
   with check (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]));
 create policy app_users_update on app_users for update to authenticated using (id = app_user_id()) with check (id = app_user_id());
+-- What someone has put away is theirs alone, at a company they can see.
+create policy user_dismissals_own on user_dismissals for all to authenticated
+  using (user_id = app_user_id()) with check (user_id = app_user_id() and organisation_id = any ((select visible_companies())::uuid[]));
 
 -- Client files, and everything in them: the practice's people only. A client never sees its own AML file.
 create policy client_files_access on client_files for all to authenticated using (practice_id = any ((select my_practices())::uuid[])) with check (practice_id = any ((select my_practices())::uuid[]));

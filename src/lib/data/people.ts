@@ -29,3 +29,34 @@ export async function getCompanyPeople(organisationId: string) {
   ]);
   return { members, invitations };
 }
+
+/**
+ * The person to invite as a client company's owner: the contact on its client
+ * file, or the company's own when the file has none.
+ */
+export const OWNER_CONTACT = `left join lateral (select id, contact_name, contact_email, imported_at from client_files
+    where organisation_id = o.id and status = 'active' order by opened_at desc nulls last limit 1) f on true`;
+export const OWNER_CONTACT_COLUMNS = `coalesce(nullif(btrim(f.contact_name), ''), nullif(btrim(o.contact_name), '')) as contact_name,
+  lower(coalesce(nullif(btrim(f.contact_email), ''), nullif(btrim(o.contact_email), ''))) as contact_email`;
+
+export type OwnerRow = {
+  id: string; slug: string; name: string; he_number: string | null; vat_number: string | null; manager: string | null;
+  contact_name: string | null; contact_email: string | null; file_id: string | null; imported: boolean;
+  /** The owner who has joined, and since when. */
+  owner_name: string | null; joined_at: string | null;
+  /** The latest invitation waiting, open or expired. */
+  invited_at: string | null; expires_at: string | null; expired: boolean;
+};
+
+/** Every client company's owner on Ledgerline: joined, invited and waiting, or still to invite. */
+export async function getOwners(practiceId: string) {
+  return sql<OwnerRow>(`select o.id, o.slug, o.name, o.he_number, o.vat_number, o.manager, ${OWNER_CONTACT_COLUMNS},
+      f.id as file_id, f.imported_at is not null as imported, m.name as owner_name, m.created_at as joined_at,
+      i.created_at as invited_at, i.expires_at, coalesce(i.expires_at < now(), false) as expired
+    from organisations o ${OWNER_CONTACT}
+    left join lateral (select u.name, cm.created_at from company_members cm join app_users u on u.id = cm.user_id
+      where cm.organisation_id = o.id and cm.role = 'owner' order by cm.created_at limit 1) m on true
+    left join lateral (select created_at, expires_at from invitations
+      where organisation_id = o.id and role = 'owner' and accepted_at is null and revoked_at is null order by created_at desc limit 1) i on true
+    where o.practice_id = $1 and not o.is_practice order by o.name`, [practiceId]);
+}

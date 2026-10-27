@@ -354,7 +354,7 @@ function WorkspaceShell({ practice, initialCompany, companyCount, user, member, 
           <Bell className="size-4" />{toReview ? <span className="bg-critical absolute top-1.5 right-1.5 size-1.5 rounded-full" /> : null}
         </Link>
         <span className="bg-hairline mx-0.5 hidden h-6 w-px sm:block" />
-        <UserMenu user={user} />
+        <UserMenu user={client?.role ? { ...user, role: client.role } : user} />
       </header>
       <main className="min-w-0 flex-1"><NavigationContent scope="page" label="Loading…" variant="page">{children}</NavigationContent></main>
     </div>

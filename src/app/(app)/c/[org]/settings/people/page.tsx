@@ -39,7 +39,9 @@ export default async function CompanyPeoplePage() {
       </li>)}</ul>
     </RecordSection> : null}
     {manage ? <RecordSection title={`Invite someone from ${org.name}`} hint="They make their account from the link">
-      <div className="p-4"><InviteForm organisationId={org.id} roles={ROLES} from={`${user.name}\n${membership.practice ? practice.name : org.name}`} /></div>
+      <div className="p-4"><InviteForm organisationId={org.id} roles={ROLES} from={`${user.name}\n${membership.practice ? practice.name : org.name}`}
+        defaults={membership.practice && !members.some(member => member.role === "owner") && !invitations.some(invitation => invitation.role === "owner" && !invitation.expired)
+          ? { name: org.contact_name, email: org.contact_email } : undefined} /></div>
     </RecordSection> : null}
   </PageBody>;
 }

@@ -59,9 +59,9 @@ to reconcile.
   quote), three figures (in the bank, customers owe you, you owe suppliers),
   one list of what needs attention, and the to-dos. The menu runs the way the
   owner works: **CRM** (enquiries, customers, quotes, invoices, products,
-  matters, tasks, calendar), then **Money** (bank, receipts, bills,
-  suppliers), then **Reports & tax**; the accountant's pages are under
-  **More**.
+  jobs, tasks, calendar, each named the company's way), then **Money**
+  (bank, receipts, bills, suppliers), then **Reports & tax**; the
+  accountant's pages are under **More**.
 
 ### 1c. Everyday work, 6 minutes
 - **Raise an invoice**: choose a customer (or **+ New customer…** and type a
@@ -256,6 +256,23 @@ to reconcile.
   overdue. Each client file says it was brought over: the engagement letter
   and due diligence are recorded as they come up for review. 300 clients
   import in about 7 seconds.
+- **Next: invite their owners** (`/clients/owners`, also **Owners on
+  Ledgerline** on Client files): every client's owner, at the contact on its
+  file, as joined, invited or still to invite. Tick them (all are ticked) and
+  **Invite**: Ledgerline makes the links and sends nothing itself. The
+  practice sends them from its own email: **Open in email** for each person,
+  or **Download for a mail merge**, a CSV with each person's message ready
+  for Outlook, Word or Gmail. Someone who runs several of the clients (a
+  holding company and its trading company) gets one link that joins them to
+  all of them. A new link replaces the one sent before; 100 invitations take
+  under half a second.
+- The owner opens the link, makes their account, and lands on their
+  company's Home with a welcome and **Getting started**: their logo on the
+  invoices, their customers (patients at a clinic), the first invoice, a
+  receipt, the bank statement. Each step ticks itself off when the books show
+  it, and **Hide** puts the list away for that person. The practice sees the
+  same steps on a new client's Home, with inviting the owner first; they show
+  for a company's first 90 days.
 
 ### 1j. VAT numbers (`/vat-numbers`), 2 minutes
 - A sale to a business in another EU state is zero-rated only if the
@@ -555,7 +572,10 @@ enforces those rules too: what it shows Maria is what the database lets her see.
   (Practice settings → People); anyone at the practice, or a company's
   owner, invites a client company's own people (Company settings → People).
   The invitation's link (valid 14 days, kept only as a fingerprint) is where
-  they make their account; it is proof the address is theirs.
+  they make their account; it is proof the address is theirs, so it also
+  joins them to any other client company the practice has invited that
+  address to. Many owners are invited at once from **Owners on Ledgerline**
+  (`/clients/owners`); Ledgerline sends no email itself.
 - The laptop demo has no passwords: `/sign-in` lists its people. Sign in as
   Nikos Savva to see Ledgerline as a client's owner does.
 - `tests/supabase-auth.spec.ts` drives the Supabase path through

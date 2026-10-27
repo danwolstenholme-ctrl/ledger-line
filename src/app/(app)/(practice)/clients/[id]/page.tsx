@@ -9,7 +9,7 @@ import { getClientFile } from "@/lib/data/clients";
 import { personCountry } from "@/lib/domain/countries";
 import { FOR_THE_BOOKS, PEP, RISK_AREA_KEYS, RISK_AREAS, RISK_LEVELS, ROLES, SERVICES, inSentence, needsIdentity, type Person } from "@/lib/domain/onboarding";
 import type { BirthComparison, SanctionsMatch } from "@/lib/domain/sanctions";
-import { formatAmount, formatDate, formatDateTime } from "@/lib/format";
+import { firstName, formatAmount, formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { InlineSubmit } from "@/components/common/form-fields";
@@ -54,9 +54,9 @@ export default async function ClientFilePage({ params }: { params: Promise<{ id:
   const { file, people, documents, current, approved, steps, letter } = data;
   const host = (await headers()).get("host") ?? "localhost:3000";
   const link = file.client_token ? `${host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https"}://${host}/o/${file.client_token}` : null;
-  const firstName = file.contact_name?.split(" ")[0] ?? "";
+  const greet = firstName(file.contact_name);
   const practiceName = letter.draft.from.name;
-  const emailBody = link ? `Dear ${firstName || "Sir or Madam"},\n\nThank you for choosing ${practiceName}. Your engagement letter is ready to read and sign, and on the same page you can send us the documents we need to set ${file.company_name} up:\n\n${link}\n\nNo account or password is needed. Please keep the link to yourself.\n\nKind regards,\n${data.user.name}\n${practiceName}` : "";
+  const emailBody = link ? `Dear ${greet || "Sir or Madam"},\n\nThank you for choosing ${practiceName}. Your engagement letter is ready to read and sign, and on the same page you can send us the documents we need to set ${file.company_name} up:\n\n${link}\n\nNo account or password is needed. Please keep the link to yourself.\n\nKind regards,\n${data.user.name}\n${practiceName}` : "";
   const nextStep = steps.find(step => !step.done);
   const closed = file.status === "declined";
   const required = documents.filter(document => !FOR_THE_BOOKS.includes(document.kind));
@@ -64,7 +64,7 @@ export default async function ClientFilePage({ params }: { params: Promise<{ id:
   const subjects = [{ id: null as string | null, name: file.company_name, kind: "Company" }, ...people.map(person => ({ id: person.id as string | null, name: person.name, kind: person.roles.map(role => ROLES[role]).join(", ") }))];
   const approver = current && !current.approved_at ? data.approverForMe(current.level) : null;
   const outstanding = documents.filter(document => !document.received_at);
-  const reminderBody = link ? `Dear ${firstName || "Sir or Madam"},\n\nThank you for signing the engagement letter. To finish setting ${file.company_name} up, we still need:\n\n${outstanding.map(document => `• ${document.label}`).join("\n")}\n\nYou can upload them on the same page as before, no account needed:\n\n${link}\n\nKind regards,\n${data.user.name}\n${practiceName}` : "";
+  const reminderBody = link ? `Dear ${greet || "Sir or Madam"},\n\nThank you for signing the engagement letter. To finish setting ${file.company_name} up, we still need:\n\n${outstanding.map(document => `• ${document.label}`).join("\n")}\n\nYou can upload them on the same page as before, no account needed:\n\n${link}\n\nKind regards,\n${data.user.name}\n${practiceName}` : "";
   const totalShares = people.reduce((sum, person) => sum + (person.ownership ?? 0), 0);
 
   return <PageBody width="full" className="space-y-4">
