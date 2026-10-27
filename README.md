@@ -616,7 +616,6 @@ real project, `npm run supabase:demo-users` gives the demo's people sign-ins.
   (Stripe), suspending one, logged support access.
 - Files into Supabase Storage: documents, logos and captures are kept in
   Postgres today.
-- Next.js 16.4 or later: 16.3.3 has published security advisories.
 
 ## At a big practice's scale
 
@@ -658,6 +657,10 @@ search: 250 KB and 140 KB with 700 clients, down from 1 MB and 865 KB.
   someone presses Post, so a failed read never touches the books.
 
 ## How it is built
+- Next.js 16.4 (App Router, Turbopack) on React 19.3 with the React Compiler,
+  run by its Rust port inside Turbopack (`next.config.ts`), so components are
+  memoised without hand-written `useMemo`. TypeScript 6.0, the newest the
+  linter's TypeScript parser reads; Tailwind 4; Motion 14.
 - `src/lib/db/schema.sql`: the ledger (journal entries rebuilt by
   `ledger_replace`, `post_*` triggers for invoices, payments, bills, bill
   payments and bank transactions, lock-date checks, bank reconciliation) with
