@@ -39,7 +39,7 @@ function Row({ item, today, everyone, showDate = false }: { item: CalendarItem; 
       <Link href={item.href} className={cn("text-[12.5px] font-medium hover:underline", tone(item))}>{item.title}</Link>
       <p className="text-ink-muted text-[11.5px] leading-snug">
         {showDate ? <>{formatDate(item.date)} · </> : null}
-        {everyone ? <><Link href={`/c/${item.company.slug}`} className="text-ink hover:text-brand hover:underline">{calendarCompanyLabel(item.company.name)}</Link> · </> : null}
+        {everyone && item.company.slug ? <><Link href={`/c/${item.company.slug}`} className="text-ink hover:text-brand hover:underline">{calendarCompanyLabel(item.company.name)}</Link> · </> : null}
         {CALENDAR_KIND_LABEL[item.kind]}{item.detail ? ` · ${item.detail}` : ""}
       </p>
     </div>
@@ -49,10 +49,10 @@ function Row({ item, today, everyone, showDate = false }: { item: CalendarItem; 
 
 function Chip({ item, everyone }: { item: CalendarItem; everyone: boolean }) {
   const company = calendarCompanyLabel(item.company.name);
-  return <Link href={item.href} title={`${item.title}${everyone ? ` · ${company}` : ""}${item.detail ? ` · ${item.detail}` : ""}`}
+  return <Link href={item.href} title={`${item.title}${everyone && company ? ` · ${company}` : ""}${item.detail ? ` · ${item.detail}` : ""}`}
     className={cn("hover:bg-muted flex min-w-0 items-center gap-1.5 rounded px-1 py-[3px] text-[11.5px] leading-tight", item.kind === "deadline" && "font-medium", tone(item))}>
     <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[item.kind])} />
-    <span className="truncate">{everyone ? <span className="text-ink-muted">{company.split(" ")[0]} · </span> : null}{item.title}</span>
+    <span className="truncate">{everyone && company ? <span className="text-ink-muted">{company.split(" ")[0]} · </span> : null}{item.title}</span>
   </Link>;
 }
 
@@ -137,7 +137,7 @@ export async function CalendarView({ query, company }: { query: Record<string, s
           </p>
           <ul className="divide-hairline divide-y">{items.map(item => <li key={item.key} className="px-2.5 py-2">
             <Link href={item.href} className={cn("text-[12px] leading-snug font-medium hover:underline", tone(item))}>{item.title}</Link>
-            <p className="text-ink-muted mt-0.5 text-[11px] leading-snug">{everyone ? `${calendarCompanyLabel(item.company.name)} · ` : ""}{item.detail ?? CALENDAR_KIND_LABEL[item.kind]}</p>
+            <p className="text-ink-muted mt-0.5 text-[11px] leading-snug">{everyone && item.company.name ? `${calendarCompanyLabel(item.company.name)} · ` : ""}{item.detail ?? CALENDAR_KIND_LABEL[item.kind]}</p>
           </li>)}</ul>
         </div>;
       })}

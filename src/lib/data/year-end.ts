@@ -80,7 +80,7 @@ export async function getYearEnd(requested?: string) {
 
   // What an auditor looks at first.
   const [unmatched, vatFiled, journals, chain, totals] = await Promise.all([
-    one<{ count: number }>("select count(*) as count from v_bank_statement_lines where organisation_id = $1 and txn_date between $2 and $3 and status in ('unmatched', 'partial')", [org.id, yearStart, periodEnd]),
+    one<{ count: number }>("select count(*) as count from v_bank_lines_unmatched where organisation_id = $1 and txn_date between $2 and $3", [org.id, yearStart, periodEnd]),
     sql<{ period_to: string; filed_on: string }>("select to_char(period_to, 'YYYY-MM-DD') as period_to, to_char(filed_on, 'YYYY-MM-DD') as filed_on from vat_returns where organisation_id = $1", [org.id]),
     sql<{ id: string; entry_date: string; reference: string | null; narration: string; created_at: string; total: number }>(`
       select e.id, to_char(e.entry_date, 'YYYY-MM-DD') as entry_date, e.reference, e.narration, e.created_at, coalesce(sum(l.debit), 0) as total

@@ -22,14 +22,19 @@ type ItemRow = { id: string; file_id: string; file_name: string; media_type: str
  * client and drafted as a bill, then waits here for a person to post it.
  */
 export async function CaptureInbox({ company }: { company?: OrganisationRow }) {
-  const [items, orgs, accounts, suppliers] = await Promise.all([
+  const [items, orgs] = await Promise.all([
     sql<ItemRow>(`select i.*, f.file_name, f.media_type, o.slug as org_slug, o.name as org_name
                     from capture_items i join capture_files f on f.id = i.file_id left join organisations o on o.id = i.organisation_id
                    where i.status in ('review', 'posted') ${company ? "and i.organisation_id = $1" : ""} order by i.status = 'posted', i.created_at desc, i.position`, company ? [company.id] : []),
     sql<OrganisationRow>("select * from organisations order by name"),
-    sql<PickerAccount & { organisation_id: string }>("select id, organisation_id, code, name, type, system_role from ledger_accounts where is_active order by code"),
-    sql<{ id: string; organisation_id: string; name: string }>("select id, organisation_id, name from suppliers where is_active order by name"),
   ]);
+  // The accounts and suppliers of the clients the documents are for, and only theirs: moving a document to another client
+  // drafts it again there. Every client's would be megabytes at a few hundred clients.
+  const routed = [...new Set(items.filter(item => item.status === "review" && item.organisation_id).map(item => item.organisation_id as string))];
+  const [accounts, suppliers] = routed.length ? await Promise.all([
+    sql<PickerAccount & { organisation_id: string }>("select id, organisation_id, code, name, type, system_role from ledger_accounts where is_active and organisation_id = any($1::uuid[]) order by code", [routed]),
+    sql<{ id: string; organisation_id: string; name: string }>("select id, organisation_id, name from suppliers where is_active and organisation_id = any($1::uuid[]) order by name", [routed]),
+  ]) : [[], []];
   // Documents captured before this session carry only Claude's reading: draft them in their client's books now.
   for (const item of items) {
     const org = orgs.find(entry => entry.id === item.organisation_id);

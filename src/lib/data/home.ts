@@ -26,7 +26,7 @@ export async function getCompanyHome() {
       where organisation_id = $1 and status in ('issued', 'part_paid') and days_overdue > 0 order by days_overdue desc limit 3`, [org.id]),
     sql<{ id: string; supplier_name: string; number: string | null; balance: number; days_overdue: number; due_on: string }>(`select id, supplier_name, number, balance, days_overdue, due_on from v_bill_directory
       where organisation_id = $1 and status in ('awaiting_payment', 'part_paid') and due_on is not null and due_on <= $2 order by due_on limit 3`, [org.id, addDays(today, 7)]),
-    one<{ count: number; bank_account_id: string | null }>("select count(*) as count, min(bank_account_id::text) as bank_account_id from v_bank_statement_lines where organisation_id = $1 and status in ('unmatched', 'partial')", [org.id]),
+    one<{ count: number; bank_account_id: string | null }>("select count(*) as count, min(bank_account_id::text) as bank_account_id from v_bank_lines_unmatched where organisation_id = $1", [org.id]),
     one<{ count: number }>("select count(*) as count from capture_items where organisation_id = $1 and status = 'review'", [org.id]),
     one<{ count: number; total: number }>("select count(*) as count, coalesce(sum(total), 0) as total from quotes where organisation_id = $1 and status = 'sent'", [org.id]),
     one<{ count: number; unsent: number }>("select count(*) filter (where status = 'draft') as count, count(*) filter (where status in ('issued', 'part_paid') and sent_at is null) as unsent from invoices where organisation_id = $1", [org.id]),

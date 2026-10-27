@@ -4,7 +4,8 @@ import { sql } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
 import { nextVatReturn, vatSettingsOf } from "@/lib/domain/vat";
 import { ukVatReturn } from "@/lib/domain/vat-uk";
-import { getUkVatFigures, ukSchemeOf } from "@/lib/data/accounts";
+import { ukFiguresOf, ukSchemeOf, type UkFiguresRow } from "@/lib/data/accounts";
+import type { OrganisationRow } from "@/types/database";
 import { getOrganisations, getPractice } from "@/lib/org";
 
 /**
@@ -16,37 +17,36 @@ export async function getPracticeDashboard() {
   const [practice, allOrganisations, lines, reviews, unrouted, receivables, activity, filed] = await Promise.all([
     getPractice(),
     getOrganisations(),
-    sql<{ organisation_id: string; count: number; bank_account_id: string }>("select organisation_id, min(bank_account_id::text) as bank_account_id, count(*) as count from v_bank_statement_lines where status in ('unmatched', 'partial') group by organisation_id"),
+    sql<{ organisation_id: string; count: number; bank_account_id: string }>("select organisation_id, min(bank_account_id::text) as bank_account_id, count(*) as count from v_bank_lines_unmatched group by organisation_id"),
     sql<{ organisation_id: string; count: number }>("select organisation_id, count(*) as count from capture_items where status = 'review' and organisation_id is not null group by organisation_id"),
     sql<{ count: number }>("select count(*) as count from capture_items where status = 'review' and organisation_id is null"),
     sql<{ organisation_id: string; overdue: number; overdue_count: number; owed: number }>(`
       select organisation_id, coalesce(sum(balance) filter (where days_overdue > 0), 0) as overdue, count(*) filter (where days_overdue > 0) as overdue_count, coalesce(sum(balance), 0) as owed
         from v_invoice_directory where status in ('issued', 'part_paid') group by organisation_id`),
-    sql<{ organisation_id: string; at: string }>(`
-      select organisation_id, max(at) as at from (
-        select organisation_id, created_at as at from journal_entries
-        union all select organisation_id, imported_at from bank_statement_imports
-        union all select organisation_id, matched_at from bank_line_matches
-        union all select organisation_id, at from audit_log where organisation_id is not null and action not in ('locked', 'filed')
-        union all select organisation_id, created_at from capture_items where organisation_id is not null
-      ) a group by organisation_id`),
+    // Each client's last activity: the latest entry, statement, match, audited change or captured document, each found through
+    // its index rather than by reading every row of every client.
+    sql<{ organisation_id: string; at: string | null }>(`
+      select o.id as organisation_id, greatest(
+        (select max(e.created_at) from journal_entries e where e.organisation_id = o.id),
+        (select max(i.imported_at) from bank_statement_imports i where i.organisation_id = o.id),
+        (select max(m.matched_at) from bank_line_matches m where m.organisation_id = o.id),
+        (select max(a.at) from audit_log a where a.organisation_id = o.id and a.action not in ('locked', 'filed')),
+        (select max(c.created_at) from capture_items c where c.organisation_id = o.id)) as at
+        from organisations o where not o.is_practice`),
     sql<{ organisation_id: string; period_to: string; filed_on: string }>("select organisation_id, period_to, filed_on from vat_returns order by period_to"),
   ]);
   // The firm's own books are not a client.
   const organisations = allOrganisations.filter(org => !org.is_practice);
   const by = <T extends { organisation_id: string }>(rows: T[]) => new Map(rows.map(row => [row.organisation_id, row]));
   const lineBy = by(lines), reviewBy = by(reviews), receivableBy = by(receivables), activityBy = by(activity);
-  const vatNow = await Promise.all(organisations.map(async org => {
-    const next = nextVatReturn({ vat: vatSettingsOf(org), registered: org.vat_registered, booksFrom: "2025-07-01",
-      filed: filed.filter(row => row.organisation_id === org.id).map(row => row.period_to), today });
-    if (!next) return null;
-    const end = next.to < today ? next.to : today;
-    // A UK client's by its own scheme (the flat rate, cash accounting); a Cyprus client's, VAT out less VAT in.
-    const net = org.country === "GB" ? ukVatReturn(await getUkVatFigures(org, next.from, end), ukSchemeOf(org)).net
-      : await sql<{ output_vat: number; input_vat: number }>("select * from vat_summary($1, $2, $3)", [org.id, next.from, end]).then(([summary]) => Math.round(((summary?.output_vat ?? 0) - (summary?.input_vat ?? 0)) * 100) / 100);
-    return { ...next, net,
-      lastFiled: filed.filter(row => row.organisation_id === org.id).at(-1) ?? null };
-  }));
+  // Each client's VAT return to come, from its periods and what it has filed: no query per client. What each comes to so far
+  // is worked out for the clients on screen only (getVatToPay).
+  const filedBy = new Map<string, typeof filed>();
+  for (const row of filed) filedBy.set(row.organisation_id, [...(filedBy.get(row.organisation_id) ?? []), row]);
+  const vatNow = organisations.map(org => {
+    const next = nextVatReturn({ vat: vatSettingsOf(org), registered: org.vat_registered, booksFrom: "2025-07-01", filed: (filedBy.get(org.id) ?? []).map(row => row.period_to), today });
+    return next ? { ...next, end: next.to < today ? next.to : today, lastFiled: (filedBy.get(org.id) ?? []).at(-1) ?? null } : null;
+  });
   const clients = organisations.map((org, index) => ({
     org,
     vat: vatNow[index],
@@ -72,4 +72,28 @@ export async function getPracticeDashboard() {
       overdueCount: clients.reduce((sum, client) => sum + client.overdueCount, 0),
     },
   };
+}
+
+/**
+ * What each client's VAT return to come amounts to so far: VAT out less VAT in for a Cyprus client, and by its own scheme
+ * (the flat rate, cash accounting) for a UK one. One query for all the Cyprus clients asked about and one for the UK ones.
+ */
+export async function getVatToPay(clients: { org: OrganisationRow; vat: { from: string; end: string } | null }[]) {
+  const due = clients.filter((client): client is { org: OrganisationRow; vat: { from: string; end: string } } => Boolean(client.vat));
+  const cyprus = due.filter(client => client.org.country !== "GB"), uk = due.filter(client => client.org.country === "GB");
+  const [cyprusSums, ukSums] = await Promise.all([
+    cyprus.length ? sql<{ organisation_id: string; output_vat: number; input_vat: number }>(`select x.org as organisation_id, s.output_vat, s.input_vat
+      from unnest($1::uuid[], $2::date[], $3::date[]) as x (org, period_from, period_to) cross join lateral vat_summary(x.org, x.period_from, x.period_to) s`,
+      [cyprus.map(client => client.org.id), cyprus.map(client => client.vat.from), cyprus.map(client => client.vat.end)]) : [],
+    uk.length ? sql<UkFiguresRow & { organisation_id: string }>(`select x.org as organisation_id, f.*
+      from unnest($1::uuid[], $2::date[], $3::date[], $4::boolean[]) as x (org, period_from, period_to, cash) cross join lateral uk_vat_figures(x.org, x.period_from, x.period_to, x.cash) f`,
+      [uk.map(client => client.org.id), uk.map(client => client.vat.from), uk.map(client => client.vat.end), uk.map(client => client.org.vat_cash_accounting)]) : [],
+  ]);
+  const toPay = new Map<string, number>();
+  for (const row of cyprusSums) toPay.set(row.organisation_id, Math.round((Number(row.output_vat ?? 0) - Number(row.input_vat ?? 0)) * 100) / 100);
+  for (const row of ukSums) {
+    const org = uk.find(client => client.org.id === row.organisation_id)!.org;
+    toPay.set(row.organisation_id, ukVatReturn(ukFiguresOf(row), ukSchemeOf(org)).net);
+  }
+  return toPay;
 }

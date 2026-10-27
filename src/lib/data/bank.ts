@@ -17,7 +17,7 @@ export type ReconcileView = (typeof RECONCILE_VIEWS)[number];
 export async function getBankStatementState() {
   const org = await requireOrg();
   const [open, imports] = await Promise.all([
-    sql<{ bank_account_id: string; count: number }>("select bank_account_id, count(*) as count from v_bank_statement_lines where organisation_id = $1 and status in ('unmatched', 'partial') group by bank_account_id", [org.id]),
+    sql<{ bank_account_id: string; count: number }>("select bank_account_id, count(*) as count from v_bank_lines_unmatched where organisation_id = $1 group by bank_account_id", [org.id]),
     sql<{ bank_account_id: string; imported_at: string }>("select bank_account_id, max(imported_at) as imported_at from bank_statement_imports where organisation_id = $1 group by bank_account_id", [org.id]),
   ]);
   return { toMatch: new Map(open.map(row => [row.bank_account_id, Number(row.count)])), lastImport: new Map(imports.map(row => [row.bank_account_id, row.imported_at])), feeds: new Map<string, { status: string; last_synced_at: string | null }>(), failed: false };

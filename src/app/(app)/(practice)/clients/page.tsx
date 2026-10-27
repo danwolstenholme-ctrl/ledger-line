@@ -9,11 +9,13 @@ import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { SubmitButton } from "@/components/common/form-fields";
-import { RecordBadge, RecordDisclosure, RecordEmpty, RecordHeader, RecordSection, recordButton } from "@/components/records/record-layout";
+import { RecordBadge, RecordDisclosure, RecordEmpty, RecordHeader, RecordPagination, RecordSection, recordButton } from "@/components/records/record-layout";
+import { ListSearch, clientMatches } from "@/components/common/list-search";
 
 export const metadata: Metadata = { title: "Client files" };
 
 const LEVEL_TONE = { low: "positive", normal: "neutral", high: "critical" } as const;
+const PAGE_SIZE = 50;
 
 /**
  * The practice's client files: who it is taking on, step by step, and every
@@ -23,6 +25,12 @@ const LEVEL_TONE = { low: "positive", normal: "neutral", high: "critical" } as c
 export default async function ClientFilesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const [data, query] = await Promise.all([getClientFiles(), searchParams]);
   const refreshing = data.refreshing;
+  // Hundreds of clients: a possible sanctions match, then reviews overdue or soon due, first; a page at a time.
+  const urgency = (file: (typeof data.active)[number]) => (file.openMatches ? 10_000 : 0) + (file.reviewIn !== null && file.reviewIn < 0 ? 5_000 : 0) + (file.reviewIn !== null && file.reviewIn <= 30 ? 1_000 : 0) + (file.screenedOnCurrent ? 0 : 100);
+  const matching = data.active.filter(file => clientMatches(query.q ?? "", { name: file.company_name, he: file.he_number, vat: file.vat_number }))
+    .sort((a, b) => urgency(b) - urgency(a) || a.company_name.localeCompare(b.company_name));
+  const page = Math.max(1, Math.min(Number(query.page) || 1, Math.ceil(matching.length / PAGE_SIZE) || 1));
+  const clients = matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title="Client files" description="Taking clients on, and keeping their due diligence current, as ICPAC’s AML Directive asks: the engagement letter, the people behind each company, sanctions screening and a risk rating."
       action={<Link href="/clients/new" className={recordButton}><UserPlus className="size-3.5" />Take on a client</Link>} />
@@ -43,10 +51,11 @@ export default async function ClientFilesPage({ searchParams }: { searchParams: 
         : <RecordEmpty title="Nobody being taken on">Start a file from a won enquiry, or with <b>Take on a client</b>.</RecordEmpty>}
     </RecordSection>
 
-    <RecordSection title="Clients" hint={`${data.active.length} clients${data.counts.reviewsDue ? ` · ${data.counts.reviewsDue} review${data.counts.reviewsDue === 1 ? "" : "s"} due within 30 days` : ""}`}>
+    <RecordSection title="Clients" hint={`${data.active.length} clients${data.counts.reviewsDue ? ` · ${data.counts.reviewsDue} review${data.counts.reviewsDue === 1 ? "" : "s"} due within 30 days` : ""}`}
+      action={data.active.length > PAGE_SIZE ? <ListSearch action="/clients" value={query.q} placeholder="Find a client: name, HE or VAT number" /> : undefined}>
       {data.active.length ? <div className="overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-[12.5px]">
         <thead><tr className="border-hairline bg-surface-sunken border-b text-left">{["Client", "Risk", "Next review", "Sanctions screening"].map(label => <th key={label} scope="col" className="text-ink-faint px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase">{label}</th>)}</tr></thead>
-        <tbody className="divide-hairline divide-y">{data.active.map(file => <tr key={file.id}>
+        <tbody className="divide-hairline divide-y">{clients.map(file => <tr key={file.id}>
           <td className="px-4 py-2.5"><Link href={`/clients/${file.id}`} className="text-ink hover:text-brand font-medium hover:underline">{file.company_name}</Link>
             <span className="text-ink-faint block text-[11.5px]">{file.he_number ?? ""}{file.manager ? ` · ${file.manager}` : ""}</span></td>
           <td className="px-4 py-2.5">{file.level ? <RecordBadge tone={LEVEL_TONE[file.level]}>{RISK_LEVELS[file.level].label} · {RISK_LEVELS[file.level].short}</RecordBadge> : <RecordBadge tone="caution">Not rated</RecordBadge>}</td>
@@ -56,7 +65,8 @@ export default async function ClientFilesPage({ searchParams }: { searchParams: 
             : file.screenedOnCurrent ? <span className="text-positive">Clear on the list of {formatDate(file.lastScreened!)}</span>
             : <span className="text-caution">{file.lastScreened ? `Last screened on the list of ${formatDate(file.lastScreened)}` : "Not screened"}</span>}</td>
         </tr>)}</tbody>
-      </table></div> : <RecordEmpty title="No clients yet">Clients appear here once their books are opened.</RecordEmpty>}
+      </table>{matching.length > PAGE_SIZE ? <RecordPagination page={page} total={matching.length} pageSize={PAGE_SIZE} href={`/clients${query.q ? `?q=${encodeURIComponent(query.q)}` : ""}`} /> : null}</div>
+        : <RecordEmpty title="No clients yet">Clients appear here once their books are opened.</RecordEmpty>}
     </RecordSection>
 
     <RecordSection title="The EU sanctions list" hint="The consolidated list of persons, groups and entities subject to EU financial sanctions"

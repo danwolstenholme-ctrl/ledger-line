@@ -270,8 +270,9 @@ function WorkspaceShell({ practice, clients, user, member, toReview, timer, chil
     const term = query.trim().toLowerCase();
     if (!term) return;
     if (client) { router.push(`${base}/customers?q=${encodeURIComponent(query.trim())}`); return; }
-    const found = clients.find(entry => entry.name.toLowerCase().includes(term));
-    if (found) router.push(`/c/${found.slug}`);
+    // One client by that name or number: open it. Several: the dashboard, narrowed to them.
+    const found = clients.filter(entry => !entry.practice && matchOf(entry, plain(query.trim())) !== null);
+    router.push(found.length === 1 ? `/c/${found[0].slug}` : `/?q=${encodeURIComponent(query.trim())}`);
   };
   const link = (entry: NavItem) => {
     const active = current?.href === entry.href;

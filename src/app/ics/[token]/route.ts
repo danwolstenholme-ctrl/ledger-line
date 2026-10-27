@@ -20,7 +20,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const origin = await siteOrigin();
   const events = data.items.filter(item => item.state !== "done").map(item => ({
     uid: `${item.key}@ledgerline`, date: item.date,
-    summary: `${item.state === "overdue" ? "Overdue: " : ""}${item.title}${feed.organisation_id ? "" : ` · ${calendarCompanyLabel(item.company.name)}`}`,
+    summary: `${item.state === "overdue" ? "Overdue: " : ""}${item.title}${feed.organisation_id || !item.company.name ? "" : ` · ${calendarCompanyLabel(item.company.name)}`}`,
     description: [item.company.name, CALENDAR_KIND_LABEL[item.kind], item.detail].filter(Boolean).join(" · "),
     url: `${origin}${item.href}`, categories: CALENDAR_KIND_LABEL[item.kind],
   }));

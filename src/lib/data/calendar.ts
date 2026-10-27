@@ -31,6 +31,9 @@ function deadlineHref(row: DeadlineRow) {
   return `${base}/deadlines`;
 }
 
+/** From this many clients with the same deadline on the same day, the all-clients calendar shows them as one line. */
+const GROUP_FROM = 8;
+
 export async function getCalendarItems(input: { from: string; to: string; client?: string | null; kind?: CalendarKind | null; grouped: boolean }) {
   const today = firmToday();
   const until = input.to > today ? input.to : today;
@@ -54,7 +57,20 @@ export async function getCalendarItems(input: { from: string; to: string; client
   ]);
 
   const all: CalendarItem[] = [];
+  // Across many clients, the same deadline on the same day is one line: "VAT return, July to September: 287 clients",
+  // opening the deadlines due that day. A handful stay one line each.
+  const sameDay = new Map<string, DeadlineRow[]>();
   for (const row of deadlines?.rows ?? []) {
+    const key = `${row.due}|${row.title}`;
+    sameDay.set(key, [...(sameDay.get(key) ?? []), row]);
+  }
+  for (const group of input.grouped ? [...sameDay.values()].filter(rows => rows.length >= GROUP_FROM) : []) {
+    const first = group[0], open = group.filter(row => row.state !== "done"), late = group.filter(row => row.state === "overdue");
+    all.push({ key: `deadline-group:${first.due}:${first.title}`, date: first.due, kind: "deadline", title: `${first.title}: ${group.length} clients`, href: `/deadlines?due=${first.due}`,
+      company: { slug: "", name: "" }, state: late.length ? "overdue" : open.length ? "due" : "done",
+      detail: open.length ? `${open.length} still open${late.length ? `, ${late.length} overdue` : ""}` : "All done" });
+  }
+  for (const row of (deadlines?.rows ?? []).filter(row => !input.grouped || (sameDay.get(`${row.due}|${row.title}`)?.length ?? 0) < GROUP_FROM)) {
     all.push({ key: `deadline:${row.key}`, date: row.due, kind: "deadline", title: row.title, href: deadlineHref(row), company: { slug: row.company.slug, name: row.company.name },
       state: row.state === "done" ? "done" : row.state === "overdue" ? "overdue" : "due",
       detail: [row.state === "done" && row.doneOn ? `Done ${formatDate(row.doneOn)}` : row.company.manager, row.extension ? `extended by ${row.extension.by}` : null].filter(Boolean).join(" · ") || null });

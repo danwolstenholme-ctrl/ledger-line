@@ -581,6 +581,29 @@ real project, `npm run supabase:demo-users` gives the demo's people sign-ins.
   Postgres today.
 - Next.js 16.4 or later: 16.3.3 has published security advisories.
 
+## At a big practice's scale
+
+`LEDGERLINE_DEMO_COMPANIES=400` builds the demo with that many client
+companies: the eight, then variants of them, each with its own name, numbers,
+bank account and fifteen months of books generated the same way, its CRM,
+staff and file following the one it varies. Use it on a throwaway database:
+
+```
+DATABASE_URL=postgres://… LEDGERLINE_DEMO_DATA=1 LEDGERLINE_RESET_ON_START=1 LEDGERLINE_DEMO_COMPANIES=400 npm run start
+```
+
+Measured on 27 October 2026 with 400 clients on Postgres 16 (101,000 bank
+lines, 365,000 journal lines, 20,000 invoices, 31,000 bills; built in 95
+seconds): every company page answers in 15 to 45 ms, and the practice pages
+(the dashboard, deadlines, calendar, fees, client files, capture) in under
+0.6 s, with at most about 1,700 elements on screen. Before this, the
+dashboard and deadlines took 47 seconds: each bank line's status was worked
+out by valuing every match. A bank line now knows whether it is matched
+(`bank_line_matched`), the dashboard works out VAT only for the clients on
+screen, deadlines are looked up by company, and the practice pages list the
+clients that need something first, forty to sixty at a time, with a search by
+name, HE or VAT number.
+
 ## If something goes wrong
 - **Reset demo data** at http://localhost:3000/settings?demo=1 rebuilds
   everything in about two seconds (or `npm run demo:reset`). The button is

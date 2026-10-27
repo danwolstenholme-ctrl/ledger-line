@@ -1,7 +1,7 @@
 import Link from "@/components/navigation/navigation-link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Landmark, Lock, ScanText } from "lucide-react";
 
-import { getPracticeDashboard } from "@/lib/data/practice";
+import { getPracticeDashboard, getVatToPay } from "@/lib/data/practice";
 import { getClientFiles } from "@/lib/data/clients";
 import { inSentence } from "@/lib/domain/onboarding";
 import { getDeadlines } from "@/lib/data/deadlines";
@@ -10,16 +10,39 @@ import { formatAmount, formatDate, formatRelative, formatMoney, greeting } from 
 import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { StatTile } from "@/components/reports/report-charts";
-import { RecordHeader, recordButton } from "@/components/records/record-layout";
+import { RecordEmpty, RecordFilterLinks, RecordHeader, RecordPagination, recordButton } from "@/components/records/record-layout";
+import { NavigationForm } from "@/components/navigation/navigation-form";
+import { getCurrentUser } from "@/lib/org";
 
+
+const PAGE_SIZE = 40;
 
 /**
  * Journey 1: every client company on one screen. What is due to the Tax
  * Department and when, what the bank says that the books do not yet, what is
  * waiting to be reviewed, who owes money, and where each set of books is locked.
  */
-export default async function PracticeDashboard() {
-  const [{ clients, totals, practice, today }, deadlines, files] = await Promise.all([getPracticeDashboard(), getDeadlines(), getClientFiles()]);
+export default async function PracticeDashboard({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const [{ clients, totals, practice, today }, deadlines, files, user, query] = await Promise.all([getPracticeDashboard(), getDeadlines(), getClientFiles(), getCurrentUser(), searchParams]);
+  // Hundreds of clients: the ones that need something first, a page at a time, narrowed to yours or to a search.
+  const pressing = (client: (typeof clients)[number]) => (client.vat && client.vat.state === "overdue" ? 10_000 : 0) + (client.vat && client.vat.state !== "open" && client.vat.daysLeft <= 30 ? 5_000 : 0)
+    + client.toReview * 100 + (client.overdue > 0 ? 50 : 0) + Math.min(client.bankLines, 49);
+  const view = query.view === "mine" || query.view === "attention" ? query.view : "all";
+  const term = (query.q ?? "").trim().toLowerCase();
+  const plainNumber = (text: string | null) => (text ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const matching = clients.filter(client => !term || client.org.name.toLowerCase().includes(term) || (term.replace(/[^a-z0-9]/g, "").length > 2 && [client.org.he_number, client.org.vat_number].some(number => plainNumber(number).includes(term.replace(/[^a-z0-9]/g, "")))));
+  const mine = matching.filter(client => client.org.manager === user.name), needing = matching.filter(client => pressing(client) >= 50);
+  const listed = (view === "mine" ? mine : view === "attention" ? needing : matching).sort((a, b) => pressing(b) - pressing(a) || a.org.name.localeCompare(b.org.name));
+  const page = Math.max(1, Math.min(Number(query.page) || 1, Math.ceil(listed.length / PAGE_SIZE) || 1));
+  const shown = listed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const vatToPay = await getVatToPay(shown);
+  const href = (next: { view?: string }) => {
+    const params = new URLSearchParams();
+    const v = next.view ?? view;
+    if (v !== "all") params.set("view", v);
+    if (term) params.set("q", query.q!.trim());
+    return `/${params.size ? `?${params}` : ""}`;
+  };
   const head = "text-ink-faint px-3 py-2 text-left text-[10.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
   const cell = "px-3 py-2.5 align-top text-[12.5px]";
   return <PageBody className="space-y-4">
@@ -44,8 +67,17 @@ export default async function PracticeDashboard() {
       </Link></li>)}</ul>
     </section> : null}
 
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <RecordFilterLinks label="Clients" options={[{ label: `Needing something · ${needing.length}`, href: href({ view: "attention" }), active: view === "attention" },
+        { label: `Yours · ${mine.length}`, href: href({ view: "mine" }), active: view === "mine" }, { label: `All · ${matching.length}`, href: href({ view: "all" }), active: view === "all" }]} />
+      <NavigationForm action="/" method="get" className="border-hairline-strong bg-surface flex h-8 w-full items-center gap-2 rounded-md border px-2.5 sm:w-72">
+        {view !== "all" ? <input type="hidden" name="view" value={view} /> : null}
+        <input name="q" defaultValue={query.q ?? ""} placeholder="Find a client: name, HE or VAT number" aria-label="Find a client" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
+      </NavigationForm>
+    </div>
+
     <section aria-label="Clients" className="ll-panel overflow-x-auto">
-      <table className="w-full min-w-[980px] border-collapse">
+      {shown.length ? <table className="w-full min-w-[980px] border-collapse">
         <thead className="border-hairline bg-surface-sunken border-b">
           <tr>
             <th scope="col" className={head}>Client</th>
@@ -58,7 +90,7 @@ export default async function PracticeDashboard() {
           </tr>
         </thead>
         <tbody className="divide-hairline divide-y">
-          {clients.map(({ org, vat, bankLines, bankAccountId, toReview, overdue, overdueCount, lastActivity }) => <tr key={org.id} className="hover:bg-surface-sunken group">
+          {shown.map(({ org, vat, bankLines, bankAccountId, toReview, overdue, overdueCount, lastActivity }) => <tr key={org.id} className="hover:bg-surface-sunken group">
             <td className={cell}>
               <Link href={`/c/${org.slug}`} className="text-ink group-hover:text-brand flex items-center gap-1.5 text-[13px] font-medium">{org.name}<ArrowRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" /></Link>
               <span className="text-ink-faint block text-[11.5px]">{org.industry} · {org.he_number}</span>
@@ -70,7 +102,7 @@ export default async function PracticeDashboard() {
                   {quarterLabel(vat.from, vat.to)} · due {formatDate(vat.due)}
                 </span>
                 <span className="text-ink-faint block text-[11.5px]">
-                  {vat.state === "open" ? "Quarter running" : vat.state === "overdue" ? `${-vat.daysLeft} days overdue` : `${vat.daysLeft} days left, not filed`} · {vat.net >= 0 ? `${formatAmount(vat.net, org.currency)} to pay` : `${formatAmount(-vat.net, org.currency)} to reclaim`}
+                  {vat.state === "open" ? "Quarter running" : vat.state === "overdue" ? `${-vat.daysLeft} days overdue` : `${vat.daysLeft} days left, not filed`} · {(vatToPay.get(org.id) ?? 0) >= 0 ? `${formatAmount(vatToPay.get(org.id) ?? 0, org.currency)} to pay` : `${formatAmount(-(vatToPay.get(org.id) ?? 0), org.currency)} to reclaim`}
                   {vat.lastFiled ? ` · last filed ${formatDate(vat.lastFiled.filed_on)}` : ""}
                 </span>
               </Link>}
@@ -88,7 +120,8 @@ export default async function PracticeDashboard() {
             <td className={cn(cell, "text-ink-muted whitespace-nowrap")}>{lastActivity ? formatRelative(lastActivity) : "—"}</td>
           </tr>)}
         </tbody>
-      </table>
+      </table> : <RecordEmpty title={term ? `No client matches “${query.q}”` : view === "mine" ? "None of your clients needs anything" : "Nothing needs doing"}>{term ? "Try part of the name, or the HE or VAT number." : "Every client is up to date."}</RecordEmpty>}
+      {listed.length > PAGE_SIZE ? <RecordPagination page={page} total={listed.length} pageSize={PAGE_SIZE} href={href({})} /> : null}
     </section>
     <p className="text-ink-faint text-[11.5px]">Each company keeps its own double-entry ledger. A document can only post to its own company&apos;s accounts: the database enforces it.</p>
   </PageBody>;

@@ -436,6 +436,7 @@ create table journal_entries (
 );
 create unique index journal_entries_source_unique on journal_entries (source, source_id) where source_id is not null;
 create index journal_entries_org_date on journal_entries (organisation_id, entry_date);
+create index journal_entries_org_created on journal_entries (organisation_id, created_at);
 
 create table journal_lines (
   id              uuid primary key default gen_random_uuid(),
@@ -1908,11 +1909,15 @@ create table bank_statement_lines (
   excluded_at     timestamptz,
   excluded_by     uuid,
   excluded_reason text,
+  -- Whether anything is matched to it, kept by the matches themselves (bank_line_matched): so what is left to match is found
+  -- from a small index, however many lines a practice's clients have.
+  matched         boolean not null default false,
   created_at      timestamptz not null default now(),
   unique (bank_account_id, external_id),
   foreign key (organisation_id, bank_account_id) references ledger_accounts (organisation_id, id)
 );
 create index bank_statement_lines_account_date_idx on bank_statement_lines (bank_account_id, txn_date desc);
+create index bank_statement_lines_unmatched_idx on bank_statement_lines (organisation_id, txn_date) where not matched and excluded_at is null;
 
 create table bank_line_matches (
   id                  uuid primary key default gen_random_uuid(),
@@ -1927,6 +1932,19 @@ create table bank_line_matches (
   constraint bank_line_matches_one_document check (num_nonnulls(invoice_payment_id, bill_payment_id, bank_transaction_id) = 1)
 );
 create index bank_line_matches_line_idx on bank_line_matches (line_id);
+create index bank_line_matches_org_at_idx on bank_line_matches (organisation_id, matched_at);
+
+-- A line is matched while anything is matched to it. Kept here so no one has to count matches to know. Owner's rights: it
+-- only ever marks the line the match is on.
+create function bank_line_matched() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(current_setting('ledgerline.seeding', true), '') = 'on' then return null; end if;
+  if tg_op = 'INSERT' then update bank_statement_lines set matched = true where id = new.line_id and not matched;
+  else update bank_statement_lines set matched = exists (select 1 from bank_line_matches where line_id = old.line_id) where id = old.line_id;
+  end if;
+  return null;
+end $$;
+create trigger bank_line_matches_matched after insert or delete on bank_line_matches for each row execute function bank_line_matched();
 create unique index bank_line_matches_invoice_payment_unique on bank_line_matches (invoice_payment_id) where invoice_payment_id is not null;
 create unique index bank_line_matches_bill_payment_unique on bank_line_matches (bill_payment_id) where bill_payment_id is not null;
 create unique index bank_line_matches_bank_transaction_unique on bank_line_matches (bank_transaction_id, bank_account_id) where bank_transaction_id is not null;
@@ -2088,6 +2106,12 @@ select l.*,
       from bank_line_matches x where x.line_id = l.id
   ) m on true;
 
+-- The bank lines nobody has matched yet: what the dashboards and the year end count, at any number of clients. Working out
+-- a line's full status (v_bank_statement_lines) means valuing every match; matching only succeeds when the values add up,
+-- so a line whose match later stops adding up is the rare case, shown on its bank account's own page.
+create view v_bank_lines_unmatched as
+select l.* from bank_statement_lines l where not l.matched and l.excluded_at is null;
+
 create function unreconciled_bank_items(p_bank_account_id uuid)
 returns table (kind text, id uuid, item_date date, amount numeric, label text, reference text, document_id uuid)
 language sql stable as $$
@@ -2181,6 +2205,10 @@ create table audit_log (
   prev_hash       text not null,
   hash            text not null
 );
+-- What the practice dashboard reads for each client's last activity: the latest of each, found through an index.
+create index audit_log_org_at on audit_log (organisation_id, at);
+create index capture_items_org_created on capture_items (organisation_id, created_at);
+create index bank_statement_imports_org_at on bank_statement_imports (organisation_id, imported_at);
 
 create function audit_hash(p_prev text, p_at timestamptz, p_org uuid, p_actor text, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb)
 returns text language sql immutable as $$
@@ -3381,6 +3409,7 @@ create policy vies_demo_register_read on vies_demo_register for select to authen
 
 -- Views read with the rights of the person asking, so the rules above hold through them too.
 alter view v_bank_statement_lines set (security_invoker = true);
+alter view v_bank_lines_unmatched set (security_invoker = true);
 alter view v_bank_transaction_directory set (security_invoker = true);
 alter view v_bill_directory set (security_invoker = true);
 alter view v_credit_note_directory set (security_invoker = true);

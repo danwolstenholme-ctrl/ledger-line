@@ -7,6 +7,7 @@ import { gunzipSync } from "node:zlib";
 
 import { STANDARD_CHART, chartFor } from "@/lib/domain/chart";
 import { annualReturnDates, ukObligations } from "@/lib/domain/deadlines";
+import { checkUkVatNumber, checkVatNumber } from "@/lib/domain/eu-vat";
 import { assessRisk, documentRequests, engagementLetter, letterText, nextReview, suggestFactors, type Person, type Role, type Service } from "@/lib/domain/onboarding";
 import { NO_YEAR, addToYear, cyMonth } from "@/lib/domain/payroll-cy";
 import { businessType } from "@/lib/domain/business-types";
@@ -79,6 +80,59 @@ type Profile = {
   /** Sales are scaled so each company earns a believable margin. */
   scale?: number;
 };
+
+// ---------------------------------------------------------------------------
+// The demo at a big practice's scale. LEDGERLINE_DEMO_COMPANIES=300 adds
+// client companies until there are that many: each a variant of one of the
+// eight, with its own name, numbers and bank account and its books generated
+// the same way, its CRM, staff, file and fee following the one it varies.
+// For seeing and timing Ledgerline with hundreds of clients; the demo has eight.
+// ---------------------------------------------------------------------------
+
+const VARIANT_PLACES: Record<string, string[]> = {
+  CY: ["Akamas", "Kition", "Lefkara", "Kourion", "Amathus", "Salamis", "Tamassos", "Idalion", "Soloi", "Marion", "Chytri", "Lapithos", "Omodos", "Lania", "Pissouri", "Zygi", "Platres", "Polis", "Agros", "Lefkonico"],
+  GB: ["Reading", "Bristol", "Oxford", "Bath", "Swindon", "Newbury", "Henley", "Wantage", "Didcot", "Thatcham", "Marlow", "Abingdon"],
+};
+const VARIANT_KINDS: Record<string, string[]> = {
+  "aegean-blue-marine": ["Marine Services", "Shipping", "Yacht Management", "Ship Agency"], "troodos-gold": ["Olive Oil", "Winery", "Foods", "Farms"],
+  "kalamies-dental": ["Dental Clinic", "Physiotherapy", "Medical Centre", "Eye Clinic"], "larnaka-roast": ["Coffee Co", "Bakery", "Taverna", "Café"],
+  "pixelforge": ["Digital", "Software", "Studio", "Media"], "mesogeios-holdings": ["Holdings", "Investments", "Capital", "Estates"],
+  "thames-edge-joinery": ["Joinery", "Builders", "Carpentry", "Interiors"], "willow-wren-design": ["Design", "Creative", "Branding", "Print"],
+};
+/** Each variant's original, whose CRM, people, file and fee it follows. */
+const TEMPLATE = new Map<string, string>();
+const base = (slug: string) => TEMPLATE.get(slug) ?? slug;
+let ALL_PROFILES: Profile[] = [];
+const profileOf = (slug: string) => ALL_PROFILES.find(profile => profile.slug === slug);
+/** A made-up VAT number whose check letter (Cyprus) or check digits (UK) agree, so the books treat it as real. */
+function variantVat(country: string, n: number) {
+  if (country === "GB") {
+    for (let check = 0; check < 100; check++) { const number = `GB${String(4000000 + n)}${String(check).padStart(2, "0")}`; if (checkUkVatNumber(number).ok) return number; }
+    return null;
+  }
+  for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") { const number = `CY${String(10000000 + n * 7).slice(0, 8)}${letter}`; if (checkVatNumber(number).ok) return number; }
+  return null;
+}
+function variants(total: number): Profile[] {
+  const made: Profile[] = [];
+  const slugs = new Set(PROFILES.map(profile => profile.slug));
+  for (let n = 0; PROFILES.length + made.length < total && n < 20_000; n++) {
+    const template = PROFILES[n % PROFILES.length];
+    const country = template.country ?? "CY";
+    const places = VARIANT_PLACES[country], kinds = VARIANT_KINDS[template.slug];
+    const round = Math.floor(n / PROFILES.length), lap = Math.floor(round / (places.length * kinds.length));
+    const name = `${places[round % places.length]} ${kinds[Math.floor(round / places.length) % kinds.length]}${lap ? ` ${lap + 1}` : ""} Ltd`;
+    const slug = name.toLowerCase().replace(/ ltd$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-");
+    if (slugs.has(slug)) continue;
+    slugs.add(slug);
+    TEMPLATE.set(slug, template.slug);
+    made.push({ ...template, slug, name, greek: "", he: country === "GB" ? String(13000000 + n) : `HE ${500000 + n}`,
+      vat: template.vat ? variantVat(country, n) : null, tic: country === "GB" ? String(5000000000 + n) : `${String(90000000 + n).slice(0, 8)}T`,
+      email: `accounts@${slug.replace(/-/g, "")}.example`, bank: { name: template.bank.name, details: `IBAN ${fictionalIban(`variant:${slug}`, country)}` },
+      prefix: `${name.split(" ").slice(0, 2).map(word => word[0]).join("").toUpperCase()}-` });
+  }
+  return made;
+}
 
 const BASE: Account[] = STANDARD_CHART;
 
@@ -354,15 +408,18 @@ const MANAGERS: Record<string, string> = {
   "thames-edge-joinery": "Andreas Kyriakou", "willow-wren-design": "Sofia Georgiou",
 };
 
-export async function seedDemo(pg: PGlite) {
+export async function seedDemo(pg: PGlite, options: { companies?: number } = {}) {
   rand = mulberry32(22102026);
   for (const key of Object.keys(T)) T[key] = [];
+  TEMPLATE.clear();
+  const total = options.companies ?? Number(process.env.LEDGERLINE_DEMO_COMPANIES ?? 0);
+  ALL_PROFILES = total > PROFILES.length ? [...PROFILES, ...variants(total)] : PROFILES;
   const practiceId = uuid();
   T.practices.push({ id: practiceId, name: "Saltlake Accounting", initials: "SA", brand_color: "#0d6e6e", tagline: "Chartered accountants, Larnaca" });
   T.app_users.push({ id: uuid(), name: "Maria Antoniou", email: "maria@saltlake.example", initials: "MA" });
   const vatFacts: { org: string; profile: Profile; quarters: Map<string, number> }[] = [];
 
-  for (const profile of PROFILES) {
+  for (const profile of ALL_PROFILES) {
     const org = uuid();
     const accounts = new Map<string, string>();
     const bankId = uuid();
@@ -380,7 +437,8 @@ export async function seedDemo(pg: PGlite) {
       vat_number: profile.vat, tic: profile.tic, vat_registered: profile.registered, vat_quarter_end_month: profile.quarterEnd, year_end_month: profile.yearEnd ?? 12,
       country: profile.country ?? "CY", currency: profile.country === "GB" ? "GBP" : "EUR", vat_flat_rate: profile.flatRate ?? null,
       default_bank_account_id: bankId, contact_name: profile.contact, contact_email: profile.email, address: profile.address,
-      invoice_prefix: profile.prefix, payment_terms_days: profile.slug === "larnaka-roast" ? 14 : 30, manager: MANAGERS[profile.slug] ?? "Maria Antoniou",
+      invoice_prefix: profile.prefix, payment_terms_days: base(profile.slug) === "larnaka-roast" ? 14 : 30,
+      manager: MANAGERS[profile.slug] ?? (TEMPLATE.has(profile.slug) ? STAFF[ALL_PROFILES.indexOf(profile) % STAFF.length].name : "Maria Antoniou"),
     });
     const acc = (code: string) => { const id = accounts.get(code); if (!id) throw new Error(`${profile.slug}: no account ${code}`); return id; };
     const movements: Movement[] = [];
@@ -411,7 +469,7 @@ export async function seedDemo(pg: PGlite) {
     for (const spec of profile.customers) {
       const customer = uuid();
       T.customers.push({ id: customer, organisation_id: org, name: spec.name, vat_number: spec.vat ?? null, country: spec.country ?? profile.country ?? "CY", eu_business: Boolean(spec.eu), default_account_id: acc(spec.lines[0].code),
-        payment_terms_days: spec.terms === (profile.slug === "larnaka-roast" ? 14 : 30) ? null : spec.terms });
+        payment_terms_days: spec.terms === (base(profile.slug) === "larnaka-roast" ? 14 : 30) ? null : spec.terms });
       for (const month of MONTHS) {
         let count = Math.floor(spec.perMonth) + (rand() < spec.perMonth % 1 ? 1 : 0);
         if (month === "2026-10") count = Math.min(count, 1);
@@ -556,7 +614,7 @@ export async function seedDemo(pg: PGlite) {
       }
       T.bank_statement_imports.push({ id: importId, organisation_id: org, bank_account_id: bankId, source: "file", file_name: `${profile.bank.name.split(" ")[0].toLowerCase()}-statement-${month}.csv`,
         added: own.length, skipped: 0, first_date: own[0].date, last_date: own[own.length - 1].date, closing_balance: balance,
-        imported_at: october ? `2026-10-${21 - (PROFILES.indexOf(profile) % 3)}T${String(6 + PROFILES.indexOf(profile)).padStart(2, "0")}:${String(10 + PROFILES.indexOf(profile) * 7)}:00.000Z` : `${addDays(day(month, lastDay(month)), 3)}T08:00:00.000Z` });
+        imported_at: october ? `2026-10-${21 - (ALL_PROFILES.indexOf(profile) % 3)}T${String((6 + ALL_PROFILES.indexOf(profile)) % 24).padStart(2, "0")}:${String((10 + ALL_PROFILES.indexOf(profile) * 7) % 60).padStart(2, "0")}:00.000Z` : `${addDays(day(month, lastDay(month)), 3)}T08:00:00.000Z` });
     }
   }
 
@@ -577,6 +635,8 @@ export async function seedDemo(pg: PGlite) {
     }
   });
 
+  // The lines matched while seeding, marked in one go (the trigger that keeps it is quiet while seeding).
+  await pg.exec("update bank_statement_lines l set matched = true where exists (select 1 from bank_line_matches m where m.line_id = l.id)");
   // History: entries carry the time their documents were recorded, not the time of the seed.
   await pg.exec(`update journal_entries set created_at = (entry_date + time '10:30') at time zone 'Asia/Nicosia' where created_at > now() - interval '1 hour'`);
 
@@ -642,7 +702,7 @@ async function seedPayroll(pg: PGlite) {
   const companies = (await pg.query<{ id: string; slug: string }>("select id, slug from organisations where country = 'CY'")).rows;
   const digits = (seed: string, length: number) => createHash("sha256").update(`ledgerline-demo:${seed}`).digest("hex").replace(/[a-f]/g, "").padEnd(length, "7").slice(0, length);
   for (const company of companies) {
-    for (const spec of EMPLOYEES[company.slug] ?? []) {
+    for (const spec of EMPLOYEES[base(company.slug)] ?? []) {
       const employee = { start_date: spec.start, leave_date: null, monthly_salary: spec.salary, thirteenth_salary: spec.thirteenth ?? true, annual_deductions: spec.deductions ?? 0, annual_exemption: 0 };
       // January to September 2026 as the previous payroll paid it.
       let ytd = NO_YEAR;
@@ -973,15 +1033,15 @@ export async function seedCrm(pg: PGlite) {
   const orgs = (await pg.query<{ id: string; slug: string; country: string; business_type: string }>("select id, slug, country, business_type from organisations")).rows;
   const { query, rows: rowsOf } = workspaceQueries(pg);
   for (const org of orgs) {
-    const setup = WORKSPACES[org.slug] ?? { type: "general" };
+    const setup = WORKSPACES[base(org.slug)] ?? { type: "general" };
     await setUpWorkspace(query, rowsOf, org.id, setup.type, org.country, setup.changes);
   }
   const rows: Record<string, Row[]> = { crm_enquiries: [], crm_contacts: [], crm_jobs: [], crm_tasks: [], crm_activities: [] };
   for (const org of orgs) {
-    const spec = CRM[org.slug];
+    const spec = CRM[base(org.slug)];
     if (!spec) continue;
     const stages = (await pg.query<StageRow>("select id, board, name, position, outcome from crm_stages where organisation_id = $1 order by position", [org.id])).rows;
-    const type = businessType(WORKSPACES[org.slug]?.type);
+    const type = businessType(WORKSPACES[base(org.slug)]?.type);
     // A clinic's private patients are customers in their own name.
     for (const [index, name] of (spec.patients ?? []).entries())
       await pg.query("insert into customers (organisation_id, name, email, phone, default_account_id) select $1, $2, $3, $4, id from ledger_accounts where organisation_id = $1 and system_role = 'sales'",
@@ -1079,12 +1139,12 @@ export async function seedQuotes(pg: PGlite) {
   const today = new Date().toISOString().slice(0, 10);
   const orgs = (await pg.query<{ id: string; slug: string; invoice_prefix: string; vat_registered: boolean }>("select id, slug, invoice_prefix, vat_registered from organisations order by slug")).rows;
   for (const org of orgs) {
-    const spec = CRM[org.slug];
-    const profile = PROFILES.find(item => item.slug === org.slug)!;
+    const spec = CRM[base(org.slug)];
+    const profile = profileOf(org.slug);
     // Quotes to the customers the company trades with, not a clinic's patients.
     const customers = (await pg.query<{ id: string; name: string; eu_business: boolean; default_account_id: string }>("select id, name, eu_business, default_account_id from customers where organisation_id = $1 order by name", [org.id])).rows
       .filter(customer => !profile || profile.customers.some(item => item.name === customer.name));
-    if (!spec || !customers.length) continue;
+    if (!spec || !profile || !customers.length) continue;
     const codes = new Map((await pg.query<{ id: string; code: string }>("select id, code from ledger_accounts where organisation_id = $1", [org.id])).rows.map(row => [row.code, row.id]));
     for (let index = 0; index < 2; index++) {
       // Two customers where there are two: a quote each, priced from what each is usually sold.
@@ -1116,7 +1176,7 @@ async function seedDeadlines(pg: PGlite) {
   const marks: Row[] = [];
   // Cyprus's provisional tax; the UK's own deadlines are below.
   for (const org of orgs.filter(item => item.country === "CY")) for (const due of ["2025-07-31", "2025-12-31", "2026-07-31"]) {
-    if (due >= today || (org.slug === "kalamies-dental" && due === "2026-07-31")) continue;
+    if (due >= today || (base(org.slug) === "kalamies-dental" && due === "2026-07-31")) continue;
     marks.push({ organisation_id: org.id, kind: "provisional_tax", period_end: due, done_on: addDays(due, -3), done_by: org.manager });
   }
   const months = (await pg.query<{ organisation_id: string; month_end: string }>(`
@@ -1142,7 +1202,7 @@ async function seedDeadlines(pg: PGlite) {
     if (!org.is_practice && "2026-08-01" < today) marks.push({ organisation_id: org.id, kind: "tax_payment", period_end: "2025-12-31", done_on: "2026-07-28", done_by: org.manager });
     if (org.incorporated_on) for (const date of annualReturnDates(org.incorporated_on, START, today))
       if (addDays(date, 28) < today) marks.push({ organisation_id: org.id, kind: "annual_return", period_end: date, done_on: addDays(date, 9), done_by: org.manager });
-    if (!(CLIENT_SERVICES[org.slug] ?? []).includes("payroll")) continue;
+    if (!(CLIENT_SERVICES[base(org.slug)] ?? []).includes("payroll")) continue;
     for (const month of MONTHS) {
       const end = `${month}-${String(lastDay(month)).padStart(2, "0")}`;
       const next = MONTHS[MONTHS.indexOf(month) + 1] ?? "2026-11";
@@ -1150,7 +1210,7 @@ async function seedDeadlines(pg: PGlite) {
       if (due < today) marks.push({ organisation_id: org.id, kind: "payroll", period_end: end, done_on: addDays(due, -6), done_by: org.manager });
     }
     // The employer's return for 2025 is extended to 30 November 2026: one is in, three to go.
-    if (org.slug === "aegean-blue-marine") marks.push({ organisation_id: org.id, kind: "employer_return", period_end: "2025-12-31", done_on: "2026-10-14", done_by: org.manager });
+    if (base(org.slug) === "aegean-blue-marine") marks.push({ organisation_id: org.id, kind: "employer_return", period_end: "2025-12-31", done_on: "2026-10-14", done_by: org.manager });
   }
   if (marks.length) await pg.query("insert into deadline_marks (organisation_id, kind, period_end, done_on, done_by) select organisation_id, kind, period_end, done_on, done_by from jsonb_populate_recordset(null::deadline_marks, $1::jsonb)", [JSON.stringify(marks)]);
 }
@@ -1212,7 +1272,8 @@ const YEAR_ENDS: Record<string, Row[]> = {
 };
 
 async function seedYearEnds(pg: PGlite) {
-  for (const [slug, law] of Object.entries(COMPANY_LAW))
+  for (const [slug, law] of [...Object.entries(COMPANY_LAW), ...[...TEMPLATE].filter(([, template]) => COMPANY_LAW[template])
+    .map(([slug, template], index) => [slug, { ...COMPANY_LAW[template], incorporated: addDays(COMPANY_LAW[template].incorporated, -37 * (index + 1)) }] as const)])
     await pg.query("update organisations set incorporated_on = $2, auditor_name = $3, auditor_is_practice = $4, consolidated_group = $5 where slug = $1",
       [slug, law.incorporated, law.auditor ?? null, law.practiceAudits ?? false, law.group ?? false]);
   const rows = Object.entries(YEAR_ENDS).flatMap(([slug, years]) => years.map(year => ({ slug, assurance: "audit", updated_by: MANAGERS[slug] ?? "Maria Antoniou", ...year })));
@@ -1319,7 +1380,7 @@ async function seedPractice(pg: PGlite) {
   // Each client company is a customer of the firm, with its fee.
   const customerOf = new Map<string, string>();
   for (const client of clients) {
-    const plan = FEES[client.slug];
+    const plan = FEES[base(client.slug)];
     if (!plan) continue;
     const customer = (await pg.query<{ id: string }>(`insert into customers (organisation_id, name, email, vat_number, country, address, default_account_id)
       values ($1, $2, $3, $4, $7, $5, $6) returning id`, [org, client.name, client.contact_email, client.vat_registered ? client.vat_number : null, client.address, fees, client.country])).rows[0].id;
@@ -1333,7 +1394,7 @@ async function seedPractice(pg: PGlite) {
   for (const period of ["2026-07-01", "2026-08-01", "2026-09-01"]) {
     if (period > today) continue;
     for (const client of clients) {
-      const plan = FEES[client.slug], customer = customerOf.get(client.id);
+      const plan = FEES[base(client.slug)], customer = customerOf.get(client.id);
       if (!plan || !customer) continue;
       number += 1;
       // A UK client's fees are outside the scope of Cyprus VAT: a business customer accounts for VAT where it is.
@@ -1369,7 +1430,7 @@ async function seedPractice(pg: PGlite) {
     const days = workingDays(period, end);
     if (!days.length) continue;
     for (const client of clients) {
-      const plan = FEES[client.slug];
+      const plan = FEES[base(client.slug)];
       if (!plan) continue;
       let left = Math.round(plan.hours * 60);
       while (left > 0) {
@@ -1499,8 +1560,8 @@ async function writeClientFiles(pg: PGlite) {
   const at = (date: string, time = "10:00:00") => `${date}T${time}.000Z`;
 
   for (const client of clients) {
-    const people = CLIENT_PEOPLE[client.slug] ?? [];
-    const services = CLIENT_SERVICES[client.slug] ?? ["bookkeeping", "vat", "tax_return"];
+    const people = CLIENT_PEOPLE[base(client.slug)] ?? [];
+    const services = CLIENT_SERVICES[base(client.slug)] ?? ["bookkeeping", "vat", "tax_return"];
     const contact = (client.contact_name ?? people[0]?.name ?? "").replace(/^Dr\s+/, "");
     const fileId = randomUUID(), signedOn = "2025-06-20";
     const letter = engagementLetter({ date: "2025-06-16", practice: { name: practice.name, address: practice.address, partner: "Maria Antoniou" },
@@ -1537,7 +1598,7 @@ async function writeClientFiles(pg: PGlite) {
     // The latest approved assessment, dated so its next review falls where REVIEW_IN says.
     const factors = suggestFactors({ business: client.industry, services, face_to_face: true, introduced_by: null }, stored);
     const result = assessRisk(factors, stored);
-    const review = addDays(today, REVIEW_IN[client.slug] ?? 400);
+    const review = addDays(today, REVIEW_IN[base(client.slug)] ?? 400);
     const years = { low: 3, normal: 2, high: 1 }[result.level];
     const approvedOn = `${Number(review.slice(0, 4)) - years}${review.slice(4)}`;
     if (nextReview(approvedOn, result.level) !== review) throw new Error(`${client.slug}: review date does not line up`);

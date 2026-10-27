@@ -1055,3 +1055,22 @@ test("a practice with many clients switches company by typing: a few letters or 
   await expect(page.getByRole("dialog").getByRole("link").nth(2)).toHaveText(/Pixelforge Studio Ltd/);
 });
 
+test("a big practice's dashboard puts the clients that need something first, yours apart, found by name or number; deadlines open on one day", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /^Yours · \d+/ }).click();
+  await expect(page).toHaveURL(/\?view=mine$/);
+  await page.getByRole("link", { name: /^All · \d+/ }).click();
+  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/);
+  await page.getByLabel("Find a client").fill("412907");
+  await page.getByLabel("Find a client").press("Enter");
+  await expect(page).toHaveURL(/q=412907/);
+  const table = page.getByRole("region", { name: "Clients" });
+  await expect(table.getByRole("link", { name: /Aegean Blue Marine Services Ltd/ })).toBeVisible();
+  await expect(table.getByRole("row")).toHaveCount(2);
+
+  await page.goto("/deadlines?due=2026-11-30");
+  await expect(page.getByText(/^Due on 30 Nov 2026: \d+ deadlines?\./)).toBeVisible();
+  await page.getByRole("link", { name: "Show every day" }).click();
+  await expect(page).toHaveURL(/\/deadlines$/);
+});
+

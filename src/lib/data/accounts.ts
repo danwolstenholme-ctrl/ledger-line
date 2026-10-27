@@ -102,11 +102,14 @@ export async function getVatSummary(from: string, to: string) {
 
 const PURCHASE_TYPES = new Set(["direct_costs", "expense", "depreciation", "fixed_asset", "current_asset"]);
 
-type UkFiguresRow = Record<"sales_vat" | "purchase_vat" | "sales_net" | "purchases_net" | "rc_services_net" | "rc_services_vat" | "rc_construction_net" | "rc_construction_vat" | "rc_import_net" | "rc_import_vat" | "capital_net" | "capital_vat", number>;
+export type UkFiguresRow = Record<"sales_vat" | "purchase_vat" | "sales_net" | "purchases_net" | "rc_services_net" | "rc_services_vat" | "rc_construction_net" | "rc_construction_vat" | "rc_import_net" | "rc_import_vat" | "capital_net" | "capital_vat", number>;
 
 /** A UK company's VAT figures for a period, by invoice date or, under cash accounting, as money moved (uk_vat_figures in the schema). */
 export async function getUkVatFigures(org: Pick<OrganisationRow, "id" | "vat_cash_accounting">, from: string, to: string): Promise<UkVatFigures> {
-  const row = await one<UkFiguresRow>("select * from uk_vat_figures($1, $2, $3, $4)", [org.id, from, to, org.vat_cash_accounting]);
+  return ukFiguresOf(await one<UkFiguresRow>("select * from uk_vat_figures($1, $2, $3, $4)", [org.id, from, to, org.vat_cash_accounting]));
+}
+/** The figures a UK return is made from, as uk_vat_figures gives them. */
+export function ukFiguresOf(row: UkFiguresRow | null): UkVatFigures {
   const n = (key: keyof UkFiguresRow) => Math.round(Number(row?.[key] ?? 0) * 100) / 100;
   return {
     salesVat: n("sales_vat"), purchaseVat: n("purchase_vat"), salesNet: n("sales_net"), purchasesNet: n("purchases_net"),
@@ -412,7 +415,7 @@ export async function getAccountsDashboard() {
     getVatSummary(quarterStart, today),
     sql<OpenInvoice>("select id, balance, days_overdue, currency, issued_on, customer_id from v_invoice_directory where organisation_id = $1 and status in ('issued', 'part_paid')", [org.id]),
     sql<OpenBill>("select id, supplier_name, number, balance, days_overdue, due_on, issued_on from v_bill_directory where organisation_id = $1 and status in ('awaiting_payment', 'part_paid')", [org.id]),
-    one<{ count: number }>("select count(*) as count from v_bank_statement_lines where organisation_id = $1 and status in ('unmatched', 'partial')", [org.id]),
+    one<{ count: number }>("select count(*) as count from v_bank_lines_unmatched where organisation_id = $1", [org.id]),
   ]);
   const [unusedCredit, unusedSupplierCredit] = await Promise.all([
     one<{ remaining: number }>("select coalesce(sum(remaining), 0) as remaining from v_credit_note_directory where organisation_id = $1 and status = 'issued' and issued_on <= $2", [org.id, today]),

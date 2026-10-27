@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { PageBody, Panel } from "@/components/common/primitives";
 import { InlineSubmit, SubmitButton } from "@/components/common/form-fields";
 import { StatTile } from "@/components/reports/report-charts";
-import { RecordBadge, RecordEmpty, RecordFilterLinks, RecordHeader, recordOutlineButton } from "@/components/records/record-layout";
+import { RecordBadge, RecordEmpty, RecordFilterLinks, RecordHeader, RecordPagination, recordOutlineButton } from "@/components/records/record-layout";
 import { ClientFilter } from "@/components/common/client-filter";
 
 const weekday = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
@@ -68,6 +68,8 @@ function Action({ row }: { row: DeadlineRow }) {
   </div>;
 }
 
+const PAGE_SIZE = 60;
+
 /**
  * Deadlines, worked out from the books: every client's at practice level, or
  * one company's inside it. `company` fixes the client and hides the choice.
@@ -78,16 +80,23 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
   const path = company ? `/c/${company}/deadlines` : "/deadlines";
   const client = company ? null : data.clients.find(item => item.slug === query.client);
   const country = company ? (await getOrgBySlug(company))?.country ?? "CY" : "CY";
+  // A practice with hundreds of clients has thousands of deadlines: a page of them at a time, the most pressing first.
+  // `?due=`: the deadlines falling on one day, as a grouped line in the calendar opens them.
+  const due = query.due && /^\d{4}-\d{2}-\d{2}$/.test(query.due) ? query.due : null;
+  const listed = due ? data.rows.filter(row => row.due === due) : data.rows;
+  const page = Math.max(1, Math.min(Number(query.page) || 1, Math.ceil(listed.length / PAGE_SIZE) || 1));
+  const shown = listed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const groups = new Map<string, DeadlineRow[]>();
-  for (const row of data.rows) {
+  for (const row of shown) {
     const group = row.state === "overdue" ? "Overdue" : monthOf(row.due);
     groups.set(group, [...(groups.get(group) ?? []), row]);
   }
-  const href = (next: { view?: string; client?: string | null }) => {
+  const href = (next: { view?: string; client?: string | null; due?: null }) => {
     const params = new URLSearchParams();
     const v = next.view ?? view, c = company ? null : next.client === undefined ? query.client : next.client;
     if (v !== "all") params.set("view", v);
     if (c) params.set("client", c);
+    if (due && next.due !== null) params.set("due", due);
     return `${path}${params.size ? `?${params}` : ""}`;
   };
 
@@ -107,7 +116,10 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
       {company ? null : <ClientFilter label="Client" options={[{ label: "All clients", href: href({ client: null }), active: !client }, ...data.clients.map(item => ({ label: item.name.replace(/ (Ltd|Limited)$/, ""), href: href({ client: item.slug }), active: client?.slug === item.slug }))]} />}
     </div>
 
-    {data.rows.length ? [...groups].map(([group, rows]) => <Panel key={group} className="overflow-hidden">
+    {due ? <p role="status" className="border-hairline bg-surface-sunken text-ink flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-[12.5px]">
+      Due on {formatDate(due)}: {listed.length} deadline{listed.length === 1 ? "" : "s"}. <Link href={href({ due: null })} className="text-brand font-medium hover:underline">Show every day</Link>
+    </p> : null}
+    {shown.length ? [...groups].map(([group, rows]) => <Panel key={group} className="overflow-hidden">
       <h2 className={cn("border-hairline bg-surface-sunken border-b px-4 py-2 text-[11px] font-semibold tracking-[0.06em] uppercase", group === "Overdue" ? "text-critical" : "text-ink-faint")}>{group}</h2>
       <ul className="divide-hairline divide-y">{rows.map(row => <li key={row.key} className={cn("grid items-center gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[3.5rem_minmax(0,1fr)_9rem_8.5rem_8.5rem]", row.state === "done" && "opacity-70")}>
         <span className="text-ink-faint flex items-baseline gap-1.5 text-[11.5px] sm:block"><b className="text-ink block text-[17px] leading-tight font-semibold tabular-nums">{formatDate(row.due).replace(/ \d{4}$/, "")}</b>{weekday(row.due)}</span>
@@ -121,6 +133,7 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
         <span className="sm:text-right"><Action row={row} /></span>
       </li>)}</ul>
     </Panel>) : <Panel><RecordEmpty title={view === "overdue" ? "Nothing is overdue" : "No deadlines here"}>{view === "overdue" ? "Every deadline past its date has been dealt with." : "Nothing falls due in the next three months for this choice."}</RecordEmpty></Panel>}
+    {listed.length > PAGE_SIZE ? <Panel><RecordPagination page={page} total={listed.length} pageSize={PAGE_SIZE} href={href({})} /></Panel> : null}
     <p className="text-ink-faint text-[12px]">Showing what is overdue and what falls due by {formatDate(data.until)}.{country === "GB" ? "" : " VIES statements appear for the months a company sold services to businesses in other EU states."}</p>
   </PageBody>;
 }
