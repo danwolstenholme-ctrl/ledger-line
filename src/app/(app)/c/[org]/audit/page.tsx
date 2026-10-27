@@ -24,6 +24,7 @@ const CLIENT_EVENTS: Record<string, string> = {
   "sanctions:screened": "Screened against the EU sanctions list", "sanctions:resolved": "Possible sanctions match decided",
   "risk:assessed": "Risk assessed", "risk:approved": "Risk rating approved",
   "invitation:invited": "Invitation sent", "invitation:accepted": "Invitation accepted: joined", "invitation:revoked": "Invitation withdrawn",
+  "document_link:shared": "Shared with the customer as a link", "document_link:stopped": "Customer’s link stopped", "document_link:accepted": "Quote accepted online by the customer",
   "year_end:updated": "Year end updated",
 };
 

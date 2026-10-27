@@ -942,6 +942,37 @@ create table quotes (
   foreign key (organisation_id, invoice_id) references invoices (organisation_id, id)
 );
 
+-- ---------------------------------------------------------------------------
+-- A link that lets a customer read one of the company's invoices or quotes
+-- without signing in, sent by WhatsApp, Viber, SMS or email. The token is the
+-- link: whoever holds it reads that one document, until the link is stopped.
+-- When it was opened is kept, and a quote accepted from it; the invoice is
+-- still raised by the company, in Ledgerline.
+-- ---------------------------------------------------------------------------
+create table document_links (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  invoice_id      uuid,
+  quote_id        uuid,
+  token           text not null unique check (token ~ '^[A-Za-z0-9_-]{32}$'),
+  created_by      uuid references app_users (id) on delete set null,
+  created_at      timestamptz not null default now(),
+  revoked_at      timestamptz,
+  first_viewed_at timestamptz,
+  last_viewed_at  timestamptz,
+  views           integer not null default 0 check (views >= 0),
+  -- A quote accepted by its customer from the link, in the name they typed.
+  accepted_at     timestamptz,
+  accepted_name   text check (accepted_name is null or length(btrim(accepted_name)) between 2 and 200),
+  constraint document_links_one check (num_nonnulls(invoice_id, quote_id) = 1),
+  constraint document_links_accepted check (accepted_at is null or (quote_id is not null and accepted_name is not null)),
+  foreign key (organisation_id, invoice_id) references invoices (organisation_id, id) on delete cascade,
+  foreign key (organisation_id, quote_id) references quotes (organisation_id, id) on delete cascade
+);
+-- One link at a time to each document: a new one is made only after the last is stopped.
+create unique index document_links_open on document_links (coalesce(invoice_id, quote_id)) where revoked_at is null;
+create index document_links_org on document_links (organisation_id);
+
 create table quote_lines (
   id              uuid primary key default gen_random_uuid(),
   organisation_id uuid not null,
@@ -2895,6 +2926,19 @@ begin
   return new;
 end $$;
 create trigger invitations_audit after insert or update on invitations for each row execute function audit_invitation();
+-- A document shared with its customer, the link stopped, a quote accepted from it. Its opening is counted, not chained.
+create function audit_document_link() returns trigger language plpgsql as $$
+declare v_action text := case when tg_op = 'INSERT' then 'shared' when new.revoked_at is not null and old.revoked_at is null then 'stopped'
+  when new.accepted_at is not null and old.accepted_at is null then 'accepted' end;
+begin
+  if v_action is not null then
+    perform audit_append(new.organisation_id, v_action, 'document_link', new.id, jsonb_build_object(
+      'document', coalesce((select 'Invoice ' || number from invoices where id = new.invoice_id), (select 'Quote ' || number from quotes where id = new.quote_id)),
+      'name', new.accepted_name));
+  end if;
+  return new;
+end $$;
+create trigger document_links_audit after insert or update on document_links for each row execute function audit_document_link();
 create trigger risk_assessments_audit after insert or update on risk_assessments for each row execute function audit_client_check();
 
 -- ---------------------------------------------------------------------------
@@ -3161,6 +3205,7 @@ alter table payroll_runs enable row level security;
 alter table payslips enable row level security;
 alter table invitations enable row level security;
 alter table user_dismissals enable row level security;
+alter table document_links enable row level security;
 alter table invoice_lines enable row level security;
 alter table invoice_payments enable row level security;
 alter table invoices enable row level security;
@@ -3399,6 +3444,11 @@ create policy invitations_access on invitations for all to authenticated
   using (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]))
   with check (practice_id = any ((select my_practices())::uuid[]) or organisation_id = any ((select owned_companies())::uuid[]));
 create policy app_users_update on app_users for update to authenticated using (id = app_user_id()) with check (id = app_user_id());
+-- A document's link for its customer: seen by whoever sees the company, made and stopped by whoever keeps its books. Opening it is Ledgerline's own business.
+create policy document_links_read on document_links for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy document_links_insert on document_links for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy document_links_update on document_links for update to authenticated
+  using (organisation_id = any ((select writable_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
 -- What someone has put away is theirs alone, at a company they can see.
 create policy user_dismissals_own on user_dismissals for all to authenticated
   using (user_id = app_user_id()) with check (user_id = app_user_id() and organisation_id = any ((select visible_companies())::uuid[]));

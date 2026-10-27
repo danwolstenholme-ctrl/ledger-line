@@ -107,6 +107,21 @@ to reconcile.
   the bank details and reference); **Open in email** opens it in your email
   app, ready to attach the PDF, and the invoice is marked as sent. Invoices
   not yet sent are listed under **Not sent** and on the Home.
+- **Share as a link** (on an issued invoice, or a quote): a private link the
+  customer opens without signing in, on their phone. They see what is owed
+  and by when, the lines and VAT, the IBAN, BIC and reference to copy into
+  their banking app, and **Download PDF**; nothing else of the books. Send it
+  with **WhatsApp** (to the customer's own number when they have one),
+  **Viber**, **Text** or **Email**: the message is written, with nothing to
+  attach, and the invoice counts as sent. The panel says when they opened it
+  ("Opened once, last 2 minutes ago"); **See what they see** previews it
+  without counting, and **Stop the link** shuts it at once. The page wears the
+  company's logo and colour.
+- A quote's link has **Accept this quote**: the customer types their name and
+  accepts. Nothing posts: the quote says "accepted it online", the person
+  who shared it gets a to-do to raise the invoice (one press, as before), and
+  the acceptance is on the audit trail in the customer's name. Try it with
+  `LRC-Q-001`.
 - **Record payment**, or tick **Paid already** on a new invoice for a card or
   cash sale: issued and paid in one step. **Copy** starts a new invoice from
   an old one.

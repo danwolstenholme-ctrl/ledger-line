@@ -141,6 +141,18 @@ expect("Nor in Maria's name", await count(nikos, "insert into calendar_feeds (us
 expect("Nikos sees his own link, not Maria's", await count(nikos, "select count(*) as n from calendar_feeds"), is(1));
 expect("Nobody signed in sees no calendar link", await count(null, "select count(*) as n from calendar_feeds"), is(0));
 
+// A document shared with its customer as a link: made by whoever keeps the company's books, seen by whoever sees the company.
+const pixelInvoice = (await conn.query("select id from invoices where organisation_id = $1 and status = 'issued' limit 1", [pixelforge])).rows[0].id as string;
+const aegeanInvoice = (await conn.query("select id from invoices where organisation_id = $1 and status = 'issued' limit 1", [aegean])).rows[0].id as string;
+const share = "insert into document_links (organisation_id, invoice_id, token) values ($1, $2, $3) returning id";
+expect("Nikos shares a Pixelforge invoice as a link", await count(nikos, share, [pixelforge, pixelInvoice, "N".repeat(32)]), is(1));
+expect("But not Aegean Blue's", await count(nikos, share, [aegean, aegeanInvoice, "M".repeat(32)]), refused);
+expect("Nor an Aegean Blue invoice filed under Pixelforge", await count(nikos, share, [pixelforge, aegeanInvoice, "L".repeat(32)]), (value: unknown) => value === 0 || refused(value) || (typeof value === "string" && /foreign key/.test(value)));
+expect("The auditor sees Pixelforge's link", await count(auditor, "select count(*) as n from document_links"), is(1));
+expect("But cannot stop it", await count(auditor, "update document_links set revoked_at = now() returning id"), (value: unknown) => value === 0 || refused(value));
+expect("Eva, at another practice, sees no link", await count(eva, "select count(*) as n from document_links"), is(0));
+expect("Nobody signed in sees none either: a link is opened by Ledgerline, not read from the table", await count(null, "select count(*) as n from document_links"), is(0));
+
 // A company's first steps, put away: each person's own, at a company they can see.
 const dismissMine = "insert into user_dismissals (user_id, organisation_id, what) values (app_user_id(), $1, 'getting_started') returning user_id";
 expect("Nikos puts Pixelforge's first steps away", await count(nikos, dismissMine, [pixelforge]), is(1));

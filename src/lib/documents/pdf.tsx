@@ -9,6 +9,7 @@ import { formatQuantity, formatUnitPrice } from "@/lib/domain/line-math";
 import { formatAmount, formatDate } from "@/lib/format";
 import type { OrganisationRow } from "@/types/database";
 import { ROBOTO_MEDIUM, ROBOTO_REGULAR } from "./fonts";
+import { accentOf, treatmentNote } from "./document-text";
 
 /**
  * The documents a customer receives, as A4 PDFs in the name of the company
@@ -81,12 +82,6 @@ function lines(text: string | null | undefined) {
 const heOf = (org: OrganisationRow) => !org.he_number ? null : org.country === "GB" ? `Company no. ${org.he_number}` : /^HE/i.test(org.he_number) ? org.he_number : `HE ${org.he_number}`;
 
 /** The company's own colour, and a text colour that reads on it: dark on a light accent, white on a dark one. */
-function accentOf(org: OrganisationRow) {
-  const hex = /^#[0-9a-f]{6}$/i.test(org.invoice_accent) ? org.invoice_accent : INK;
-  const [r, g, b] = [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return { accent: hex, onAccent: 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? INK : "#ffffff" };
-}
-
 /** The issuing company across the top: its logo or its name, and what it prints about itself. */
 function CompanyHeader({ org, logo }: { org: OrganisationRow; logo: string | null }) {
   // A UK company's UTR is HMRC's business, not its customers': it isn't printed.
@@ -123,22 +118,6 @@ function Footer({ org, title }: { org: OrganisationRow; title: string }) {
 }
 
 /** What the document says about VAT when it charges none. */
-function treatmentNote(data: DocumentPdfData) {
-  const { document, org } = data;
-  if (!org.vat_registered) return `${org.name} is not registered for VAT. No VAT has been charged.`;
-  if (org.country === "GB") {
-    // The CIS domestic reverse charge: the invoice says so, and shows the VAT the customer is to pay HMRC.
-    if (document.vat_treatment === "reverse_charge") return `Reverse charge: customer to pay the VAT to HMRC. VAT at 20% on ${formatAmount(document.net, org.currency)}: ${formatAmount(Math.round(Number(document.net) * 20) / 100, org.currency)}.`;
-    if (document.vat_treatment === "exempt") return "Exempt from VAT.";
-    if (document.vat_treatment === "outside_scope") return "Outside the scope of UK VAT: the place of supply is outside the UK.";
-    return null;
-  }
-  if (document.vat_treatment === "reverse_charge") return "Reverse charge: VAT to be accounted for by the recipient under Article 196 of Council Directive 2006/112/EC.";
-  if (document.vat_treatment === "exempt") return "Exempt from VAT.";
-  if (document.vat_treatment === "outside_scope") return "Outside the scope of Cyprus VAT: the place of supply is outside Cyprus.";
-  return null;
-}
-
 function stampFor(data: DocumentPdfData) {
   const { kind, document } = data;
   if (kind === "invoice") {

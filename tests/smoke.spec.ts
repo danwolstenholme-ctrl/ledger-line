@@ -1218,3 +1218,70 @@ test("on a phone, the owner adds from the + at the foot of the screen: a receipt
   await expect(bar.getByRole("link", { name: "Invoices" })).toHaveAttribute("aria-current", "page");
   await phone.close();
 });
+
+test("an invoice goes to its customer as a link for WhatsApp, Viber, a text or email: they open it without signing in, and the company sees they did", async ({ page, browser }) => {
+  await page.goto("/c/larnaka-roast/sales");
+  await page.getByRole("link", { name: "LRC-2026-0116" }).click();
+  const share = page.locator("section.ll-panel").filter({ has: page.getByRole("heading", { name: "Share with Coral Sands Hotel Ltd" }) });
+  await share.getByRole("button", { name: "Share as a link" }).click();
+  const link = share.getByRole("textbox", { name: "Link to LRC-2026-0116" });
+  await expect(link).toHaveValue(/\/d\/[A-Za-z0-9_-]{32}$/);
+  const url = await link.inputValue();
+  expect(await share.getByRole("link", { name: "WhatsApp" }).getAttribute("href")).toContain(encodeURIComponent(url));
+  expect(decodeURIComponent((await share.getByRole("link", { name: "Email" }).getAttribute("href"))!)).toContain(`Invoice LRC-2026-0116 from Larnaka Roast Coffee Co Ltd: €2,266.11, due 11 Nov 2026. View it and download it here:\n\n${url}`);
+  await expect(share).toContainText("Not opened yet");
+
+  const outside = await browser.newContext();
+  const customer = await outside.newPage();
+  await customer.goto(url);
+  await expect(customer.getByRole("heading", { name: "Invoice LRC-2026-0116" })).toBeVisible();
+  await expect(customer.getByText("Balance due")).toBeVisible();
+  await expect(customer.getByText("€2,266.11").first()).toBeVisible();
+  await expect(customer.getByText("Pay by bank transfer to Eurobank current account")).toBeVisible();
+  await expect(customer.getByRole("button", { name: "Copy the reference" })).toBeVisible();
+  const pdf = await customer.request.get(`${url}/pdf`);
+  expect(pdf.status()).toBe(200);
+  expect(pdf.headers()["content-type"]).toBe("application/pdf");
+
+  await page.reload();
+  await expect(share).toContainText("Opened once");
+  // Looking at it as the customer sees it isn't counted.
+  await page.goto(`${url}?preview=1`);
+  await expect(page.getByText("This is what Coral Sands Hotel Ltd sees.")).toBeVisible();
+  await page.goBack();
+  await expect(share).toContainText("Opened once");
+
+  // Stopped, it opens nothing.
+  await share.getByRole("button", { name: "Stop the link" }).click();
+  await expect(share.getByRole("button", { name: "Share as a link" })).toBeVisible();
+  await customer.goto(url);
+  await expect(customer.getByRole("heading", { name: "This link can’t be used" })).toBeVisible();
+  await outside.close();
+});
+
+test("a quote shared as a link is accepted online in the customer's name: the company gets a to-do to raise the invoice", async ({ page, browser }) => {
+  await page.goto("/c/larnaka-roast/quotes");
+  await page.getByRole("link", { name: "LRC-Q-001" }).click();
+  const share = page.locator("section.ll-panel").filter({ has: page.getByRole("heading", { name: "Share with Coral Sands Hotel Ltd" }) });
+  await share.getByRole("button", { name: "Share as a link" }).click();
+  const url = await share.getByRole("textbox", { name: "Link to LRC-Q-001" }).inputValue();
+
+  const outside = await browser.newContext();
+  const customer = await outside.newPage();
+  await customer.goto(url);
+  await expect(customer.getByRole("heading", { name: "Quote LRC-Q-001" })).toBeVisible();
+  await customer.getByLabel("Your name").fill("Petros Hadjigeorgiou");
+  await customer.getByRole("button", { name: "Accept this quote" }).click();
+  await expect(customer.getByText("Accepted. Thank you.")).toBeVisible();
+  await customer.reload();
+  await expect(customer.getByText(/Accepted by Petros Hadjigeorgiou on/)).toBeVisible();
+  await outside.close();
+
+  await page.reload();
+  await expect(page.getByText("Coral Sands Hotel Ltd accepted it online")).toBeVisible();
+  await expect(share).toContainText("accepted by Petros Hadjigeorgiou");
+  await page.goto("/c/larnaka-roast/crm/tasks");
+  await expect(page.getByText("Raise the invoice: Coral Sands Hotel Ltd accepted quote LRC-Q-001 online (Petros Hadjigeorgiou)")).toBeVisible();
+  await page.goto("/c/larnaka-roast/audit");
+  await expect(page.getByRole("row", { name: /Quote accepted online by the customer/ })).toContainText("Petros Hadjigeorgiou (customer)");
+});

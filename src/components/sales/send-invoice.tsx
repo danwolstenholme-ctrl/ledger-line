@@ -12,13 +12,15 @@ import { useCurrency } from "@/components/common/regime";
 export type SendInvoiceData = {
   invoiceId: string; number: string; total: number; balance: number; dueOn: string | null; customerName: string; to: string; greeting: string | null;
   company: string; sender: string; bank: { name: string; bank_details: string | null } | null; pdfHref: string; sentAt: string | null; sentTo: string | null;
+  /** The invoice's link for the customer, once shared: the message carries it, and there is nothing to attach. */
+  link?: string | null;
 };
 
 function draft(data: SendInvoiceData, currency: string) {
   const bank = data.bank ? `\n\nYou can pay by bank transfer to ${data.bank.name}:\n${data.bank.bank_details ?? ""}\nPlease quote ${data.number} as the reference.` : "";
   return {
     subject: `Invoice ${data.number} from ${data.company}`,
-    body: `Dear ${data.greeting ?? data.customerName},\n\nPlease find attached invoice ${data.number} for ${formatAmount(data.balance, currency)}${data.dueOn ? `, due by ${formatDate(data.dueOn)}` : ""}.${bank}\n\nThank you for your business.\n\nKind regards,\n${data.sender}\n${data.company}`,
+    body: `Dear ${data.greeting ?? data.customerName},\n\n${data.link ? `Here is invoice ${data.number}` : `Please find attached invoice ${data.number}`} for ${formatAmount(data.balance, currency)}${data.dueOn ? `, due by ${formatDate(data.dueOn)}` : ""}.${data.link ? ` You can view it and download it at:\n${data.link}` : ""}${bank}\n\nThank you for your business.\n\nKind regards,\n${data.sender}\n${data.company}`,
   };
 }
 
@@ -49,6 +51,6 @@ export function SendInvoicePanel({ data, startOpen = false, primary = false }: {
       <button type="button" className={recordOutlineButton} onClick={() => { void navigator.clipboard?.writeText(`${subject}\n\n${body}`).then(() => setCopied(true)); record(); }}><Copy className="size-3.5" />{copied ? "Copied" : "Copy the message"}</button>
       <button type="button" onClick={() => setOpen(false)} className="text-ink-muted hover:text-ink px-2 text-[13px]">Close</button>
     </div>
-    <p className="text-ink-faint text-[12px]">{sent ? "Marked as sent, and logged on the customer's timeline." : "Opens your email app with this message: attach the PDF before you send it."}</p>
+    <p className="text-ink-faint text-[12px]">{sent ? "Marked as sent, and logged on the customer's timeline." : data.link ? "Opens your email app with this message: the link is in it, so there is nothing to attach." : "Opens your email app with this message: attach the PDF before you send it."}</p>
   </section>;
 }

@@ -6,12 +6,15 @@ import Link from "@/components/navigation/navigation-link";
 import { getQuote } from "@/lib/data/sales";
 import { countryName } from "@/lib/domain/countries";
 import { UUID_PATTERN } from "@/lib/domain/invoices";
-import { formatDate } from "@/lib/format";
+import { formatAmount, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { RecordDetail, RecordHeader, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
 import { QuoteActions } from "@/components/sales/sale-actions";
 import { DocumentLines, PdfLinks, QuoteStatusBadge, TREATMENT_LABELS, treatmentDetail } from "@/components/sales/sales-parts";
+import { ShareLinkPanel } from "@/components/sales/share-link";
+import { getDocumentLink } from "@/lib/data/document-links";
+import { siteOrigin } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Quote" };
 
@@ -23,6 +26,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   if (!data) notFound();
   const { org, quote, lines, customer } = data;
   const open = quote.status === "draft" || quote.status === "sent";
+  const [link, origin] = await Promise.all([quote.status !== "declined" ? getDocumentLink("quote", id) : null, siteOrigin()]);
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title={`Quote ${quote.number}`} back={{ href: "/accounts/quotes", label: "Quotes" }} description={`${quote.client_name} · ${formatDate(quote.issued_on)}`}
       action={<>
@@ -34,8 +38,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
     {quote.status === "accepted" && quote.invoice_id ? <p role="status" className="border-positive-line bg-positive-soft text-positive rounded-lg border px-4 py-2.5 text-[13px]">
       Accepted{quote.accepted_on ? ` on ${formatDate(quote.accepted_on)}` : ""} and invoiced as <Link href={`/invoices/${quote.invoice_id}`} className="font-mono font-medium underline">{quote.invoice_number}</Link>.
     </p> : null}
-    {open ? <section className="ll-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <p className="text-ink text-[13px]"><span className="font-medium">Has {quote.client_name} accepted?</span> <span className="text-ink-muted">The invoice is raised with these lines, numbered and dated today.</span></p>
+    {open ? <section className={cn("ll-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3", link?.accepted_at && "border-positive-line bg-positive-soft")}>
+      {link?.accepted_at ? <p className="text-ink text-[13px]"><span className="text-positive font-semibold">{quote.client_name} accepted it online</span> <span className="text-ink-muted">on {formatDate(link.accepted_at.slice(0, 10))}, as {link.accepted_name}. Raise the invoice: it takes these lines, numbered and dated today.</span></p>
+        : <p className="text-ink text-[13px]"><span className="font-medium">Has {quote.client_name} accepted?</span> <span className="text-ink-muted">The invoice is raised with these lines, numbered and dated today.</span></p>}
       <QuoteActions id={id} status={quote.status} />
     </section> : quote.status === "declined" ? <section className="ll-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <p className="text-ink-muted text-[13px]">Declined. Reopen it if the customer comes back.</p><QuoteActions id={id} status={quote.status} />
@@ -59,13 +64,21 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         <DocumentLines lines={lines} treatment={quote.vat_treatment} registered={org.vat_registered} net={Number(quote.net)} total={Number(quote.total)} />
         {quote.notes ? <p className="border-hairline text-ink-muted border-t px-4 py-3 text-[13px] whitespace-pre-line">{quote.notes}</p> : null}
       </RecordSection>
-      <RecordSection title="Details">
-        <dl className="divide-hairline divide-y px-4">
-          <RecordDetail label="Customer" value={<Link href={`/accounts/customers/${quote.customer_id}`} className="text-brand hover:underline">{quote.client_name}</Link>} />
-          <RecordDetail label="VAT" value={treatmentDetail(org.vat_registered ? quote.vat_treatment : "exempt", org.country)} />
-          <RecordDetail label="In the books" value="Nothing: a quote posts nothing until it is accepted and invoiced." />
-        </dl>
-      </RecordSection>
+      <div className="min-w-0 space-y-4">
+        {quote.status !== "declined" ? <RecordSection title={`Share with ${quote.client_name}`} hint="They can accept it online">
+          <div className="px-4 py-3.5"><ShareLinkPanel key={link?.id ?? "none"} kind="quote" documentId={id} number={quote.number} link={link} origin={origin}
+            customer={{ name: quote.client_name, email: customer?.email ?? null, phone: customer?.phone ?? null, country: customer?.country ?? org.country }}
+            subject={`Quote ${quote.number} from ${org.name}`}
+            message={`Quote ${quote.number} from ${org.name}: ${formatAmount(quote.total)}${quote.valid_until ? `, valid until ${formatDate(quote.valid_until)}` : ""}. View it, and accept it, here:`} /></div>
+        </RecordSection> : null}
+        <RecordSection title="Details">
+          <dl className="divide-hairline divide-y px-4">
+            <RecordDetail label="Customer" value={<Link href={`/accounts/customers/${quote.customer_id}`} className="text-brand hover:underline">{quote.client_name}</Link>} />
+            <RecordDetail label="VAT" value={treatmentDetail(org.vat_registered ? quote.vat_treatment : "exempt", org.country)} />
+            <RecordDetail label="In the books" value="Nothing: a quote posts nothing until it is accepted and invoiced." />
+          </dl>
+        </RecordSection>
+      </div>
     </div>
   </PageBody>;
 }

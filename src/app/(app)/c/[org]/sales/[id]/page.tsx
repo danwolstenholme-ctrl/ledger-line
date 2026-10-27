@@ -19,6 +19,9 @@ import { InvoiceStatusButton, RecordPaymentForm, RestoreInvoiceButton } from "@/
 import { DocumentLines, InvoiceStatusBadge, PdfLinks, TREATMENT_LABELS, treatmentDetail } from "@/components/sales/sales-parts";
 import { ReminderPanel } from "@/components/sales/reminder";
 import { SendInvoicePanel, type SendInvoiceData } from "@/components/sales/send-invoice";
+import { ShareLinkPanel } from "@/components/sales/share-link";
+import { getDocumentLink } from "@/lib/data/document-links";
+import { siteOrigin } from "@/lib/site";
 import { answerView, latestChecks, vatKey } from "@/lib/vies";
 import { VatCheckButton } from "@/components/vat/vat-check";
 
@@ -35,14 +38,16 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
   const sendable = invoice.status === "issued" || invoice.status === "part_paid" || invoice.status === "paid";
   const reverseCharge = invoice.vat_treatment === "reverse_charge";
   const vat = reverseCharge ? vatKey(invoice.client_vat_number, invoice.client_country) : null;
-  const [postings, reminder, checks] = await Promise.all([getPostings([id, ...payments.map(payment => payment.id)]), sendable ? getReminder(invoice.customer_id) : null, latestChecks(vat ? [vat] : [])]);
+  const [postings, reminder, checks, link, origin] = await Promise.all([getPostings([id, ...payments.map(payment => payment.id)]), sendable ? getReminder(invoice.customer_id) : null, latestChecks(vat ? [vat] : []),
+    sendable ? getDocumentLink("invoice", id) : null, siteOrigin()]);
   const balance = Number(invoice.balance), paid = Number(invoice.amount_paid), credited = Number(invoice.amount_credited);
   const open = invoice.status === "issued" || invoice.status === "part_paid";
   const editable = invoice.status === "draft" || (invoice.status === "issued" && paid === 0 && credited === 0);
   const creditable = (invoice.status === "issued" || invoice.status === "part_paid" || invoice.status === "paid") && credits.filter(item => item.raised_here).length < 20;
   const pdf = `/c/${org.slug}/sales/${id}/pdf`;
   const send: SendInvoiceData | null = reminder ? { invoiceId: id, number: invoice.number, total: Number(invoice.total), balance: Number(invoice.balance), dueOn: invoice.due_on,
-    customerName: invoice.client_name, to: reminder.to, greeting: reminder.greeting, company: org.name, sender: reminder.sender, bank: reminder.bank, pdfHref: pdf, sentAt: invoice.sent_at, sentTo: invoice.sent_to } : null;
+    customerName: invoice.client_name, to: reminder.to, greeting: reminder.greeting, company: org.name, sender: reminder.sender, bank: reminder.bank, pdfHref: pdf, sentAt: invoice.sent_at, sentTo: invoice.sent_to,
+    link: link ? `${origin}/d/${link.token}` : null } : null;
 
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title={`Invoice ${invoice.number}`} back={{ href: "/invoices", label: "Invoices" }}
@@ -128,6 +133,14 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
             <p className="text-ink mb-2.5 text-[13.5px] font-semibold">Record a payment</p>
             <RecordPaymentForm invoiceId={id} balance={balance} banks={banks} defaultBank={org.default_bank_account_id} today={today} />
           </div> : null}
+        </RecordSection> : null}
+
+        {sendable ? <RecordSection title={`Share with ${invoice.client_name}`} hint="As a link: nothing to attach">
+          <div className="px-4 py-3.5"><ShareLinkPanel key={link?.id ?? "none"} kind="invoice" documentId={id} number={invoice.number} link={link} origin={origin}
+            customer={{ name: invoice.client_name, email: customer?.email ?? null, phone: customer?.phone ?? null, country: customer?.country ?? org.country }}
+            subject={`Invoice ${invoice.number} from ${org.name}`}
+            message={open ? `Invoice ${invoice.number} from ${org.name}: ${formatAmount(balance)}${invoice.due_on ? `, due ${formatDate(invoice.due_on)}` : ""}. View it and download it here:`
+              : `Invoice ${invoice.number} from ${org.name}, paid in full. View it and download it here:`} /></div>
         </RecordSection> : null}
 
         <RecordSection title="Details">

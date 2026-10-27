@@ -220,7 +220,11 @@ export async function logoVersion(orgId: string) {
 
 /** Everything the PDF prints about one invoice, quote or credit note. */
 export async function getDocumentForPdf(kind: SalesKind, id: string) {
-  const org = await requireOrg();
+  return documentFor(await requireOrg(), kind, id);
+}
+
+/** The same for a given company: what a shared link opens is read with Ledgerline's own rights (data/document-links). */
+export async function documentFor(org: OrganisationRow, kind: SalesKind, id: string) {
   const view = kind === "invoice" ? "v_invoice_directory" : kind === "quote" ? "v_quote_directory" : "v_credit_note_directory";
   const document = await one<InvoiceDirectoryRow | QuoteDirectoryRow | CreditNoteDirectoryRow>(`select * from ${view} where id = $1 and organisation_id = $2`, [id, org.id]);
   if (!document) return null;
