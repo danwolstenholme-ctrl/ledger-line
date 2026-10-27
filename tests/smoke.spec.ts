@@ -59,18 +59,20 @@ test("white label rebrands every screen", async ({ page }) => {
   await expect(page.getByRole("complementary", { name: "Main navigation" }).getByText(/Powered by/)).toBeVisible();
 });
 
-test("each client has the CRM: to-dos, the pipeline, and a won enquiry becomes a customer in the books", async ({ page }) => {
+test("each client has the CRM: to-dos, the pipeline in its own stages, and a won enquiry becomes a customer with its first job", async ({ page }) => {
   await page.goto("/c/larnaka-roast/crm");
   await expect(page.getByRole("heading", { name: "My to-dos" })).toBeVisible();
   await page.getByLabel("New to-do").fill("Call the roastery about the green coffee order");
   await page.getByLabel("New to-do").press("Enter");
   await expect(page.getByText("Call the roastery about the green coffee order")).toBeVisible();
-  await page.goto("/c/larnaka-roast/crm/enquiries");
-  await expect(page.getByRole("region", { name: "Proposal sent" })).toBeVisible();
-  await page.getByRole("region", { name: "Proposal sent" }).getByRole("link").first().click();
-  await page.getByRole("button", { name: "Won: make a customer" }).click();
-  await expect(page.getByRole("heading", { name: "Matters" })).toBeVisible();
-  await expect(page.getByText("Owes you")).toBeVisible();
+  await page.goto("/c/larnaka-roast/crm/pipeline");
+  await page.getByRole("region", { name: "Confirmed" }).getByRole("link").first().click();
+  await page.getByRole("button", { name: "Mark as won" }).click();
+  // A café and roastery's work is its orders: the new one opens with its first to-do, and the customer is in the books.
+  await expect(page.getByText(/^Order #\d+/)).toBeVisible();
+  await expect(page.getByText("Confirm the date and time with the customer")).toBeVisible();
+  await page.getByRole("link", { name: "Raise an invoice" }).click();
+  await expect(page.getByRole("heading", { name: "New invoice" })).toBeVisible();
 });
 
 test("a company's home puts the everyday actions first", async ({ page }) => {
@@ -422,7 +424,7 @@ test("a journal is posted, edited, reversed in the next month and removed", asyn
 });
 
 test("an enquiry sent from the company's website form lands in its pipeline, assigned, with a call-back due", async ({ page }) => {
-  await page.goto("/c/larnaka-roast/crm/enquiries/website");
+  await page.goto("/c/larnaka-roast/crm/pipeline/form");
   const form = await page.getByRole("link", { name: "Open the form" }).getAttribute("href");
   expect(form).toMatch(/^\/f\/ll_form_[A-Za-z0-9]{24}$/);
   await page.goto(form!);
@@ -434,7 +436,7 @@ test("an enquiry sent from the company's website form lands in its pipeline, ass
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("heading", { name: "Thank you" })).toBeVisible();
 
-  await page.goto("/c/larnaka-roast/crm/enquiries");
+  await page.goto("/c/larnaka-roast/crm/pipeline");
   const card = page.getByRole("link", { name: /Eleni Charalambous/ });
   await expect(card).toContainText("From your website");
   await card.click();
@@ -443,7 +445,7 @@ test("an enquiry sent from the company's website form lands in its pipeline, ass
 });
 
 test("the enquiries API takes JSON with a form key, refuses a wrong key, and a new key retires the old one", async ({ page }) => {
-  await page.goto("/c/pixelforge/crm/enquiries/website");
+  await page.goto("/c/pixelforge/crm/pipeline/form");
   const token = (await page.getByRole("link", { name: "Open the form" }).getAttribute("href"))!.replace("/f/", "");
   const post = (key: string, data: Record<string, string>) => page.request.post("/api/v1/enquiries", { headers: { authorization: `Bearer ${key}` }, data });
 
@@ -611,6 +613,9 @@ test("a new client is taken on: the letter signed through their link, everyone s
   await page.getByRole("button", { name: "Take them on: open the books" }).click();
   await expect(page).toHaveURL(/\/c\/kypros-ferry-lines\?opened=1$/);
   await expect(page.getByText(/Kypros Ferry Lines Ltd is taken on, and its books are open/)).toBeVisible();
+  // Its Ledgerline is shaped as a shipping business's from the start: its clients and its jobs.
+  await expect(page.getByRole("complementary", { name: "Main navigation" }).getByRole("link", { name: "Clients" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Main navigation" }).getByRole("link", { name: "Jobs" })).toBeVisible();
 
   await page.goto("/c/saltlake-accounting/audit");
   await expect(page.getByRole("row", { name: /Engagement letter signed/ })).toContainText("Andreas Michaelides (client)");
@@ -812,7 +817,8 @@ test("the sidebar runs customers first, then money, then reports and tax", async
   await page.goto("/c/kalamies-dental");
   const menu = page.getByRole("complementary", { name: "Main navigation" });
   await expect(menu.locator("p.ll-eyebrow")).toHaveText(["CRM", "Money", "Reports & tax"]);
-  await expect(menu.getByRole("link")).toContainText(["Home", "Enquiries", "Customers", "Quotes", "Invoices", "Products", "Matters", "Tasks", "Calendar", "Bank", "Upload receipts", "Bills", "Suppliers", "Payroll", "Reports", "VAT returns", "Deadlines", "Year end"]);
+  // In the clinic's own words: its patients and insurers, and its treatment plans.
+  await expect(menu.getByRole("link")).toContainText(["Home", "Enquiries", "Patients and insurers", "Quotes", "Invoices", "Products", "Treatment plans", "Tasks", "Calendar", "Bank", "Upload receipts", "Bills", "Suppliers", "Payroll", "Reports", "VAT returns", "Deadlines", "Year end"]);
 });
 
 test("the calendar puts every client's deadlines on their days, and one client's everything", async ({ page }) => {
@@ -960,3 +966,92 @@ test("Cyprus payroll: a month worked out from the year so far, extra pay added, 
   await page.goto("/c/thames-edge-joinery");
   await expect(page.getByRole("complementary", { name: "Main navigation" }).getByRole("link", { name: "Payroll" })).toHaveCount(0);
 });
+
+test("each company's CRM is its own: a port agent's jobs carry the vessel and port, a clinic's are treatment plans, a holding company keeps opportunities", async ({ page }) => {
+  const menu = page.getByRole("complementary", { name: "Main navigation" });
+  await page.goto("/c/aegean-blue-marine/crm/jobs");
+  await expect(menu.getByRole("link", { name: "Clients" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "In port" })).toContainText("Vassiliko");
+  await page.getByRole("link", { name: /Tanker call at Vassiliko/ }).click();
+  await expect(page.getByText("MT Meridian Grace", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Job #\d+ · Meridian Ship Management Ltd/)).toBeVisible();
+
+  await page.goto("/c/kalamies-dental/crm/jobs");
+  await expect(page.getByRole("heading", { name: "Treatment plans", level: 1 })).toBeVisible();
+  await page.getByRole("link", { name: /Clear aligners/ }).click();
+  await expect(page.getByText(/Keep clinical notes in your clinical records system/)).toBeVisible();
+
+  await page.goto("/c/mesogeios-holdings/crm/pipeline");
+  await expect(page.getByRole("heading", { name: "Opportunities", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Proposal" })).toContainText("Acquisition");
+  await expect(menu.getByRole("link", { name: "Quotes" })).toHaveCount(0);
+  await expect(menu.getByRole("link", { name: "Projects" })).toHaveCount(0);
+});
+
+test("deals are dragged along the board: to the next stage, and to lost with the reason", async ({ page }) => {
+  await page.goto("/c/troodos-gold/crm/pipeline");
+  const card = page.getByRole("region", { name: "New" }).getByRole("listitem").first();
+  const title = (await card.locator("a > span").first().innerText()).split("\n")[0];
+  await card.dragTo(page.getByRole("region", { name: "Samples sent" }));
+  await expect(page.getByRole("region", { name: "Samples sent" })).toContainText(title);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Samples sent" })).toContainText(title);
+
+  const next = page.getByRole("region", { name: "Samples sent" }).getByRole("listitem").filter({ hasText: title });
+  await next.dragTo(page.getByLabel("Drop here: Lost"));
+  await page.getByLabel(/Why was .* lost\?/).fill("Went with a cheaper Spanish oil");
+  await page.getByRole("button", { name: "Mark as lost" }).click();
+  await expect(page.getByRole("region", { name: "Samples sent" })).not.toContainText(title);
+  await page.goto("/c/troodos-gold/crm/pipeline?view=list");
+  await expect(page.getByRole("row", { name: new RegExp(title) })).toContainText("Went with a cheaper Spanish oil");
+});
+
+test("a company is set up its own way in Customise: its names, a stage of its own, and a detail on every card", async ({ page }) => {
+  const menu = page.getByRole("complementary", { name: "Main navigation" });
+  await page.goto("/c/troodos-gold/settings/workspace");
+  await page.locator("input[name=job_one]").fill("Shipment");
+  await page.locator("input[name=job_many]").fill("Shipments");
+  await page.getByRole("button", { name: "Save the names" }).click();
+  await expect(menu.getByRole("link", { name: "Shipments" })).toBeVisible();
+
+  const stages = page.locator("section.ll-panel", { has: page.getByRole("heading", { name: "Shipments: the stages" }) });
+  await stages.getByRole("button", { name: "Add a stage" }).click();
+  await stages.getByLabel("Stage 4").fill("At the port");
+  await stages.getByRole("button", { name: "Save the stages" }).click();
+  await expect(stages.getByLabel("Stage 4")).toHaveValue("At the port");
+
+  const adder = page.getByRole("group", { name: "Add a detail" });
+  await adder.getByLabel("Kept on").selectOption({ label: "Shipments" });
+  await adder.getByLabel("Name").fill("Pallets");
+  await adder.getByLabel("Kind").selectOption({ label: "Number" });
+  await adder.getByLabel("Show on the cards and in the list").check();
+  await adder.getByRole("button", { name: "Add it" }).click();
+  await expect(page.getByText("Pallets", { exact: true })).toBeVisible();
+
+  await page.goto("/c/troodos-gold/crm/jobs");
+  await expect(page.getByRole("region", { name: "At the port" })).toBeVisible();
+  await page.getByRole("link", { name: "New shipment" }).click();
+  await page.getByLabel("Title").fill("Hotel supply, November");
+  await page.getByLabel("Pallets").fill("4");
+  await page.getByRole("button", { name: "Add the shipment" }).click();
+  await expect(page.getByText(/^Shipment #\d+/)).toBeVisible();
+  await page.goto("/c/troodos-gold/crm/jobs");
+  await expect(page.getByRole("region", { name: "Received" }).getByRole("listitem").filter({ hasText: "Hotel supply, November" })).toContainText("4");
+});
+
+test("a practice with many clients switches company by typing: a few letters or a registration number, then Enter, from any page with Ctrl+K", async ({ page }) => {
+  await page.goto("/c/kalamies-dental");
+  await page.getByRole("button", { name: /Kalamies Dental/ }).first().click();
+  await page.getByLabel("Find a company").fill("pixel");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/c\/pixelforge$/);
+  await page.keyboard.press("Control+k");
+  await page.getByLabel("Find a company").fill("412907");
+  await expect(page.getByRole("dialog").getByRole("link")).toHaveText(/Aegean Blue Marine Services Ltd\s*HE 412907/);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/c\/aegean-blue-marine$/);
+  // The last ones opened come first next time.
+  await page.getByRole("button", { name: /Aegean Blue/ }).first().click();
+  await expect(page.getByRole("dialog").getByRole("link").nth(2)).toHaveText(/Pixelforge Studio Ltd/);
+});
+

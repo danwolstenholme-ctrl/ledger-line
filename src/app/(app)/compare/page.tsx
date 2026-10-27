@@ -33,7 +33,7 @@ const ROWS: { group: string; rows: Row[] }[] = [
     { label: "E-invoicing ready (ViDA, July 2030)", detail: "UBL invoices and credit notes in the Peppol BIS 3.0 structure", ledgerline: ["yes", "Pass the EN 16931 rules today"], balabook: ["unknown", "Not stated"] },
     { label: "VIES statement", detail: "EU sales by customer VAT number, agreeing with box 8B", ledgerline: ["yes", "With the VAT return"], balabook: ["part", "VIES/OSS listed"] },
     { label: "Originals kept with the books", ledgerline: ["yes", "The capture stays with its bill"], balabook: ["unknown", "Not stated"] },
-    { label: "CRM in every client", detail: "Enquiries pipeline, clients, matters and tasks beside each company's books", ledgerline: ["yes", "The same workspace as the books"], balabook: ["unknown", "Not stated"] },
+    { label: "CRM in every client, shaped to its business", detail: "Pipeline, customers, jobs and tasks in each company's own words, stages and fields, beside its books", ledgerline: ["yes", "Ten kinds of business; change anything"], balabook: ["unknown", "Not stated"] },
   ] },
 ];
 

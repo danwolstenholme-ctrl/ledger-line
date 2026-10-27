@@ -10,6 +10,8 @@ import { formatAgo, formatAmount, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PageBody, Panel, PanelHeader } from "@/components/common/primitives";
 import { AddTodo, TaskCheck } from "@/components/crm/forms";
+import { getWorkspace } from "@/lib/data/workspace";
+import { uses } from "@/lib/domain/business-types";
 import { dueTone } from "@/components/crm/badges";
 import { StatTile } from "@/components/reports/report-charts";
 import { RecordHeader } from "@/components/records/record-layout";
@@ -28,6 +30,7 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
   const [home, query, membership] = await Promise.all([getCompanyHome(), searchParams, getMembership()]);
   const deadlines = (await getDeadlines({ client: home.org.slug })).rows.filter(row => row.kind !== "vat_return" && (row.state === "overdue" || (row.state === "due" && row.daysLeft <= 14)));
   const { org, today, cash, receivables, payables, vat } = home;
+  const workspace = await getWorkspace(org.id);
   const capture = `/c/${org.slug}/capture`;
   const actions: Action[] = [
     { href: "/invoices/new", label: "Raise an invoice", hint: "Bill a customer, get the PDF", icon: FileText },
@@ -36,7 +39,7 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
     { href: "/accounts/bank/new?kind=receive", label: "Money in", hint: "Received, not from an invoice", icon: ArrowDownLeft },
     { href: "/accounts/bank/new?kind=spend", label: "Money out", hint: "Spent, without a bill", icon: ArrowUpRight },
     { href: "/accounts/quotes/new", label: "Write a quote", hint: "Becomes the invoice when accepted", icon: FilePen },
-  ];
+  ].filter(action => action.href !== "/accounts/quotes/new" || uses(workspace, "quotes"));
 
   const attention: Attention[] = [];
   for (const invoice of receivables.late) attention.push({ key: `i${invoice.id}`, href: `/invoices/${invoice.id}`, icon: FileText, tone: "critical",
@@ -47,8 +50,9 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
     title: `Pay ${bill.supplier_name} ${formatAmount(bill.balance)}`, detail: `${bill.number ? `Bill ${bill.number} · ` : ""}${bill.days_overdue > 0 ? `${bill.days_overdue} days overdue` : `due ${formatDate(bill.due_on)}`}` });
   for (const row of deadlines) attention.push({ key: row.key, href: row.review ? `/clients/${row.review.fileId}` : `/c/${org.slug}/deadlines`, icon: CalendarClock, tone: row.state === "overdue" ? "critical" : "caution",
     title: row.title, detail: row.state === "overdue" ? `${-row.daysLeft} days overdue: due ${formatDate(row.due)}` : `Due ${formatDate(row.due)}, in ${row.daysLeft} days` });
-  if (home.waitingEnquiries.count) attention.push({ key: "enquiries", href: `/c/${org.slug}/crm/enquiries`, icon: Inbox, tone: "critical",
-    title: `${home.waitingEnquiries.count} enquir${home.waitingEnquiries.count === 1 ? "y" : "ies"} waiting for a reply`, detail: `The oldest arrived ${formatAgo(home.waitingEnquiries.oldest)}: nobody has answered yet` });
+  const pipelineWords = workspace.labels.deal;
+  if (home.waitingEnquiries.count) attention.push({ key: "enquiries", href: `/c/${org.slug}/crm/pipeline`, icon: Inbox, tone: "critical",
+    title: `${home.waitingEnquiries.count} ${(home.waitingEnquiries.count === 1 ? pipelineWords[0] : pipelineWords[1]).toLowerCase()} waiting for a reply`, detail: `The oldest arrived ${formatAgo(home.waitingEnquiries.oldest)}: nobody has answered yet` });
   if (home.vatUnconfirmed.length) attention.push({ key: "vies", href: home.vatUnconfirmed.length === 1 ? `/c/${org.slug}/customers/${home.vatUnconfirmed[0].id}` : membership.practice ? "/vat-numbers" : `/c/${org.slug}/customers`, icon: BadgeCheck, tone: "caution",
     title: `${home.vatUnconfirmed.length} EU customer${home.vatUnconfirmed.length === 1 ? "’s VAT number" : "s’ VAT numbers"} to confirm in VIES`,
     detail: `${home.vatUnconfirmed.map(customer => customer.name).join(", ")}: sales to ${home.vatUnconfirmed.length === 1 ? "it" : "them"} are zero-rated` });
@@ -111,7 +115,7 @@ export default async function CompanyHome({ searchParams }: { searchParams: Prom
         <div className="p-3"><AddTodo /></div>
         {tasks.length ? <ul className="divide-hairline border-hairline divide-y border-t">{tasks.map(task => <li key={task.id} className="flex items-center gap-3 px-4 py-2">
           <TaskCheck id={task.id} done={Boolean(task.done_at)} />
-          <span className="min-w-0 flex-1"><span className="text-ink block truncate text-[12.5px]">{task.title}</span>{task.link_label ? <span className="text-ink-faint block truncate text-[11px]">{task.link_kind} · {task.link_label}</span> : null}</span>
+          <span className="min-w-0 flex-1"><span className="text-ink block truncate text-[12.5px]">{task.title}</span>{task.link_label ? <span className="text-ink-faint block truncate text-[11px]">{task.link_kind ? `${workspace.labels[task.link_kind][0]} · ` : ""}{task.link_label}</span> : null}</span>
           <span className={cn("shrink-0 text-[12px] tabular-nums", dueTone(task.due_on, today))}>{task.due_on ? formatDate(task.due_on) : ""}</span>
         </li>)}</ul> : null}
       </Panel>

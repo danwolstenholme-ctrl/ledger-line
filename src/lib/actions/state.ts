@@ -14,6 +14,9 @@ export interface ActionState {
 
 export const idleState: ActionState = { ok: false, error: null };
 
+/** What moving a card on a board hands back: and, when a deal was won, where its new customer or job is. */
+export interface MoveState extends ActionState { href?: string; hrefLabel?: string }
+
 /** What a VIES check hands back to the form that asked for it. */
 export type VatCheckResult = {
   number: string; countryName: string; valid: boolean | null; name: string | null; address: string | null; consultation: string | null;

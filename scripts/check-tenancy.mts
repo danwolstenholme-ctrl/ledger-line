@@ -162,6 +162,20 @@ expect("A payslip whose net isn't its gross less what is withheld is refused", a
   select $1, $2, id, 1000, 1000, 88, 26.5, 0, 900, 88, 29, 20, 12, 5 from employees where organisation_id = $1 and id <> $3 limit 1 returning id`, [aegean, runId, someone]), (value: unknown) => typeof value === "string" && value.includes("payslips_net"));
 expect("Eva sees none of the payslips, Nikos none of Aegean Blue's", Number(await count(eva, "select count(*) as n from payslips")) + Number(await count(nikos, "select count(*) as n from payslips")), is(0));
 
+// How a company works: read by everyone in it, set by its accountant or its owner. Its staff work the pipeline and never see salaries.
+const staffer = (await conn.query("insert into app_users (name, email, initials) values ('Elena Markou', 'elena@pixelforge.example', 'EM') returning id")).rows[0].id as string;
+await conn.query("update app_users set auth_id = id where id = $1", [staffer]);
+await conn.query("insert into company_members (organisation_id, user_id, role) values ($1, $2, 'staff')", [pixelforge, staffer]);
+expect("Maria sees Aegean Blue's stages, its pipeline's and its jobs'", await count(maria, "select count(*) as n from crm_stages where organisation_id = $1", [aegean]), is(10));
+expect("Eva sees none of Saltlake's clients' stages or fields", await count(eva, "select (select count(*) from crm_stages) + (select count(*) from custom_fields) + (select count(*) from workspace_settings) as n"), is(0));
+expect("Nikos, the owner, renames one of Pixelforge's stages", await count(nikos, "update crm_stages set name = 'Scoping' where organisation_id = $1 and board = 'deal' and position = 1 returning id", [pixelforge]), is(1));
+expect("Pixelforge's staff add to its pipeline", await count(staffer, "insert into crm_enquiries (organisation_id, reference, full_name, owner) values ($1, 'P-2026-9001', 'Walk-in Visitor', 'Elena Markou') returning id", [pixelforge]), is(1));
+expect("…which starts in its first stage", await count(staffer, "select count(*) as n from crm_enquiries e join crm_stages s on s.id = e.stage_id where e.reference = 'P-2026-9001' and s.name = 'Scoping'"), is(1));
+expect("But they can't reshape how the company works", await count(staffer, "insert into crm_stages (organisation_id, board, name, position) values ($1, 'deal', 'Sneaky stage', 9) returning id", [pixelforge]), refused);
+expect("Nor see what anyone is paid", await count(staffer, "select (select count(*) from employees) + (select count(*) from payslips) as n"), is(0));
+expect("A stage from another company is refused", await count(maria, "update crm_enquiries set stage_id = (select id from crm_stages where organisation_id = $2 and board = 'deal' limit 1) where organisation_id = $1 returning id", [pixelforge, aegean]), (value: unknown) => typeof value === "string" && value.includes("crm_stage_board"));
+expect("A lost enquiry needs its reason", await count(maria, "update crm_enquiries set stage_id = (select id from crm_stages where organisation_id = $1 and board = 'deal' and outcome = 'lost') where organisation_id = $1 and reference = 'P-2026-9001' returning id", [pixelforge]), (value: unknown) => typeof value === "string" && value.includes("crm_lost_reason"));
+
 // Nobody signed in: nothing.
 expect("Nobody signed in sees no company", await count(null, "select count(*) as n from organisations"), is(0));
 expect("Nobody signed in sees no invoice", await count(null, "select count(*) as n from invoices"), is(0));

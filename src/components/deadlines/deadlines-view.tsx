@@ -9,6 +9,7 @@ import { PageBody, Panel } from "@/components/common/primitives";
 import { InlineSubmit, SubmitButton } from "@/components/common/form-fields";
 import { StatTile } from "@/components/reports/report-charts";
 import { RecordBadge, RecordEmpty, RecordFilterLinks, RecordHeader, recordOutlineButton } from "@/components/records/record-layout";
+import { ClientFilter } from "@/components/common/client-filter";
 
 const weekday = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
 const monthOf = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -103,7 +104,7 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <RecordFilterLinks label="Show" options={DEADLINE_VIEWS.map(item => ({ label: item.label, href: href({ view: item.key }), active: view === item.key }))} />
-      {company ? null : <RecordFilterLinks label="Client" options={[{ label: "All clients", href: href({ client: null }), active: !client }, ...data.clients.map(item => ({ label: item.name.replace(/ (Ltd|Limited)$/, ""), href: href({ client: item.slug }), active: client?.slug === item.slug }))]} />}
+      {company ? null : <ClientFilter label="Client" options={[{ label: "All clients", href: href({ client: null }), active: !client }, ...data.clients.map(item => ({ label: item.name.replace(/ (Ltd|Limited)$/, ""), href: href({ client: item.slug }), active: client?.slug === item.slug }))]} />}
     </div>
 
     {data.rows.length ? [...groups].map(([group, rows]) => <Panel key={group} className="overflow-hidden">

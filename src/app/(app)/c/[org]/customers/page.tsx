@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { PageBody, Panel } from "@/components/common/primitives";
 import { NavigationForm } from "@/components/navigation/navigation-form";
 import { RecordEmpty, RecordHeader, recordButton, recordOutlineButton } from "@/components/records/record-layout";
+import { getWorkspace } from "@/lib/data/workspace";
 
 export const metadata: Metadata = { title: "Customers" };
 
@@ -16,11 +17,12 @@ export const metadata: Metadata = { title: "Customers" };
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const query = (await searchParams).q;
   const { org, rows } = await getClients(query);
+  const [one, many] = (await getWorkspace(org.id)).labels.customer;
   const owed = rows.reduce((sum, row) => sum + Number(row.owed), 0);
   const head = "text-ink-faint px-3 py-2 text-left text-[11px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
   return <PageBody className="space-y-4">
-    <RecordHeader title="Customers" description={`${rows.length} customer${rows.length === 1 ? "" : "s"}${query ? ` matching “${query}”` : ""}${owed ? `, owing ${formatAmount(owed)} between them` : ""}.`}
-      action={<><Link href="/accounts/customers/import" className={recordOutlineButton}>Import</Link><a href={`/c/${org.slug}/customers/export`} className={recordOutlineButton}>Export</a><Link href="/accounts/customers/new" className={recordButton}><Plus className="size-4" />New customer</Link></>} />
+    <RecordHeader title={many} description={`${rows.length} ${(rows.length === 1 ? one : many).toLowerCase()}${query ? ` matching “${query}”` : ""}${owed ? `, owing ${formatAmount(owed)} between them` : ""}.`}
+      action={<><Link href="/accounts/customers/import" className={recordOutlineButton}>Import</Link><a href={`/c/${org.slug}/customers/export`} className={recordOutlineButton}>Export</a><Link href="/accounts/customers/new" className={recordButton}><Plus className="size-4" />New {one.toLowerCase()}</Link></>} />
     <Panel className="overflow-hidden">
       <div className="border-hairline flex justify-end border-b px-4 py-2.5">
         <NavigationForm action="" method="get" className="border-hairline-strong flex h-8 w-full items-center gap-2 rounded-md border px-2.5 sm:w-64">

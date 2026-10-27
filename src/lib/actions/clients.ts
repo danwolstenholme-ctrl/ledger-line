@@ -19,6 +19,8 @@ import {
 import { getCurrentUser, getPractice } from "@/lib/org";
 import { keepDocument } from "@/lib/client-documents";
 import { screen, startRefresh } from "@/lib/sanctions";
+import { BUSINESS_TYPE_KEYS, suggestBusinessType } from "@/lib/domain/business-types";
+import { setUpWorkspace } from "@/lib/db/workspace-setup";
 
 /**
  * Taking a client on, step by step, and keeping its file current. Each
@@ -89,12 +91,14 @@ export async function takeOnFromEnquiry(form: FormData) {
   if (!UUID.test(id)) return;
   const existing = await one<{ id: string }>("select id from client_files where enquiry_id = $1", [id]);
   if (existing) redirect(`/clients/${existing.id}`);
-  const enquiry = await one<{ organisation_id: string; stage: string; full_name: string; company: string | null; email: string | null; phone: string | null; service: string | null }>(
-    "select e.organisation_id, e.stage, e.full_name, e.company, e.email, e.phone, e.service from crm_enquiries e join organisations o on o.id = e.organisation_id and o.is_practice where e.id = $1", [id]);
-  if (!enquiry || enquiry.stage === "lost") return;
+  const enquiry = await one<{ organisation_id: string; outcome: string; full_name: string; company: string | null; email: string | null; phone: string | null; service: string | null }>(
+    `select e.organisation_id, s.outcome, e.full_name, e.company, e.email, e.phone, e.service from crm_enquiries e join crm_stages s on s.id = e.stage_id
+       join organisations o on o.id = e.organisation_id and o.is_practice where e.id = $1`, [id]);
+  if (!enquiry || enquiry.outcome === "lost") return;
   const [practice, user] = await Promise.all([getPractice(), getCurrentUser()]);
-  if (enquiry.stage !== "won") {
-    await sql("update crm_enquiries set stage = 'won', stage_changed_at = now(), next_action = null, next_action_due = null where id = $1", [id]);
+  if (enquiry.outcome !== "won") {
+    await sql(`update crm_enquiries set stage_id = (select id from crm_stages where organisation_id = $2 and board = 'deal' and outcome = 'won'), next_action = null, next_action_due = null
+      where id = $1`, [id, enquiry.organisation_id]);
     await sql("insert into crm_activities (organisation_id, enquiry_id, kind, body, actor) values ($1, $2, 'won', 'Won: taking them on as a client.', $3)", [enquiry.organisation_id, id, user.name]);
   }
   const file = (await one<{ id: string }>(`insert into client_files (practice_id, enquiry_id, company_name, contact_name, contact_email, contact_phone, manager, created_by)
@@ -139,8 +143,10 @@ export async function saveClientDetails(_previous: ActionState, form: FormData):
   if (p.failed || !name) return p.fail();
   try {
     await sql(`update client_files set company_name = $2, he_number = $3, incorporated_on = $4, registered_address = $5, business = $6, contact_name = $7, contact_email = $8, contact_phone = $9,
-        vat_registered = $10, vat_number = $11, vat_quarter_end_month = $12, year_end_month = $13, books_from = $14, manager = $15, face_to_face = $16, introduced_by = $17, country = $18 where id = $1`,
-      [file.id, name, he, incorporated, address, business, contact, email, phone, registered, registered ? vat.value : null, quarter, yearEnd, booksMonth ? `${booksMonth}-01` : null, manager, faceToFace, introducedBy, country]);
+        vat_registered = $10, vat_number = $11, vat_quarter_end_month = $12, year_end_month = $13, books_from = $14, manager = $15, face_to_face = $16, introduced_by = $17, country = $18,
+        business_type = coalesce($19, business_type) where id = $1`,
+      [file.id, name, he, incorporated, address, business, contact, email, phone, registered, registered ? vat.value : null, quarter, yearEnd, booksMonth ? `${booksMonth}-01` : null, manager, faceToFace, introducedBy, country,
+       p.enum("business_type", BUSINESS_TYPE_KEYS, { label: "Kind of business" })]);
     // Once signed, the services and fees are what the client agreed to: they are not changed here.
     if (!file.signed_at) await sql("update client_files set services = $2, monthly_fee = $3, hourly_rate = $4, app_fee = $5 where id = $1", [file.id, services, fee, rate, app]);
     await syncRequests(file.id);
@@ -387,6 +393,8 @@ export async function openBooks(_previous: ActionState, form: FormData): Promise
       await run(`insert into ledger_accounts (id, organisation_id, code, name, type, system_role, description, bank_details, outside_vat)
         select id, organisation_id, code, name, type, system_role, description, bank_details, outside_vat from jsonb_populate_recordset(null::ledger_accounts, $1::jsonb)`, [JSON.stringify(accounts)]);
       await run("update organisations set default_bank_account_id = $2 where id = $1", [org, bank]);
+      // Shaped to its kind of business: what it calls things, its stages and fields, and the parts it uses.
+      await setUpWorkspace(run, run, org, file.business_type ?? suggestBusinessType(file.business), file.country);
       if (practiceOrg) {
         const fees = (await run<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [practiceOrg.id]))[0];
         const customer = (await run<{ id: string }>(`insert into customers (organisation_id, name, email, vat_number, country, address, default_account_id) values ($1, $2, $3, $4, 'CY', $5, $6) returning id`,

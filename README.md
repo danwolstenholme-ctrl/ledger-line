@@ -143,13 +143,36 @@ to reconcile.
   template to download. **Export** gives each list back as a spreadsheet, and
   **Invoices → Export all** every invoice with what was paid and credited.
 
-### 1f. The CRM in every company, 2 minutes
-- **Enquiries**: the pipeline board, New → Proposal sent → Won. Open one in
-  Proposal sent: next action, timeline (log a call), stage. **Won: make a
-  customer** adds them to Customers, with their first matter, so they can be
-  invoiced straight away.
-- **Matters** and **Tasks**: the work in hand and everything to do, each with
-  an owner and a date.
+### 1f. The CRM, shaped to each business, 4 minutes
+- Every company is set up from its **kind of business**, which the accountant
+  picks when taking the client on: what it calls its customers and its work,
+  the stages its enquiries and its work go through, the details it keeps, and
+  which parts it uses. Switch company and watch the menu change:
+  - **Aegean Blue Marine** (shipping): Clients, Enquiries, and **Jobs** that
+    go Planned → In port → Final account → Closed, each with its vessel, port
+    and ETA on the card.
+  - **Kalamies Dental** (clinic): **Patients and insurers**, and **Treatment
+    plans** (Proposed → Accepted → In treatment → Completed), with who pays.
+  - **Larnaka Roast** (café and roastery): **Orders**, Received → Roasting →
+    Ready → Delivered, collection or delivery on the card.
+  - **Troodos Gold** (producer): **Leads** and **Orders**; **Pixelforge**
+    (software studio): **Deals** and **Projects** with their fee basis;
+    **Mesogeios Holdings**: only **Opportunities** and tasks, no quotes or
+    jobs; **Thames Edge Joinery**: **Jobs** with the site address, opening in
+    maps.
+- **The board**: drag a card from stage to stage. Drop a deal on **Won** and it
+  becomes a customer with its first job and first to-do (for a port agent,
+  "Send the proforma disbursement account"); drop it on **Lost** and it asks
+  why. Each column shows its value and how likely it is; the header, the
+  pipeline's value and the likely part of it.
+- Open any deal or customer: **Call**, **WhatsApp**, **Viber** or **Email** with
+  the message started, and **Save contact** to the phone. Plain links: nothing
+  to connect.
+- **Customise** (under More): rename anything ("Jobs" to "Shipments"), add a
+  stage, turn a part off, or add a detail of its own ("Pallets", on every
+  card). Set by the company's owner or its accountant; its staff use it as
+  set, and never see payroll.
+- **Tasks**: everything to do, each with an owner and a date.
 - **Website form** (Enquiries → Website form): **Open the form** shows the
   company's own form, in its logo and colour. Send one as a prospect, then go
   back to the board: it is in New, marked "From your website", owned by
@@ -602,9 +625,17 @@ real project, `npm run supabase:demo-users` gives the demo's people sign-ins.
   preview in the browser and again on the server.
 - The company Home (`src/app/c/[org]/page.tsx`, `src/lib/data/home.ts`) and the
   menu with the company switcher (`src/components/shell/app-shell.tsx`).
-- The CRM (`src/app/c/[org]/crm`, `src/lib/data/crm.ts`, `src/lib/actions/crm.ts`):
-  enquiries, matters and tasks, one CRM per company, wired to that
-  company's customers and invoices.
+- The CRM (`src/app/(app)/c/[org]/crm`, `src/lib/data/crm.ts`, `src/lib/actions/crm.ts`):
+  the pipeline (`crm_enquiries`), jobs (`crm_jobs`) and tasks, one CRM per
+  company, wired to that company's customers and invoices. How each company
+  works is `src/lib/domain/business-types.ts` (the ten kinds of business and
+  what each sets up), `workspace_settings`, `crm_stages` (each board's stages,
+  checked by `crm_stage_check`) and `custom_fields` (values in each record's
+  `extra`); `src/lib/db/workspace-setup.ts` sets a company up, and
+  **Customise** (`src/app/(app)/c/[org]/settings/workspace`,
+  `src/lib/actions/workspace.ts`) changes it. The board is
+  `src/components/crm/board.tsx` (HTML drag and drop; each card's own page
+  moves it too, on a phone or with a keyboard).
 - `src/proxy.ts` tags each request under `/c/{company}` with the company, so
   the data layer and server actions (`src/lib/data`, `src/lib/actions`) know
   whose books they are in.

@@ -5,6 +5,7 @@ import { sql } from "@/lib/db";
 import { getCurrentUser, getMembership, getOrganisations, getPractice } from "@/lib/org";
 import { AppShell } from "@/components/shell/app-shell";
 import { getRunningTimer } from "@/lib/data/work";
+import { MODULES } from "@/lib/domain/business-types";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +22,18 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /** Everything behind sign-in: the menu, the top bar and the page, in the practice's colours. */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [user, practice, organisations, membership, reviews] = await Promise.all([
+  const [user, practice, organisations, membership, reviews, workspaces] = await Promise.all([
     getCurrentUser(), getPractice(), getOrganisations(), getMembership(),
     sql<{ organisation_id: string | null; count: number }>("select organisation_id, count(*) as count from capture_items where status = 'review' group by organisation_id"),
+    // What each company calls its customers, pipeline and work, and the parts it uses: its menu.
+    sql<{ organisation_id: string; customer_many: string; deal_many: string; job_many: string; modules: string[] }>("select organisation_id, customer_many, deal_many, job_many, modules from workspace_settings"),
   ]);
+  const navOf = (id: string) => {
+    const row = workspaces.find(item => item.organisation_id === id);
+    return row ? { customers: row.customer_many, deals: row.deal_many, jobs: row.job_many, modules: row.modules } : { customers: "Customers", deals: "Enquiries", jobs: "Jobs", modules: [...MODULES] };
+  };
+  // Payroll is seen by the practice, and by a company's owner and auditor: never what each person is paid by anyone else.
+  const seesPayroll = (slug: string) => membership.practice || membership.companies.some(company => company.slug === slug && (company.role === "owner" || company.role === "auditor"));
   const toReview = reviews.reduce((sum, row) => sum + Number(row.count), 0);
   const running = membership.practice ? await getRunningTimer(user.name) : null;
   const role = membership.practice ? membership.role ?? "Practice" : membership.companies[0] ? `${COMPANY_ROLE[membership.companies[0].role] ?? "Team"}, ${membership.companies[0].name.replace(/ (Ltd|Limited)$/, "")}` : "";
@@ -35,7 +44,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppShell practice={{ name: practice.name, initials: practice.initials, brand_color: practice.brand_color, tagline: practice.tagline }}
       user={{ name: user.name, initials: user.initials, email: user.email, role, demo: AUTH_MODE === "demo" }} member={membership.practice} toReview={toReview}
       timer={running ? { company: running.company, slug: running.slug, work: running.work, started_at: running.started_at } : null}
-      clients={organisations.map(org => ({ id: org.id, slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, country: org.country, toReview: Number(reviews.find(row => row.organisation_id === org.id)?.count ?? 0) }))}>
+      clients={organisations.map(org => ({ id: org.id, slug: org.slug, name: org.name, industry: org.industry, practice: org.is_practice, country: org.country, payroll: seesPayroll(org.slug), nav: navOf(org.id), greek: org.greek_name, he: org.he_number, vat: org.vat_number, toReview: Number(reviews.find(row => row.organisation_id === org.id)?.count ?? 0) }))}>
       {children}
     </AppShell>
   </>;

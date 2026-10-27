@@ -15,7 +15,8 @@ export const metadata: Metadata = { title: "Take on a client" };
 export default async function NewClientPage() {
   const won = await sql<{ id: string; reference: string; full_name: string; company: string | null; service: string | null; stage_changed_at: string }>(`
     select e.id, e.reference, e.full_name, e.company, e.service, e.stage_changed_at from crm_enquiries e join organisations o on o.id = e.organisation_id and o.is_practice
-     where e.stage = 'won' and not exists (select 1 from client_files f where f.enquiry_id = e.id) order by e.stage_changed_at desc`);
+      join crm_stages s on s.id = e.stage_id
+     where s.outcome = 'won' and not exists (select 1 from client_files f where f.enquiry_id = e.id) order by e.stage_changed_at desc`);
   return <PageBody width="3xl" className="space-y-4">
     <RecordHeader back={{ href: "/clients", label: "Client files" }} title="Take on a client" description="Start the client’s file. Ledgerline asks for what due diligence needs as you go, and opens the books once it is done." />
     {won.length ? <RecordSection title="Won enquiries" hint="From the firm’s own pipeline">

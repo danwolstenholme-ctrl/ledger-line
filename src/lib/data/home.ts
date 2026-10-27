@@ -34,8 +34,9 @@ export async function getCompanyHome() {
     sql<{ period_to: string }>("select period_to from vat_returns where organisation_id = $1 order by period_to", [org.id]),
     getRepeatingDueCount(),
     // Enquiries nobody has answered a day after they arrived.
-    one<{ count: number; oldest: string | null }>(`select count(*) as count, min(created_at) as oldest from crm_enquiries e where organisation_id = $1 and stage = 'new'
-      and created_at < now() - interval '1 day' and not exists (select 1 from crm_activities a where a.enquiry_id = e.id and a.occurred_at > e.created_at + interval '1 minute')`, [org.id]),
+    one<{ count: number; oldest: string | null }>(`select count(*) as count, min(e.created_at) as oldest from crm_enquiries e join crm_stages s on s.id = e.stage_id
+      where e.organisation_id = $1 and s.outcome = 'open' and s.position = (select min(f.position) from crm_stages f where f.organisation_id = $1 and f.board = 'deal' and f.outcome = 'open')
+      and e.created_at < now() - interval '1 day' and not exists (select 1 from crm_activities a where a.enquiry_id = e.id and a.occurred_at > e.created_at + interval '1 minute')`, [org.id]),
     // EU business customers invoiced in the last six months: each zero-rated sale rests on their VAT number being valid.
     sql<{ id: string; name: string; vat_number: string; country: string }>(`select c.id, c.name, c.vat_number, c.country from customers c
       where c.organisation_id = $1 and c.is_active and c.eu_business and c.vat_number is not null

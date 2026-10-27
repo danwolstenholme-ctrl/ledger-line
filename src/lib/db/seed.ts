@@ -9,6 +9,8 @@ import { STANDARD_CHART, chartFor } from "@/lib/domain/chart";
 import { annualReturnDates, ukObligations } from "@/lib/domain/deadlines";
 import { assessRisk, documentRequests, engagementLetter, letterText, nextReview, suggestFactors, type Person, type Role, type Service } from "@/lib/domain/onboarding";
 import { NO_YEAR, addToYear, cyMonth } from "@/lib/domain/payroll-cy";
+import { businessType } from "@/lib/domain/business-types";
+import { setUpWorkspace, type WorkspaceChanges } from "@/lib/db/workspace-setup";
 import { SANCTIONS_INSERT, type SanctionsEntry } from "@/lib/domain/sanctions";
 
 /**
@@ -824,128 +826,236 @@ async function seedCaptures(pg: PGlite, practiceId: string) {
 // ---------------------------------------------------------------------------
 
 type EnquirySeed = [company: string, person: string, service: string, value: number];
-const CRM: Record<string, { staff: string[]; enquiries: EnquirySeed[]; matters: string[]; sources: string[] }> = {
+/** A demo job: its stage (a position among the open stages, or "won" for done), the days from today it is due (and starts), and its fields. */
+type JobSeed = { title: string; customer?: string; stage: number | "won"; value?: number; due?: number; starts?: number; fields?: Record<string, string | number> };
+const CRM: Record<string, { staff: string[]; enquiries: EnquirySeed[]; jobs: JobSeed[]; sources: string[]; patients?: string[]; todos?: string[];
+  dealFields?: Record<number, Record<string, string | number>>; customerFields?: Record<string, Record<string, string>> }> = {
   "aegean-blue-marine": { staff: ["Christos Panayiotou", "Anna Demetriou", "Loukas Ioannides"], sources: ["Website", "Referral", "Marina office", "Phone"], enquiries: [
     ["Thalassa Yachting Ltd", "Andreas Kyriakou", "Charter season management, MY Selene", 18000], ["Nordsee Bulk Carriers GmbH", "Lena Hoffmann", "Port agency for bulk carrier calls at Vassiliko", 42000],
     ["Adriatic Crew Services d.o.o.", "Marko Petrović", "Crew change logistics, Larnaca airport", 9600], ["Limassol Sailing Club", "Christina Ioannou", "Winter berth coordination for the club fleet", 6500],
     ["Blue Wave Charters Ltd", "Stavros Michael", "Yacht management, two catamarans", 21000], ["Kypros Ferry Lines Ltd", "Elena Charalambous", "Husbandry services for the summer ferry", 15000],
     ["Orion Offshore Ltd", "James Whitfield", "Provisioning for a survey vessel", 8200], ["Aphrodite Cruises Ltd", "Maria Georgiou", "Shore excursion logistics", 12000],
     ["Delta Marine Survey Ltd", "Nikos Antoniou", "Agency for survey vessel rotation", 7400]],
-    matters: ["Yacht management, MY Akrotiri Star", "Port agency contract 2026–27", "Crew transfers, winter rota", "Vassiliko tanker calls, Q4"] },
+    jobs: [
+      { title: "Port call, MV Horizon Star", customer: "Blue Horizon Shipping Ltd", stage: 1, value: 6800, due: 3, fields: { vessel: "MV Horizon Star", port: "Limassol", eta: 3 } },
+      { title: "Tanker call at Vassiliko, MT Meridian Grace", customer: "Meridian Ship Management Ltd", stage: 2, value: 9400, due: 1, fields: { vessel: "MT Meridian Grace", port: "Vassiliko", eta: -1 } },
+      { title: "Yacht management, MY Akrotiri Star", customer: "Akrotiri Yacht Charters Ltd", stage: 2, value: 12000, due: 60, fields: { vessel: "MY Akrotiri Star", port: "Limassol" } },
+      { title: "Crew change, MV Kourion Spirit", customer: "Kourion Bay Tours Ltd", stage: 3, value: 3200, due: -2, fields: { vessel: "MV Kourion Spirit", port: "Larnaca", eta: -9 } },
+      { title: "Port call, MV Horizon Dawn", customer: "Blue Horizon Shipping Ltd", stage: "won", value: 5600, due: -6, fields: { vessel: "MV Horizon Dawn", port: "Limassol", eta: -14 } },
+    ], dealFields: { 0: { vessel: "MY Selene" }, 1: { vessel: "MV Nordsee Trader" } } },
   "troodos-gold": { staff: ["Eleni Kyprianou", "Michalis Georgiades", "Rena Phylactou"], sources: ["Website", "Trade fair", "Referral", "Shop visit"], enquiries: [
     ["Mesogeios Hotels Ltd", "Petros Hadjigeorgiou", "Olive oil for three hotel restaurants", 14000], ["Feinkost Berger GmbH", "Katrin Berger", "Early harvest oil for Munich delicatessens", 26000],
     ["Larnaca Gourmet Market", "Sofia Neophytou", "Shelf listing, 500ml and 750ml", 5200], ["Nicosia Cooking School", "Alexis Pavlou", "Tasting sessions for students", 2400],
     ["Paphos Wedding Co", "Irene Savva", "Olive oil wedding favours, 400 bottles", 3800], ["Kyrenia Street Taverna", "Giorgos Loizou", "Monthly 5L tin supply", 4100],
     ["Agrotourism Cyprus", "Helen Markides", "Mill tours for agrotourism guests", 3000], ["Delikatessen Nord AB", "Erik Sandberg", "Distributor enquiry, Sweden", 31000],
     ["Troodos Hiking Tours", "Panos Christou", "Mill visit add-on for hiking groups", 1800]],
-    matters: ["Hotel supply agreement 2026", "Christmas gift box range", "Wholesale price list review", "Shelf listing at Nicosia Fine Foods"] },
+    jobs: [
+      { title: "Hotel supply, October: 120 tins of 5 litres", customer: "Coral Sands Hotel Ltd", stage: 1, value: 4800, due: 4, fields: { delivery_address: "Coral Sands Hotel, kitchen entrance, Ayia Napa" } },
+      { title: "Christmas gift boxes, 300 sets", customer: "Nicosia Fine Foods Ltd", stage: 2, value: 7500, due: 12 },
+      { title: "Shelf restock, 500ml and 750ml", customer: "Paphos Gourmet Deli Ltd", stage: 3, value: 2100, due: 0, fields: { tracking: "Courier ref. 7731-2290" } },
+      { title: "Early harvest, first pressing: 60 cases", customer: "Nicosia Fine Foods Ltd", stage: 1, value: 3900, due: 9 },
+      { title: "September restock", customer: "Paphos Gourmet Deli Ltd", stage: "won", value: 1850, due: -18 },
+    ], customerFields: { "Nicosia Fine Foods Ltd": { price_list: "Distributor" }, "Paphos Gourmet Deli Ltd": { price_list: "Trade" }, "Coral Sands Hotel Ltd": { price_list: "Trade" } } },
   "kalamies-dental": { staff: ["Dr Sofia Hadjioannou", "Dr Marios Evagorou", "Niki Solomou"], sources: ["Website", "Phone", "Referral", "Walk-in"], enquiries: [
     ["", "Katerina Pavlidou", "Implant consultation, upper molar", 2400], ["", "Michael Stylianou", "Clear aligner treatment plan", 3900],
     ["Larnaca Primary School No. 4", "School office", "Dental check-up day for pupils", 1500], ["", "Andrea Constantinou", "Whitening and hygiene package", 450],
     ["Medisure Health Insurance Ltd", "Claims team", "Direct-billing agreement renewal", 18000], ["", "Yiannis Kyprianou", "Crown and bridge work", 1800],
     ["Harbour Staff Benefit Fund", "Fund secretary", "Staff dental scheme", 6000], ["", "Eleni Michaelidou", "Children's orthodontic assessment", 900],
     ["", "George Hadjimichael", "Root canal follow-up", 650]],
-    matters: ["Medisure direct billing 2026", "Olympic Health Cover claims backlog", "Surgery 2 refurbishment", "Implant cases, October"] },
+    patients: ["Sotiris Charalambous", "Elena Vasiliou", "Kyriacos Demetriades"], jobs: [
+      { title: "Implants, upper left: two-stage plan", customer: "Sotiris Charalambous", stage: 2, value: 2400, due: 30, fields: { paid_by: "Medisure" } },
+      { title: "Clear aligners, 12 months", customer: "Elena Vasiliou", stage: 3, value: 3900, due: 300, fields: { paid_by: "Self-paying" } },
+      { title: "Crown and bridge, lower right", customer: "Kyriacos Demetriades", stage: 1, value: 1800, due: 21, fields: { paid_by: "Olympic Health Cover" } },
+      { title: "Whitening and hygiene package", customer: "Elena Vasiliou", stage: 1, value: 450, due: 14, fields: { paid_by: "Self-paying" } },
+      { title: "Root canal and crown", customer: "Sotiris Charalambous", stage: "won", value: 950, due: -20, fields: { paid_by: "Medisure" } },
+    ] },
   "larnaka-roast": { staff: ["Marios Georgiou", "Chloe Antoniades", "Stelios Papas"], sources: ["Website", "Instagram", "Café counter", "Referral"], enquiries: [
     ["Coral Sands Hotel Ltd", "Petros Hadjigeorgiou", "Coffee service for the conference season", 9800], ["Finikoudes Beach Kiosk Ltd", "Savvas Ioannou", "Espresso machine lease renewal", 3600],
     ["Seaview Café Ltd", "Despina Kyriacou", "House blend supply, 20kg a month", 7200], ["CoWork Nicosia Ltd", "Rania Haddad", "Office coffee subscription, three floors", 5400],
     ["Ayia Napa Beach Bars Ltd", "Kostas Efthymiou", "Barista training for summer staff", 2800], ["Larnaca Book Café", "Marina Petrou", "Retail bags of single origin", 1900],
     ["Mesogeios Hotels Ltd", "Natalia Ioannidou", "Breakfast coffee programme", 16000], ["Kition Wedding Venues", "Lucia Romano", "Coffee cart for weddings", 4500],
     ["Paralimni Bakery Ltd", "Andreas Theodorou", "Wholesale beans, weekly", 6100]],
-    matters: ["Coral Sands conference season", "Kiosk machine lease 2026", "Barista academy, autumn intake", "Single-origin launch"] },
+    jobs: [
+      { title: "Conference coffee bar, week 44", customer: "Coral Sands Hotel Ltd", stage: 1, value: 2600, due: 5, fields: { handover: "Delivery", delivery_address: "Coral Sands Hotel, conference wing" } },
+      { title: "House blend, 20 kg", customer: "Finikoudes Beach Kiosk Ltd", stage: 2, value: 640, due: 1, fields: { handover: "Delivery", delivery_address: "Finikoudes promenade kiosk" } },
+      { title: "Machine service and a spare grinder", customer: "Finikoudes Beach Kiosk Ltd", stage: 3, value: 380, due: 0, fields: { handover: "Collection" } },
+      { title: "Single-origin launch: three coffees, 50 bags each", stage: 2, value: 0, due: 8, fields: { handover: "Collection" } },
+      { title: "Breakfast blend, 15 kg", customer: "Coral Sands Hotel Ltd", stage: "won", value: 480, due: -5, fields: { handover: "Delivery" } },
+    ] },
   "pixelforge": { staff: ["Nikos Savva", "Ioanna Kleanthous", "Marcus Lee"], sources: ["Website", "Referral", "Clutch", "LinkedIn"], enquiries: [
     ["Nordlicht Software GmbH", "Jonas Weber", "Phase 2: offline mode for the mobile app", 48000], ["Brabant Digital BV", "Sanne de Vries", "Checkout redesign", 26000],
     ["Atelier Lumière SAS", "Camille Laurent", "Booking system for a second venue", 18000], ["Helios Hotels Cyprus Ltd", "Nicolas Pierides", "Loyalty programme in the guest app", 22000],
     ["Medisure Health Insurance Ltd", "Product team", "Claims app prototype", 35000], ["Kypros Ferry Lines Ltd", "Elena Charalambous", "Ticketing website rebuild", 40000],
     ["Fjord Analytics AS", "Ingrid Nilsen", "Data dashboard, two-week discovery", 12000], ["Olive Grove Estates Ltd", "Christos Pallis", "Online shop", 9000],
     ["Brightline Learning Ltd", "Oliver Grant", "Learning platform MVP", 55000]],
-    matters: ["Nordlicht app, sprints 14–16", "Brabant support retainer", "Helios guest app 2.0", "Atelier booking system go-live"] },
+    jobs: [
+      { title: "Nordlicht app, sprints 14 to 16", customer: "Nordlicht Software GmbH", stage: 2, value: 36000, due: 34, starts: -8, fields: { fee_basis: "Time and materials" } },
+      { title: "Brabant support retainer", customer: "Brabant Digital BV", stage: 2, value: 2400, due: 5, starts: -26, fields: { fee_basis: "Retainer" } },
+      { title: "Helios guest app 2.0", customer: "Helios Hotels Cyprus Ltd", stage: 1, value: 22000, due: 75, starts: 12, fields: { fee_basis: "Fixed price" } },
+      { title: "Atelier booking system go-live", customer: "Atelier Lumière SAS", stage: 3, value: 18000, due: 6, starts: -40, fields: { fee_basis: "Fixed price" } },
+      { title: "Nordlicht design system", customer: "Nordlicht Software GmbH", stage: "won", value: 9500, due: -12, starts: -60, fields: { fee_basis: "Fixed price" } },
+    ] },
   "mesogeios-holdings": { staff: ["Petros Constantinou", "Andri Kallis"], sources: ["Board", "Bank", "Introducer"], enquiries: [
     ["Kourion Boutique Hotel Ltd", "Board of directors", "Acquisition of a 40% stake", 1200000], ["Larnaca Logistics Park Ltd", "Chief financial officer", "Shareholder loan, €400,000", 400000],
     ["Mesogeios Hotels Ltd", "Finance director", "Dividend for the 2025 year", 50000], ["Troodos Retreats Ltd", "Founder", "Seed investment", 150000],
     ["Levant Private Bank", "Relationship manager", "Refinancing of the group facility", 2000000], ["Akamas Eco Lodges Ltd", "Managing director", "Joint venture proposal", 600000]],
-    matters: ["Annual general meeting 2026", "Group restructuring review", "Loan to Mesogeios Hotels: interest schedule", "2025 audit with Kition Audit Partners"] },
+    jobs: [], todos: ["Annual general meeting 2026: notice to shareholders", "Group restructuring review with the lawyers", "Loan to Mesogeios Hotels: interest schedule", "2025 audit: answer Kition Audit Partners' questions"],
+    dealFields: { 0: { kind: "Acquisition", stake: 40 }, 1: { kind: "Loan" }, 2: { kind: "Investment" }, 3: { kind: "Investment", stake: 15 }, 4: { kind: "Refinancing" }, 5: { kind: "Investment", stake: 50 } } },
+  "thames-edge-joinery": { staff: ["Tom Ashworth", "Priya Shah"], sources: ["Phone", "Referral", "Website", "Repeat customer"], enquiries: [
+    ["Brookmere Construction Ltd", "Gareth Lewis", "Oak staircase and balustrade, Woodley plot 12", 14500], ["", "Helen Marsh", "Fitted wardrobes, three bedrooms", 6200],
+    ["Caversham Homes Ltd", "Sam Okafor", "Second fix joinery, six houses", 38000], ["Hartley Lettings Ltd", "Joanna Pike", "Sash window repairs across four flats", 7800],
+    ["", "David Chen", "Garden room, timber frame", 21000], ["Brookmere Construction Ltd", "Gareth Lewis", "Doors and skirting, Earley site", 16400],
+    ["", "Rachel Moore", "Kitchen worktops and shelving", 3900], ["Caversham Homes Ltd", "Sam Okafor", "Show home finishing", 9200], ["Hartley Lettings Ltd", "Joanna Pike", "Fire doors to HMO standard", 11800]],
+    jobs: [
+      { title: "Oak staircase, Woodley plot 12", customer: "Brookmere Construction Ltd", stage: 2, value: 14500, due: 9, starts: -6, fields: { site_address: "Plot 12, Bader Way, Woodley RG5 4AX", access: "Site gate code from the site manager" } },
+      { title: "Second fix, Caversham Heights phase 2", customer: "Caversham Homes Ltd", stage: 1, value: 38000, due: 40, starts: 7, fields: { site_address: "Caversham Heights, Peppard Road, Reading RG4 8TZ" } },
+      { title: "Sash windows, 14 Eldon Square", customer: "Hartley Lettings Ltd", stage: 3, value: 7800, due: 2, starts: -15, fields: { site_address: "14 Eldon Square, Reading RG1 4DP", access: "Keys from the letting office" } },
+      { title: "Doors and skirting, Earley site", customer: "Brookmere Construction Ltd", stage: "won", value: 16400, due: -10, starts: -45, fields: { site_address: "Earley Gate, Whiteknights Road, Reading RG6 6BU" } },
+    ] },
+  "willow-wren-design": { staff: ["Hannah Wren", "Ollie Grant"], sources: ["Website", "Referral", "Instagram", "Existing client"], enquiries: [
+    ["Halcyon Coffee Roasters Ltd", "Amir Patel", "Packaging for the winter blends", 4800], ["Avon Valley Cider Co Ltd", "Lucy Ford", "Labels for a new perry range", 3600],
+    ["Clifton Physio Clinic Ltd", "Dr Ben Ellis", "Website refresh and booking page", 7200], ["Northgate Architects LLP", "Fiona Black", "Annual report design", 5400],
+    ["", "Megan Price", "Wedding stationery", 1200], ["Harbourside Market CIC", "Kate Lyons", "Market signage and maps", 2900],
+    ["Halcyon Coffee Roasters Ltd", "Amir Patel", "Café menu boards", 1500], ["Avon Valley Cider Co Ltd", "Lucy Ford", "Trade show stand", 6800], ["Northgate Architects LLP", "Fiona Black", "Brand guidelines", 8400]],
+    jobs: [
+      { title: "Winter blend packaging", customer: "Halcyon Coffee Roasters Ltd", stage: 2, value: 4800, due: 12, starts: -10, fields: { fee_basis: "Fixed price" } },
+      { title: "Website refresh", customer: "Clifton Physio Clinic Ltd", stage: 1, value: 7200, due: 45, starts: 5, fields: { fee_basis: "Fixed price" } },
+      { title: "Monthly design support", customer: "Northgate Architects LLP", stage: 2, value: 1200, due: 4, starts: -27, fields: { fee_basis: "Retainer" } },
+      { title: "Cider label refresh", customer: "Avon Valley Cider Co Ltd", stage: "won", value: 3100, due: -8, starts: -40, fields: { fee_basis: "Fixed price" } },
+    ] },
 };
-/** What each demo matter is, in a line, for the two companies the demo opens most. */
-const MATTER_SUMMARIES: Record<string, string> = {
-  "Coral Sands conference season": "Coffee bar and barista cover for the hotel's conference season, October to December, billed monthly.",
-  "Kiosk machine lease 2026": "Renewal of the espresso machine lease at the beach kiosk, with servicing and a spare grinder.",
-  "Barista academy, autumn intake": "A six-week barista course for the hotel's new bar staff: twelve places.",
-  "Single-origin launch": "Three single-origin coffees for retail, sold at the kiosk and the café counter.",
-  "Nordlicht app, sprints 14–16": "Three two-week sprints on the Nordlicht mobile app: offline mode and push notifications.",
+/** What each demo job is, in a line. */
+const JOB_SUMMARIES: Record<string, string> = {
+  "Conference coffee bar, week 44": "Coffee bar and barista cover for the hotel's conference week, billed with the month.",
+  "Machine service and a spare grinder": "The espresso machine's six-month service at the kiosk, and a spare grinder for the summer.",
+  "Single-origin launch: three coffees, 50 bags each": "Three single-origin coffees for retail, sold at the kiosk and the café counter.",
+  "Nordlicht app, sprints 14 to 16": "Three two-week sprints on the Nordlicht mobile app: offline mode and push notifications.",
   "Brabant support retainer": "Support and small changes on the Brabant checkout, up to 20 hours a month.",
   "Helios guest app 2.0": "The second version of the hotel guest app: loyalty points and room-service ordering.",
   "Atelier booking system go-live": "Launch of the booking system for Atelier's second venue, with two weeks of close support.",
+  "Port call, MV Horizon Star": "Husbandry and clearance for a general cargo call: pilot, berth, provisions and a crew change.",
+  "Oak staircase, Woodley plot 12": "Oak staircase with glass balustrade, made in the workshop and fitted over three days.",
 };
 const PEOPLE = ["Andreas Christodoulou", "Maria Iacovou", "Kyriakos Neocleous", "Anastasia Petridou", "Constantinos Louca", "Despo Charalambidou", "Thomas Kleopa", "Ioanna Papadopoulou", "Simon Hart", "Julia Becker", "Pieter Jansen", "Claire Dubois"];
 const ROLES = ["Director", "Finance manager", "Operations manager", "Accounts payable", "Purchasing"];
-const STAGES = ["new", "new", "contact_attempted", "contacted", "contacted", "qualified", "proposal", "proposal", "won"];
+/** Where each demo enquiry is: a position among the company's open stages, or won. */
+const STAGES: (number | "won")[] = [1, 1, 1, 2, 2, 2, 3, 3, "won"];
 const DUE = [-3, -1, 0, 0, 1, 3, 6, 10, 14];
+
+/** How each demo company works: its business type, and what it changed from the type's starting point. */
+const WORKSPACES: Record<string, { type: string; changes?: WorkspaceChanges }> = {
+  "aegean-blue-marine": { type: "marine" },
+  "troodos-gold": { type: "wholesale" },
+  "kalamies-dental": { type: "health", changes: { labels: { customer: ["Patient or insurer", "Patients and insurers"] },
+    fields: [{ entity: "job", key: "paid_by", label: "Paid by", kind: "choice", options: ["Self-paying", "Medisure", "Olympic Health Cover"], onCard: true }] } },
+  "larnaka-roast": { type: "retail", changes: { stages: { job: [{ name: "Received" }, { name: "Roasting" }, { name: "Ready" }, { name: "Delivered", outcome: "won" }, { name: "Cancelled", outcome: "lost" }] } } },
+  "pixelforge": { type: "agency" },
+  "mesogeios-holdings": { type: "holding" },
+  "thames-edge-joinery": { type: "trades" },
+  "willow-wren-design": { type: "agency", changes: { labels: { deal: ["Enquiry", "Enquiries"] } } },
+};
+type StageRow = { id: string; board: string; name: string; position: number; outcome: string };
+/** A company's stage: a position among its open stages on the board, or the one that closes it well. */
+const stageAt = (stages: StageRow[], board: "deal" | "job", at: number | "won") => {
+  if (at === "won") return stages.find(stage => stage.board === board && stage.outcome === "won")!;
+  const open = stages.filter(stage => stage.board === board && stage.outcome === "open");
+  return open[Math.min(at, open.length) - 1];
+};
+/** What to call someone in a to-do: a person by their first name, a board or an office by what it is. */
+const callName = (person: string) => /^(Dr )?[A-Z][a-zà-ÿ]+ [A-Z]/.test(person) ? person.replace(/^Dr /, "").split(" ")[0] : `the ${person.toLowerCase()}`;
+const workspaceQueries = (pg: PGlite) => ({
+  query: (text: string, params?: unknown[]) => pg.query(text, params),
+  rows: async <T,>(text: string, params?: unknown[]) => (await pg.query<T>(text, params)).rows,
+});
 
 export async function seedCrm(pg: PGlite) {
   const today = new Date().toISOString().slice(0, 10);
-  const orgs = (await pg.query<{ id: string; slug: string }>("select id, slug from organisations")).rows;
-  const rows: Record<string, Row[]> = { crm_enquiries: [], crm_contacts: [], crm_matters: [], crm_tasks: [], crm_activities: [] };
+  const orgs = (await pg.query<{ id: string; slug: string; country: string; business_type: string }>("select id, slug, country, business_type from organisations")).rows;
+  const { query, rows: rowsOf } = workspaceQueries(pg);
+  for (const org of orgs) {
+    const setup = WORKSPACES[org.slug] ?? { type: "general" };
+    await setUpWorkspace(query, rowsOf, org.id, setup.type, org.country, setup.changes);
+  }
+  const rows: Record<string, Row[]> = { crm_enquiries: [], crm_contacts: [], crm_jobs: [], crm_tasks: [], crm_activities: [] };
   for (const org of orgs) {
     const spec = CRM[org.slug];
     if (!spec) continue;
+    const stages = (await pg.query<StageRow>("select id, board, name, position, outcome from crm_stages where organisation_id = $1 order by position", [org.id])).rows;
+    const type = businessType(WORKSPACES[org.slug]?.type);
+    // A clinic's private patients are customers in their own name.
+    for (const [index, name] of (spec.patients ?? []).entries())
+      await pg.query("insert into customers (organisation_id, name, email, phone, default_account_id) select $1, $2, $3, $4, id from ledger_accounts where organisation_id = $1 and system_role = 'sales'",
+        [org.id, name, `${name.toLowerCase().replace(/[^a-z]+/g, ".")}@example.test`, `+357 99 ${String(624110 + index * 3313).slice(0, 6)}`]);
+    for (const [name, extra] of Object.entries(spec.customerFields ?? {})) await pg.query("update customers set extra = $3 where organisation_id = $1 and name = $2", [org.id, name, JSON.stringify(extra)]);
     const customers = (await pg.query<{ id: string; name: string }>("select id, name from customers where organisation_id = $1 order by name", [org.id])).rows;
     const overdue = (await pg.query<{ customer_id: string; number: string; client_name: string }>("select customer_id, number, client_name from v_invoice_directory where organisation_id = $1 and days_overdue > 0 order by days_overdue desc limit 2", [org.id])).rows;
     const prefix = org.slug.split("-").map(part => part[0]).join("").toUpperCase();
     const at = (offset: number, hour = 10) => new Date(Date.parse(`${addDays(today, offset)}T${String(hour).padStart(2, "0")}:15:00Z`)).toISOString();
-    const enquiryIds: { id: string; name: string; company: string; stage: string }[] = [];
+    const enquiryIds: { id: string; name: string; company: string; won: boolean }[] = [];
     spec.enquiries.forEach(([company, person, service, value], index) => {
-      const id = uuid(), stage = STAGES[index] ?? "contacted";
-      const won = stage === "won";
+      const id = uuid(), place = STAGES[index] ?? 2, stage = stageAt(stages, "deal", place);
+      const won = place === "won";
       const due = won ? null : addDays(today, DUE[index] ?? 7);
-      const next = won ? null : [`Call ${person.split(" ")[0]} back`, `Send the proposal for ${service.toLowerCase()}`, `Chase ${company || person} for a decision`, `Book a meeting with ${person.split(" ")[0]}`][index % 4];
+      // A person, by their first name; a board or an office, by what it is.
+      const who = callName(person);
+      const next = won ? null : [`Call ${who} back`, `Send the proposal for ${service.toLowerCase()}`, `Chase ${company || person} for a decision`, `Book a meeting with ${who}`][index % 4];
+      const source = spec.sources[index % spec.sources.length], owner = spec.staff[index % spec.staff.length];
       rows.crm_enquiries.push({ id, organisation_id: org.id, reference: `${prefix}-${2026}-${String(40 + index).padStart(4, "0")}`, full_name: person, company: company || null,
         email: `${person.toLowerCase().replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, "")}@example.test`, phone: `+357 9${String(9100000 + index * 7331).slice(0, 7)}`,
-        source: spec.sources[index % spec.sources.length], channel: spec.sources[index % spec.sources.length] === "Website" ? "form" : "manual", service, stage, value, owner: spec.staff[index % spec.staff.length], priority: index === 1 ? "urgent" : index === 4 ? "high" : "normal",
-        next_action: next, next_action_due: due, summary: `${service}. ${company ? `${company} ` : ""}${won ? "Agreed; set up as a client." : "Requirement being clarified."}`,
+        source, channel: source === "Website" ? "form" : "manual", service, stage_id: stage.id, value, owner, priority: index === 1 ? "urgent" : index === 4 ? "high" : "normal",
+        next_action: next, next_action_due: due, expected_on: won ? null : addDays(today, 14 + index * 6), extra: spec.dealFields?.[index] ?? {},
+        summary: `${service}. ${company ? `${company} ` : ""}${won ? "Agreed: set up as a customer." : "Requirement being clarified."}`,
         stage_changed_at: at(-(index + 2)), created_at: at(-(index * 4 + 6), 9) });
-      rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "email", body: `Enquiry received via ${spec.sources[index % spec.sources.length].toLowerCase()}: ${service.toLowerCase()}.`, actor: spec.staff[index % spec.staff.length], occurred_at: at(-(index * 4 + 6), 9) });
-      if (stage !== "new") rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "call", body: `Spoke to ${person.split(" ")[0]}: wants ${service.toLowerCase()}${value ? `, budget around €${value.toLocaleString("en-GB")}` : ""}.`, actor: spec.staff[index % spec.staff.length], occurred_at: at(-(index * 2 + 3), 11) });
-      if (stage === "proposal") rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "stage", body: "Moved to Proposal sent. Proposal emailed with terms and timing.", actor: spec.staff[index % spec.staff.length], occurred_at: at(-(index + 2), 15) });
-      if (won) rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "won", body: "Won: terms agreed and set up as a client.", actor: spec.staff[0], occurred_at: at(-3, 16) });
-      enquiryIds.push({ id, name: person, company, stage });
+      rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "email", body: `Enquiry received via ${source.toLowerCase()}: ${service.toLowerCase()}.`, actor: owner, occurred_at: at(-(index * 4 + 6), 9) });
+      if (place !== 1) rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "call", body: `Spoke to ${who}: wants ${service.toLowerCase()}${value ? `, budget around ${org.country === "GB" ? "£" : "€"}${value.toLocaleString("en-GB")}` : ""}.`, actor: owner, occurred_at: at(-(index * 2 + 3), 11) });
+      if (place === 3) rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "stage", body: `Moved to ${stage.name}.`, actor: owner, occurred_at: at(-(index + 2), 15) });
+      if (won) rows.crm_activities.push({ id: uuid(), organisation_id: org.id, enquiry_id: id, kind: "won", body: "Won: terms agreed and set up as a customer.", actor: spec.staff[0], occurred_at: at(-3, 16) });
+      enquiryIds.push({ id, name: person, company, won });
     });
     customers.forEach((customer, index) => {
+      if ((spec.patients ?? []).includes(customer.name)) return;
       const count = 1 + (index % 2);
       for (let n = 0; n < count; n++) {
         const name = PEOPLE[(index * 3 + n * 5 + orgs.indexOf(org)) % PEOPLE.length];
         rows.crm_contacts.push({ id: uuid(), organisation_id: org.id, customer_id: customer.id, name, role: ROLES[(index + n) % ROLES.length],
-          email: `${name.toLowerCase().split(" ")[0]}@${customer.name.toLowerCase().replace(/ (ltd|limited|gmbh|bv|sas|ab)$/, "").replace(/[^a-z]+/g, "")}.example`, phone: `+357 2${String(2200000 + index * 913 + n * 37).slice(0, 7)}` });
+          email: `${name.toLowerCase().split(" ")[0]}@${customer.name.toLowerCase().replace(/ (ltd|limited|gmbh|bv|sas|ab|llp|cic|co ltd)$/, "").replace(/[^a-z]+/g, "")}.example`, phone: `+357 2${String(2200000 + index * 913 + n * 37).slice(0, 7)}` });
       }
     });
-    const matterIds: string[] = [];
-    spec.matters.forEach((title, index) => {
-      const id = uuid();
-      const customer = customers[index % Math.max(1, customers.length)];
-      matterIds.push(id);
-      rows.crm_matters.push({ id, organisation_id: org.id, reference: `${prefix}-M-${String(101 + index)}`, title, customer_id: customer?.id ?? null, owner: spec.staff[index % spec.staff.length],
-        status: ["active", "waiting_on_client", "active", "on_hold"][index], priority: index === 0 ? "high" : "normal", value: [12000, 8400, 5600, 3200][index] * (org.slug === "mesogeios-holdings" ? 5 : 1),
-        next_action: ["Send the monthly report", "Chase the signed agreement", "Confirm the schedule", "Agree the revised scope"][index], next_action_due: addDays(today, [-2, 0, 2, 9][index]),
-        summary: MATTER_SUMMARIES[title] ?? (customer ? `For ${customer.name}.` : null), opened_on: addDays(today, -(40 + index * 21)) });
-      rows.crm_activities.push({ id: uuid(), organisation_id: org.id, matter_id: id, kind: "note", body: customer ? `Matter opened for ${customer.name}.` : "Matter opened.", actor: spec.staff[index % spec.staff.length], occurred_at: at(-(40 + index * 21), 10) });
+    const jobIds: string[] = [];
+    spec.jobs.forEach((job, index) => {
+      const id = uuid(), stage = stageAt(stages, "job", job.stage), done = job.stage === "won";
+      const customer = job.customer ? customers.find(row => row.name === job.customer) : undefined;
+      if (job.customer && !customer) throw new Error(`${org.slug}: no customer ${job.customer}`);
+      // A date field given as days from today.
+      const extra = Object.fromEntries(Object.entries(job.fields ?? {}).map(([key, value]) => [key, key === "eta" && typeof value === "number" ? addDays(today, value) : value]));
+      jobIds.push(id);
+      rows.crm_jobs.push({ id, organisation_id: org.id, reference: String(101 + index), title: job.title, customer_id: customer?.id ?? null, owner: spec.staff[index % spec.staff.length],
+        stage_id: stage.id, priority: index === 0 ? "high" : "normal", value: job.value || null, starts_on: job.starts === undefined ? null : addDays(today, job.starts),
+        due_on: job.due === undefined ? null : addDays(today, job.due), closed_on: done ? addDays(today, job.due ?? -3) : null,
+        next_action: done ? null : ["Confirm the dates with the customer", "Send an update", "Check everything is ready", "Agree what is left"][index % 4], next_action_due: done ? null : addDays(today, [0, 2, 1, 5][index % 4]),
+        summary: JOB_SUMMARIES[job.title] ?? (customer ? `For ${customer.name}.` : null), extra, opened_on: addDays(today, -(18 + index * 9)), stage_changed_at: at(-(index + 1)), created_at: at(-(18 + index * 9), 9) });
+      rows.crm_activities.push({ id: uuid(), organisation_id: org.id, job_id: id, kind: "note", body: customer ? `Opened for ${customer.name}.` : "Opened.", actor: spec.staff[index % spec.staff.length], occurred_at: at(-(18 + index * 9), 10) });
+      if (done) rows.crm_activities.push({ id: uuid(), organisation_id: org.id, job_id: id, kind: "stage", body: `Moved to ${stage.name}.`, actor: spec.staff[0], occurred_at: at(job.due ?? -3, 16) });
     });
-    const open = enquiryIds.filter(item => item.stage !== "won");
+    const open = enquiryIds.filter(item => !item.won);
+    const doneJob = spec.jobs.findIndex(job => job.stage === "won");
     const tasks: [string, number, string, Partial<Row>][] = [
-      [`Call ${open[0]?.name.split(" ")[0] ?? "the prospect"} back`, -2, "high", { enquiry_id: open[0]?.id }],
-      [`Send the revised proposal to ${open[6]?.company || open[6]?.name || "the client"}`, -1, "urgent", { enquiry_id: open[6]?.id }],
-      [spec.matters[0] ? `${spec.matters[0]}: monthly report` : "Monthly report", 0, "normal", { matter_id: matterIds[0] }],
-      [`Chase ${open[2]?.company || open[2]?.name || "the client"} for a decision`, 0, "normal", { enquiry_id: open[2]?.id }],
+      [`Call ${open[0] ? callName(open[0].name) : "the prospect"} back`, -2, "high", { enquiry_id: open[0]?.id }],
+      [`Send the revised quote to ${open[6]?.company || open[6]?.name || "the customer"}`, -1, "urgent", { enquiry_id: open[6]?.id }],
+      ...(jobIds[0] ? [[type.firstTask, 0, "normal", { job_id: jobIds[0] }] as [string, number, string, Partial<Row>]] : []),
+      [`Chase ${open[2]?.company || open[2]?.name || "the customer"} for a decision`, 0, "normal", { enquiry_id: open[2]?.id }],
       ...(overdue[0] ? [[`Chase invoice ${overdue[0].number} with ${overdue[0].client_name}`, 1, "high", { customer_id: overdue[0].customer_id }] as [string, number, string, Partial<Row>]] : []),
-      [`Prepare quote: ${open[3]?.company || open[3]?.name || "new enquiry"}`, 2, "normal", { enquiry_id: open[3]?.id }],
-      [spec.matters[1] ? `${spec.matters[1]}: confirm terms` : "Confirm terms", 4, "normal", { matter_id: matterIds[1] }],
-      [`Book a meeting with ${open[4]?.name.split(" ")[0] ?? "the prospect"}`, 6, "normal", { enquiry_id: open[4]?.id }],
+      ...(doneJob >= 0 ? [[`Raise the invoice: ${spec.jobs[doneJob].title}`, 1, "high", { job_id: jobIds[doneJob] }] as [string, number, string, Partial<Row>]] : []),
+      [`Prepare a quote: ${open[3]?.company || open[3]?.name || "new enquiry"}`, 2, "normal", { enquiry_id: open[3]?.id }],
+      ...(jobIds[1] ? [[`Send ${spec.jobs[1].customer ?? "the customer"} an update`, 4, "normal", { job_id: jobIds[1] }] as [string, number, string, Partial<Row>]] : []),
+      [`Book a meeting with ${open[4] ? callName(open[4].name) : "the prospect"}`, 6, "normal", { enquiry_id: open[4]?.id }],
       ...(overdue[1] ? [[`Agree a payment plan with ${overdue[1].client_name}`, 8, "normal", { customer_id: overdue[1].customer_id }] as [string, number, string, Partial<Row>]] : []),
-      [spec.matters[2] ? `${spec.matters[2]}: review` : "Quarterly review", 13, "normal", { matter_id: matterIds[2] }],
+      ...(spec.todos ?? []).map((title, index) => [title, [-2, 0, 4, 13][index % 4], "normal", {}] as [string, number, string, Partial<Row>]),
     ];
     tasks.forEach(([title, offset, priority, link], index) => rows.crm_tasks.push({ id: uuid(), organisation_id: org.id, title, due_on: addDays(today, offset), priority, owner: spec.staff[index % spec.staff.length],
-      enquiry_id: link.enquiry_id ?? null, matter_id: link.matter_id ?? null, customer_id: link.customer_id ?? null, created_at: at(-(5 + index), 9) }));
+      enquiry_id: link.enquiry_id ?? null, job_id: link.job_id ?? null, customer_id: link.customer_id ?? null, created_at: at(-(5 + index), 9) }));
   }
-  for (const table of ["crm_enquiries", "crm_contacts", "crm_matters", "crm_tasks", "crm_activities"]) {
+  for (const table of ["crm_enquiries", "crm_contacts", "crm_jobs", "crm_tasks", "crm_activities"]) {
     const groups = new Map<string, Row[]>();
     for (const row of rows[table]) {
       const key = Object.keys(row).filter(column => row[column] !== undefined).sort().join(",");
@@ -970,16 +1080,18 @@ export async function seedQuotes(pg: PGlite) {
   const orgs = (await pg.query<{ id: string; slug: string; invoice_prefix: string; vat_registered: boolean }>("select id, slug, invoice_prefix, vat_registered from organisations order by slug")).rows;
   for (const org of orgs) {
     const spec = CRM[org.slug];
-    const customers = (await pg.query<{ id: string; name: string; eu_business: boolean; default_account_id: string }>("select id, name, eu_business, default_account_id from customers where organisation_id = $1 order by name", [org.id])).rows;
-    if (!spec || !customers.length) continue;
     const profile = PROFILES.find(item => item.slug === org.slug)!;
+    // Quotes to the customers the company trades with, not a clinic's patients.
+    const customers = (await pg.query<{ id: string; name: string; eu_business: boolean; default_account_id: string }>("select id, name, eu_business, default_account_id from customers where organisation_id = $1 order by name", [org.id])).rows
+      .filter(customer => !profile || profile.customers.some(item => item.name === customer.name));
+    if (!spec || !customers.length) continue;
     const codes = new Map((await pg.query<{ id: string; code: string }>("select id, code from ledger_accounts where organisation_id = $1", [org.id])).rows.map(row => [row.code, row.id]));
     for (let index = 0; index < 2; index++) {
       // Two customers where there are two: a quote each, priced from what each is usually sold.
       const customer = customers[index % customers.length];
       const sold = profile.customers.find(item => item.name === customer.name)?.lines ?? [];
       const treatment = !org.vat_registered ? "exempt" : customer.eu_business ? "reverse_charge" : "standard";
-      const lines = (sold.length ? sold : [{ code: "", rate: 19 as Rate, range: [900, 2400] as [number, number], text: [spec.matters[index] ?? "Services"] }]).map(item => {
+      const lines = (sold.length ? sold : [{ code: "", rate: 19 as Rate, range: [900, 2400] as [number, number], text: [spec.jobs[index]?.title ?? "Services"] }]).map(item => {
         const rate = treatment === "standard" ? item.rate : 0;
         const net = Math.round((index === 0 ? item.range[1] : (item.range[0] + item.range[1]) / 2) * (profile.scale ?? 1) / 10) * 10;
         return { description: item.text[0], account_id: codes.get(item.code) ?? customer.default_account_id, net, vat_rate: rate, vat_amount: Math.round(net * rate) / 100 };
@@ -1443,14 +1555,19 @@ async function writeClientFiles(pg: PGlite) {
     { company: "Olive and Thyme Catering Ltd", person: "Despina Charalambous", service: "Payroll for 14 staff and the annual accounts", stage: "contacted", value: 5400, days: 6, changed: 3, channel: "manual" },
   ];
   const enquiryIds: Record<string, string> = {};
+  // The firm works as a professional practice: its clients, enquiries and engagements.
+  const { query, rows: rowsOf } = workspaceQueries(pg);
+  await setUpWorkspace(query, rowsOf, practice.org, "professional", "CY", { labels: { job: ["Engagement", "Engagements"] } });
+  const practiceStages = (await pg.query<StageRow>("select id, board, name, position, outcome from crm_stages where organisation_id = $1 order by position", [practice.org])).rows;
+  const PLACES: Record<string, number | "won"> = { new: 1, contacted: 2, proposal: 3, won: "won" };
   for (const [index, enquiry] of enquiries.entries()) {
     const id = randomUUID();
     enquiryIds[enquiry.company] = id;
     const won = enquiry.stage === "won";
-    await pg.query(`insert into crm_enquiries (id, organisation_id, reference, full_name, company, email, phone, source, channel, service, stage, value, owner, next_action, next_action_due, summary, stage_changed_at, created_at)
+    await pg.query(`insert into crm_enquiries (id, organisation_id, reference, full_name, company, email, phone, source, channel, service, stage_id, value, owner, next_action, next_action_due, summary, stage_changed_at, created_at)
       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
       [id, practice.org, `SA-2026-${String(61 + index).padStart(4, "0")}`, enquiry.person, enquiry.company, `${enquiry.person.split(" ")[0].toLowerCase()}@${enquiry.company.toLowerCase().replace(/ (ltd|house)$/, "").replace(/[^a-z]+/g, "")}.example`,
-       `+357 99 ${String(512330 + index * 4417).slice(0, 6)}`, enquiry.channel === "form" ? "Website" : "Referral", enquiry.channel, enquiry.service, enquiry.stage, enquiry.value,
+       `+357 99 ${String(512330 + index * 4417).slice(0, 6)}`, enquiry.channel === "form" ? "Website" : "Referral", enquiry.channel, enquiry.service, stageAt(practiceStages, "deal", PLACES[enquiry.stage]).id, enquiry.value,
        index % 2 ? "Andreas Kyriakou" : "Maria Antoniou", won ? null : ["Call Stelios back", "Send the proposal", "Chase Despina for a decision"][index - 1] ?? null, won ? null : addDays(today, index),
        `${enquiry.service}. ${won ? "Agreed: taking them on." : "Requirement being clarified."}`, at(addDays(today, -enquiry.changed), "15:20:00"), at(addDays(today, -enquiry.days), "09:05:00")]);
     await pg.query("insert into crm_activities (organisation_id, enquiry_id, kind, body, actor, occurred_at) values ($1, $2, 'email', $3, 'system', $4)",

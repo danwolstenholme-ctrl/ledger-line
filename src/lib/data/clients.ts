@@ -19,7 +19,7 @@ export type ClientFileRow = {
   /** Its country, whose terms its books are opened in. */
   country: "CY" | "GB";
   id: string; practice_id: string; organisation_id: string | null; enquiry_id: string | null; status: "onboarding" | "active" | "declined";
-  company_name: string; he_number: string | null; incorporated_on: string | null; registered_address: string | null; business: string;
+  company_name: string; he_number: string | null; incorporated_on: string | null; registered_address: string | null; business: string; business_type: string | null;
   contact_name: string | null; contact_email: string | null; contact_phone: string | null; services: Service[];
   monthly_fee: number; hourly_rate: number; app_fee: number; vat_registered: boolean; vat_number: string | null; vat_quarter_end_month: number; year_end_month: number;
   books_from: string | null; manager: string | null; face_to_face: boolean; introduced_by: string | null; client_token: string | null;

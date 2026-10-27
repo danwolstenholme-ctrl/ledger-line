@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "@/components/navigation/navigation-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BadgeCheck, Banknote, BarChart3, FolderCheck, Bell, BookOpen, BriefcaseBusiness, CalendarClock, CalendarDays, ClipboardCheck, Coins, Timer, Check, ChevronDown, ChevronRight, ChevronsUpDown, FilePen, FileText, Home, Inbox, Landmark,
-  LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, Truck, Users, X, type LucideIcon,
+  LayoutDashboard, ListChecks, NotebookPen, Package, PanelLeft, Percent, Receipt, ScanText, Search, Settings, ShieldCheck, SlidersHorizontal, Truck, Users, X, type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -18,7 +18,11 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { motion } from "motion/react";
 
 export type ShellPractice = { name: string; initials: string; brand_color: string; tagline: string | null };
-export type ShellClient = { id: string; slug: string; name: string; industry: string; practice: boolean; toReview: number; country: string };
+/** `nav`: what the company calls its customers, its pipeline and its work, and the parts it uses (lib/domain/business-types). `payroll`: the person may see its payroll. */
+export type ShellClient = { id: string; slug: string; name: string; industry: string; practice: boolean; toReview: number; country: string; payroll: boolean;
+  nav: { customers: string; deals: string; jobs: string; modules: string[] };
+  /** What else it is known by, for finding it: its Greek name, registration (HE) and VAT numbers. */
+  greek: string | null; he: string | null; vat: string | null };
 /** The person signed in. `role`: their role at the practice, or what they are to their company. `demo`: the laptop demo's sign-in. */
 export type ShellUser = { name: string; initials: string; email: string; role: string; demo: boolean };
 
@@ -54,17 +58,19 @@ export function PracticeMark({ practice, size = "md" }: { practice: Pick<ShellPr
 const shortName = (name: string) => name.replace(/ (Ltd|Limited)$/, "");
 
 function companyNav(base: string, client: ShellClient): NavGroup[] {
+  const has = (module: string) => client.nav.modules.includes(module);
   return [
     { label: null, items: [{ href: base, label: "Home", icon: Home, title: "Home" }] },
     // Customers first: who they are, what was quoted and invoiced, what is to do, and when.
+    // In the company's own words, and only the parts it uses.
     { label: "CRM", items: [
-      { href: `${base}/crm/enquiries`, label: "Enquiries", icon: Inbox, title: "Enquiries" },
-      { href: `${base}/customers`, label: "Customers", icon: Users, title: "Customers" },
-      { href: `${base}/quotes`, label: "Quotes", icon: FilePen, title: "Quotes" },
+      ...(has("pipeline") ? [{ href: `${base}/crm/pipeline`, label: client.nav.deals, icon: Inbox, title: client.nav.deals }] : []),
+      { href: `${base}/customers`, label: client.nav.customers, icon: Users, title: client.nav.customers },
+      ...(has("quotes") ? [{ href: `${base}/quotes`, label: "Quotes", icon: FilePen, title: "Quotes" }] : []),
       { href: `${base}/sales`, label: "Invoices", icon: FileText, title: "Invoices", also: [`${base}/credit-notes`, `${base}/repeating`] },
-      { href: `${base}/items`, label: "Products", icon: Package, title: "Products and services" },
-      { href: `${base}/crm/matters`, label: "Matters", icon: BriefcaseBusiness, title: "Matters" },
-      { href: `${base}/crm/tasks`, label: "Tasks", icon: ListChecks, title: "Tasks" },
+      ...(has("products") ? [{ href: `${base}/items`, label: "Products", icon: Package, title: "Products and services" }] : []),
+      ...(has("jobs") ? [{ href: `${base}/crm/jobs`, label: client.nav.jobs, icon: BriefcaseBusiness, title: client.nav.jobs }] : []),
+      ...(has("tasks") ? [{ href: `${base}/crm/tasks`, label: "Tasks", icon: ListChecks, title: "Tasks" }] : []),
       { href: `${base}/calendar`, label: "Calendar", icon: CalendarDays, title: "Calendar" },
     ] },
     { label: "Money", items: [
@@ -73,7 +79,7 @@ function companyNav(base: string, client: ShellClient): NavGroup[] {
       { href: `${base}/bills`, label: "Bills", icon: Receipt, title: "Bills", also: [`${base}/supplier-credits`] },
       { href: `${base}/suppliers`, label: "Suppliers", icon: Truck, title: "Suppliers" },
       // Cyprus payroll: a UK company's wages are coded from the bank until UK payroll is built.
-      ...(client.country === "CY" ? [{ href: `${base}/payroll`, label: "Payroll", icon: Banknote, title: "Payroll" }] : []),
+      ...(client.country === "CY" && has("payroll") && client.payroll ? [{ href: `${base}/payroll`, label: "Payroll", icon: Banknote, title: "Payroll" }] : []),
     ] },
     { label: "Reports & tax", items: [
       { href: `${base}/reports`, label: "Reports", icon: BarChart3, title: "Reports" },
@@ -86,6 +92,7 @@ function companyNav(base: string, client: ShellClient): NavGroup[] {
       { href: `${base}/journals`, label: "Journals", icon: NotebookPen, title: "Journals" },
       { href: `${base}/audit`, label: "Audit trail", icon: ShieldCheck, title: "Audit trail" },
       { href: `${base}/settings`, label: "Company settings", icon: Settings, title: "Company settings" },
+      { href: `${base}/settings/workspace`, label: "Customise", icon: SlidersHorizontal, title: "How the company works" },
       { href: `${base}/settings/people`, label: "People", icon: Users, title: "People" },
     ] },
   ];
@@ -99,10 +106,40 @@ function sameSection(pathname: string, slug: string) {
   return `/c/${slug}${section.length ? `/${section.join("/")}` : ""}`;
 }
 
+const RECENT_KEY = "ledgerline.recent-companies";
+/** The companies this browser opened last, most recent first. Kept in the browser only: a convenience, never a record. */
+function readRecent(): string[] {
+  try { const stored: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]"); return Array.isArray(stored) ? stored.filter((slug): slug is string => typeof slug === "string").slice(0, 6) : []; }
+  catch { return []; }
+}
+/** Search without case or accents, and numbers without their spaces: "he412907" finds HE 412907, "αιγαιο" finds ΑΙΓΑΙΟ. */
+const plain = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const compact = (text: string) => plain(text).replace(/[^a-z0-9\u03b1-\u03c9]/g, "");
+/** How a company matches what was typed: by its name (""), by another name or number it goes by (that text), or not at all (null). */
+function matchOf(entry: ShellClient, query: string): string | null {
+  if (plain(entry.name).includes(query)) return "";
+  const short = compact(query);
+  for (const alias of [entry.greek, entry.he, entry.vat]) if (alias && (plain(alias).includes(query) || (short.length > 2 && compact(alias).includes(short)))) return alias;
+  return null;
+}
+const subscribeNothing = () => () => undefined;
+
+/**
+ * Which company's books: a search over every client by name, Greek name,
+ * registration or VAT number, the last few opened first. Built for a
+ * practice with a hundred clients: type a few letters and press Enter, or
+ * ⌘K (Ctrl+K) from anywhere to open it.
+ */
 function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { clients: ShellClient[]; current: ShellClient | undefined; pathname: string; onNavigate: () => void; member: boolean }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  const [active, setActive] = useState(0);
+  const [recent, setRecent] = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const shortcut = useSyncExternalStore(subscribeNothing, () => /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl+K", () => null);
+  const show = () => { setRecent(readRecent()); setActive(0); setOpen(true); };
   useEffect(() => {
     if (!open) return;
     const away = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
@@ -111,39 +148,75 @@ function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { c
     window.addEventListener("keydown", key);
     return () => { document.removeEventListener("mousedown", away); window.removeEventListener("keydown", key); };
   }, [open]);
-  const shown = clients.filter(entry => !entry.practice && entry.name.toLowerCase().includes(filter.trim().toLowerCase()));
+  // ⌘K or Ctrl+K, anywhere: find a company.
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setRecent(readRecent()); setActive(0); setOpen(true); }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
+  // The company being looked at goes to the front of this browser's recent list.
+  useEffect(() => {
+    if (!current || current.practice) return;
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify([current.slug, ...readRecent().filter(slug => slug !== current.slug)].slice(0, 6))); } catch { /* private window: no list */ }
+  }, [current]);
+  useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" }); }, [active]);
+
+  const companies = clients.filter(entry => !entry.practice);
   const firm = clients.find(entry => entry.practice);
+  const query = plain(filter.trim());
+  // What was typed: names that start with it first, then the rest A to Z.
+  const matches = query ? companies.map(entry => ({ entry, via: matchOf(entry, query) })).filter(row => row.via !== null)
+    .sort((a, b) => Number(!plain(a.entry.name).startsWith(query)) - Number(!plain(b.entry.name).startsWith(query)) || a.entry.name.localeCompare(b.entry.name)) : [];
+  const recentEntries = query ? [] : recent.map(slug => companies.find(entry => entry.slug === slug)).filter((entry): entry is ShellClient => Boolean(entry) && entry?.slug !== current?.slug).slice(0, 5);
+  const options = query ? matches.map(row => row.entry) : [...recentEntries, ...companies];
   const done = () => { setOpen(false); setFilter(""); onNavigate(); };
+  const go = (entry: ShellClient) => { router.push(sameSection(pathname, entry.slug)); done(); };
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); setActive(index => Math.min(index + 1, options.length - 1)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(index - 1, 0)); }
+    else if (event.key === "Enter" && options[active]) { event.preventDefault(); go(options[active]); }
+  };
+  const row = (entry: ShellClient, index: number, via: string | null) => <li key={`${index}-${entry.slug}`}>
+    <Link href={sameSection(pathname, entry.slug)} onClick={done} data-index={index} onMouseEnter={() => setActive(index)}
+      className={cn("flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", index === active ? "bg-muted" : "", entry.slug === current?.slug ? "text-brand font-medium" : "text-ink")}>
+      <span className="min-w-0 flex-1 truncate">{entry.name}{via ? <span className="text-ink-faint ml-1.5 text-[11.5px]">{via}</span> : null}</span>
+      {entry.toReview ? <span className="bg-brand rounded px-1.5 text-[10.5px] leading-[18px] font-semibold text-white tabular-nums" title="Documents to review">{entry.toReview}</span> : null}
+      {entry.slug === current?.slug ? <Check className="size-3.5" /> : null}
+    </Link>
+  </li>;
+  const heading = (text: string) => <li aria-hidden className="text-ink-faint px-2.5 pt-2 pb-0.5 text-[10.5px] font-semibold tracking-[0.08em] uppercase">{text}</li>;
+
   return <div ref={ref} className="relative">
-    <button type="button" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-haspopup="true"
+    <button type="button" onClick={() => open ? setOpen(false) : show()} aria-expanded={open} aria-haspopup="true" aria-keyshortcuts="Meta+K Control+K"
       className="border-hairline-strong hover:bg-muted bg-surface flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 touch:py-3">
       <span className={cn("grid size-7 shrink-0 place-items-center rounded text-[11px] font-semibold", current ? "bg-brand-50 text-brand" : "bg-surface-sunken text-ink-muted")}>
         {current ? current.name.split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase() : <LayoutDashboard className="size-3.5" />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="text-ink block truncate text-[12.5px] leading-tight font-semibold">{current ? shortName(current.name) : "All clients"}</span>
-        <span className="text-ink-faint block truncate text-[11px] leading-tight">{current ? current.industry : `${clients.filter(entry => !entry.practice).length} companies`}</span>
+        <span className="text-ink-faint block truncate text-[11px] leading-tight">{current ? current.industry : `${companies.length} companies`}</span>
       </span>
       <ChevronsUpDown className="text-ink-faint size-3.5 shrink-0" />
     </button>
-    <MenuPanel open={open} role="dialog" className="bg-surface border-hairline absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-md border shadow-lg">
+    <MenuPanel open={open} role="dialog" className="bg-surface border-hairline absolute top-full left-0 z-10 mt-1 w-[21rem] max-w-[calc(100vw-1.25rem)] overflow-hidden rounded-md border shadow-lg">
       <div className="border-hairline flex items-center gap-2 border-b px-2.5 py-2">
         <Search className="text-ink-faint size-3.5 shrink-0" />
-        <input autoFocus value={filter} onChange={event => setFilter(event.target.value)} placeholder="Switch company…" aria-label="Find a company" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
+        <input autoFocus value={filter} onChange={event => { setFilter(event.target.value); setActive(0); }} onKeyDown={onKeyDown}
+          placeholder="Name, HE or VAT number…" aria-label="Find a company" aria-describedby="switcher-hint"
+          className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />
       </div>
-      <ul className="max-h-[60vh] overflow-y-auto py-1">
-        {member ? <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3"><LayoutDashboard className="size-3.5" />Practice dashboard</Link></li> : null}
-        {firm && member ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
+      <ul ref={listRef} className="max-h-[min(60vh,32rem)] overflow-y-auto py-1">
+        {!query && member ? <li><Link href="/" onClick={done} className="text-ink-muted hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3"><LayoutDashboard className="size-3.5" />Practice dashboard</Link></li> : null}
+        {!query && firm && member ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
           <BookOpen className="size-3.5" /><span className="min-w-0 flex-1 truncate">Your firm’s own books</span>{firm.slug === current?.slug ? <Check className="size-3.5" /> : null}</Link></li> : null}
-        {shown.map(entry => <li key={entry.slug}>
-          <Link href={sameSection(pathname, entry.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", entry.slug === current?.slug ? "text-brand font-medium" : "text-ink")}>
-            <span className="min-w-0 flex-1 truncate">{shortName(entry.name)}</span>
-            {entry.toReview ? <span className="bg-brand rounded px-1.5 text-[10.5px] leading-[18px] font-semibold text-white tabular-nums" title="Documents to review">{entry.toReview}</span> : null}
-            {entry.slug === current?.slug ? <Check className="size-3.5" /> : null}
-          </Link>
-        </li>)}
-        {!shown.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12px]">No company by that name.</li> : null}
+        {recentEntries.length ? <>{heading("Recent")}{recentEntries.map((entry, index) => row(entry, index, null))}</> : null}
+        {!query ? <>{heading(`All ${companies.length}`)}{companies.map((entry, index) => row(entry, recentEntries.length + index, null))}</> : null}
+        {query ? matches.map((match, index) => row(match.entry, index, match.via || null)) : null}
+        {query && !matches.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12px]">No company by that name or number.</li> : null}
       </ul>
+      <p id="switcher-hint" className="border-hairline text-ink-faint border-t px-2.5 py-1.5 text-[11px] touch:hidden">↑ ↓ to choose, Enter to open{shortcut ? ` · ${shortcut} from any page` : ""}</p>
     </MenuPanel>
   </div>;
 }

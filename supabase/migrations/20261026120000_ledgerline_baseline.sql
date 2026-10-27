@@ -59,6 +59,8 @@ create table organisations (
   consolidated_group      boolean not null default false,
   -- The country whose tax and company law apply (lib/domain/regimes), and the currency its books are kept in.
   country                 char(2) not null default 'CY' check (country in ('CY', 'GB')),
+  -- What kind of business it is (lib/domain/business-types): the starting point for its names, stages and the parts it uses.
+  business_type           text not null default 'general' check (business_type in ('trades', 'professional', 'agency', 'retail', 'wholesale', 'marine', 'property', 'health', 'holding', 'general')),
   currency                char(3) not null default 'EUR',
   -- A company, or someone in business on their own: a sole trader is taxed by an individual's tax year.
   entity                  text not null default 'company' check (entity in ('company', 'sole_trader')),
@@ -154,6 +156,8 @@ create table customers (
   default_account_id uuid,
   -- Days this customer has to pay; the company's own terms when not set.
   payment_terms_days smallint check (payment_terms_days between 0 and 365),
+  -- The company's own details on its customers (custom_fields), by key.
+  extra           jsonb not null default '{}' check (jsonb_typeof(extra) = 'object'),
   is_active       boolean not null default true,
   created_at      timestamptz not null default now(),
   unique (organisation_id, id),
@@ -2261,11 +2265,65 @@ end $$;
 
 -- ---------------------------------------------------------------------------
 -- The CRM, inside each client company: enquiries through to won, the
--- company's clients (its customers in the books), their people, the work in
--- hand (matters), tasks and the activity on each.
+-- company's customers (the same customers as in its books), their people,
+-- the work it does for them (its jobs, whatever it calls them), tasks and the
+-- activity on each. How each company works is its own: what it calls these,
+-- the stages they go through, the details it keeps, and the parts it uses.
 -- ---------------------------------------------------------------------------
 
-create type crm_stage as enum ('new', 'contact_attempted', 'contacted', 'qualified', 'proposal', 'won', 'lost');
+-- How a company works (lib/domain/business-types): what it calls its customers, its enquiries and its work, and the
+-- parts beyond its books it uses. Set from its business type when it is opened; the company changes it afterwards.
+create table workspace_settings (
+  organisation_id uuid primary key references organisations (id) on delete cascade,
+  customer_one    text not null default 'Customer',
+  customer_many   text not null default 'Customers',
+  deal_one        text not null default 'Enquiry',
+  deal_many       text not null default 'Enquiries',
+  job_one         text not null default 'Job',
+  job_many        text not null default 'Jobs',
+  modules         text[] not null default '{pipeline,quotes,jobs,tasks,products,payroll}'
+                  check (modules <@ array['pipeline', 'quotes', 'jobs', 'tasks', 'products', 'payroll']::text[]),
+  updated_at      timestamptz not null default now(),
+  constraint workspace_settings_labels check (length(btrim(customer_one)) between 1 and 30 and length(btrim(customer_many)) between 1 and 30
+    and length(btrim(deal_one)) between 1 and 30 and length(btrim(deal_many)) between 1 and 30 and length(btrim(job_one)) between 1 and 30 and length(btrim(job_many)) between 1 and 30)
+);
+
+-- The stages a company's enquiries (the 'deal' board) and its jobs (the 'job' board) go through, in order. Each board has
+-- one stage that closes a record well (won; done) and one that closes it otherwise (lost; cancelled). A deal stage's
+-- probability weighs the pipeline.
+create table crm_stages (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  board           text not null check (board in ('deal', 'job')),
+  name            text not null check (length(btrim(name)) between 1 and 40),
+  position        smallint not null check (position > 0),
+  outcome         text not null default 'open' check (outcome in ('open', 'won', 'lost')),
+  probability     smallint check (probability between 0 and 100),
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id)
+);
+create unique index crm_stages_name on crm_stages (organisation_id, board, lower(btrim(name)));
+create unique index crm_stages_one_won on crm_stages (organisation_id, board) where outcome = 'won';
+create unique index crm_stages_one_lost on crm_stages (organisation_id, board) where outcome = 'lost';
+
+-- The details a company keeps beyond the usual on its customers, enquiries and jobs: a vessel and its port, a site
+-- address, a fee basis. Values live in each record's `extra`, by key. An archived field keeps its values, unshown.
+create table custom_fields (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  entity          text not null check (entity in ('customer', 'deal', 'job')),
+  key             text not null check (key ~ '^[a-z][a-z0-9_]{0,39}$'),
+  label           text not null check (length(btrim(label)) between 1 and 60),
+  kind            text not null check (kind in ('text', 'number', 'money', 'date', 'choice', 'yes_no', 'link')),
+  options         text[] not null default '{}',
+  position        smallint not null default 0,
+  -- Shown on the record's card on its board, and as a column in its list.
+  on_card         boolean not null default false,
+  archived_at     timestamptz,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, entity, key),
+  constraint custom_fields_options check (case when kind = 'choice' then cardinality(options) between 1 and 30 else cardinality(options) = 0 end)
+);
 
 create table crm_enquiries (
   id               uuid primary key default gen_random_uuid(),
@@ -2279,8 +2337,10 @@ create table crm_enquiries (
   -- How it reached the books: typed in by someone, sent from the company's website form, or posted to the API.
   channel          text not null default 'manual' check (channel in ('manual', 'form', 'api')),
   service          text,
-  stage            crm_stage not null default 'new',
+  -- Filled with the company's first open stage when not given (crm_stage_check).
+  stage_id         uuid not null,
   value            numeric(14, 2),
+  expected_on      date,
   owner            text not null,
   priority         text not null default 'normal' check (priority in ('normal', 'high', 'urgent')),
   next_action      text,
@@ -2288,10 +2348,11 @@ create table crm_enquiries (
   summary          text,
   lost_reason      text,
   customer_id      uuid references customers (id) on delete set null,
+  extra            jsonb not null default '{}' check (jsonb_typeof(extra) = 'object'),
   stage_changed_at timestamptz not null default now(),
   created_at       timestamptz not null default now(),
   unique (organisation_id, reference),
-  constraint crm_enquiries_lost_reason check (stage <> 'lost' or lost_reason is not null)
+  foreign key (organisation_id, stage_id) references crm_stages (organisation_id, id)
 );
 
 -- ---------------------------------------------------------------------------
@@ -2471,24 +2532,62 @@ create table crm_contacts (
   created_at      timestamptz not null default now()
 );
 
-create table crm_matters (
-  id              uuid primary key default gen_random_uuid(),
-  organisation_id uuid not null references organisations (id) on delete cascade,
-  reference       text not null,
-  title           text not null,
-  customer_id     uuid references customers (id) on delete set null,
-  enquiry_id      uuid references crm_enquiries (id) on delete set null,
-  owner           text not null,
-  status          text not null default 'active' check (status in ('active', 'waiting_on_client', 'on_hold', 'completed')),
-  priority        text not null default 'normal' check (priority in ('normal', 'high', 'urgent')),
-  value           numeric(14, 2),
-  next_action     text,
-  next_action_due date,
-  summary         text,
-  opened_on       date not null default current_date,
-  created_at      timestamptz not null default now(),
-  unique (organisation_id, reference)
+-- The work a company does for its customers, whatever it calls it: jobs, projects, orders, bookings, treatment plans.
+create table crm_jobs (
+  id               uuid primary key default gen_random_uuid(),
+  organisation_id  uuid not null references organisations (id) on delete cascade,
+  reference        text not null,
+  title            text not null check (length(btrim(title)) between 1 and 200),
+  customer_id      uuid references customers (id) on delete set null,
+  enquiry_id       uuid references crm_enquiries (id) on delete set null,
+  owner            text not null,
+  -- Filled with the company's first open stage when not given (crm_stage_check).
+  stage_id         uuid not null,
+  priority         text not null default 'normal' check (priority in ('normal', 'high', 'urgent')),
+  value            numeric(14, 2) check (value >= 0),
+  starts_on        date,
+  due_on           date,
+  next_action      text,
+  next_action_due  date,
+  summary          text,
+  extra            jsonb not null default '{}' check (jsonb_typeof(extra) = 'object'),
+  opened_on        date not null default current_date,
+  -- The day it reached done or cancelled; none while it is open.
+  closed_on        date,
+  stage_changed_at timestamptz not null default now(),
+  created_at       timestamptz not null default now(),
+  unique (organisation_id, reference),
+  foreign key (organisation_id, stage_id) references crm_stages (organisation_id, id),
+  constraint crm_jobs_dates check (due_on is null or starts_on is null or due_on >= starts_on)
 );
+
+-- A record's stage is one of its company's, on its own board. A new one starts in the first open stage; a deal lost says
+-- why; a job closes on the day it reaches done or cancelled, and opens again if moved back.
+create function crm_stage_check() returns trigger language plpgsql as $$
+declare v_board text := case tg_table_name when 'crm_enquiries' then 'deal' else 'job' end; v_outcome text;
+begin
+  if new.stage_id is null then
+    select id into new.stage_id from crm_stages where organisation_id = new.organisation_id and board = v_board and outcome = 'open' order by position limit 1;
+  end if;
+  select outcome into v_outcome from crm_stages where id = new.stage_id and organisation_id = new.organisation_id and board = v_board;
+  if v_outcome is null then
+    raise exception 'crm_stage_board: that is not one of this company''s % stages', case v_board when 'deal' then 'pipeline' else 'job' end using errcode = '23514';
+  end if;
+  if tg_op = 'UPDATE' and new.stage_id is distinct from old.stage_id then new.stage_changed_at := now(); end if;
+  if v_board = 'deal' then
+    if v_outcome = 'lost' and nullif(btrim(coalesce(new.lost_reason, '')), '') is null then
+      raise exception 'crm_lost_reason: a lost enquiry needs its reason' using errcode = '23514';
+    end if;
+    if v_outcome <> 'lost' then new.lost_reason := null; end if;
+  else
+    new.closed_on := case when v_outcome = 'open' then null
+      when tg_op = 'INSERT' then coalesce(new.closed_on, current_date)
+      when old.stage_id = new.stage_id then coalesce(old.closed_on, current_date) else current_date end;
+  end if;
+  return new;
+end $$;
+create trigger crm_enquiries_stage before insert or update of stage_id, lost_reason on crm_enquiries for each row execute function crm_stage_check();
+create trigger crm_jobs_stage before insert or update of stage_id on crm_jobs for each row execute function crm_stage_check();
 
 create table crm_tasks (
   id              uuid primary key default gen_random_uuid(),
@@ -2499,7 +2598,7 @@ create table crm_tasks (
   owner           text not null,
   done_at         timestamptz,
   enquiry_id      uuid references crm_enquiries (id) on delete cascade,
-  matter_id       uuid references crm_matters (id) on delete cascade,
+  job_id          uuid references crm_jobs (id) on delete cascade,
   customer_id     uuid references customers (id) on delete cascade,
   created_at      timestamptz not null default now()
 );
@@ -2508,7 +2607,7 @@ create table crm_activities (
   id              uuid primary key default gen_random_uuid(),
   organisation_id uuid not null references organisations (id) on delete cascade,
   enquiry_id      uuid references crm_enquiries (id) on delete cascade,
-  matter_id       uuid references crm_matters (id) on delete cascade,
+  job_id          uuid references crm_jobs (id) on delete cascade,
   customer_id     uuid references customers (id) on delete cascade,
   kind            text not null default 'note' check (kind in ('note', 'call', 'email', 'meeting', 'stage', 'won')),
   body            text not null,
@@ -2539,6 +2638,8 @@ create table client_files (
   incorporated_on       date,
   registered_address    text,
   business              text not null default '',
+  -- The kind of business (lib/domain/business-types), which shapes its Ledgerline when its books open. None: suggested from `business`.
+  business_type         text check (business_type in ('trades', 'professional', 'agency', 'retail', 'wholesale', 'marine', 'property', 'health', 'holding', 'general')),
   contact_name          text,
   contact_email         text,
   contact_phone         text,
@@ -2948,6 +3049,19 @@ create function writable_companies() returns uuid[] language sql stable security
     select o.id from organisations o join practice_staff s on s.practice_id = o.practice_id where s.user_id = app_user_id()
     union all select organisation_id from company_members where user_id = app_user_id() and role in ('owner', 'staff')) writable
 $$;
+-- What the person may set up (how a company works: its names, stages and fields): their practices' companies, and those they own.
+create function setup_companies() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct id), '{}') from (
+    select o.id from organisations o join practice_staff s on s.practice_id = o.practice_id where s.user_id = app_user_id()
+    union all select organisation_id from company_members where user_id = app_user_id() and role = 'owner') setup
+$$;
+-- Whose payroll the person sees: their practices' companies, and those they own or audit. A company's other people see the
+-- wages in its books as totals, never what each person is paid.
+create function payroll_companies() returns uuid[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct id), '{}') from (
+    select o.id from organisations o join practice_staff s on s.practice_id = o.practice_id where s.user_id = app_user_id()
+    union all select organisation_id from company_members where user_id = app_user_id() and role in ('owner', 'auditor')) payroll
+$$;
 -- The client companies the person owns: they may invite that company's own people.
 create function owned_companies() returns uuid[] language sql stable security definer set search_path = public as $$
   select coalesce(array_agg(organisation_id), '{}') from company_members where user_id = app_user_id() and role = 'owner'
@@ -2991,7 +3105,10 @@ alter table credit_notes enable row level security;
 alter table crm_activities enable row level security;
 alter table crm_contacts enable row level security;
 alter table crm_enquiries enable row level security;
-alter table crm_matters enable row level security;
+alter table crm_jobs enable row level security;
+alter table crm_stages enable row level security;
+alter table custom_fields enable row level security;
+alter table workspace_settings enable row level security;
 alter table crm_tasks enable row level security;
 alter table customers enable row level security;
 alter table deadline_marks enable row level security;
@@ -3093,10 +3210,23 @@ create policy crm_enquiries_read on crm_enquiries for select to authenticated us
 create policy crm_enquiries_insert on crm_enquiries for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy crm_enquiries_update on crm_enquiries for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy crm_enquiries_delete on crm_enquiries for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
-create policy crm_matters_read on crm_matters for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
-create policy crm_matters_insert on crm_matters for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy crm_matters_update on crm_matters for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy crm_matters_delete on crm_matters for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_jobs_read on crm_jobs for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_jobs_insert on crm_jobs for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_jobs_update on crm_jobs for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy crm_jobs_delete on crm_jobs for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+-- How a company works is read by everyone in it and set by its accountant or its owner.
+create policy crm_stages_read on crm_stages for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy crm_stages_insert on crm_stages for insert to authenticated with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy crm_stages_update on crm_stages for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy crm_stages_delete on crm_stages for delete to authenticated using (organisation_id = any ((select setup_companies())::uuid[]));
+create policy custom_fields_read on custom_fields for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy custom_fields_insert on custom_fields for insert to authenticated with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy custom_fields_update on custom_fields for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy custom_fields_delete on custom_fields for delete to authenticated using (organisation_id = any ((select setup_companies())::uuid[]));
+create policy workspace_settings_read on workspace_settings for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy workspace_settings_insert on workspace_settings for insert to authenticated with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy workspace_settings_update on workspace_settings for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy workspace_settings_delete on workspace_settings for delete to authenticated using (organisation_id = any ((select setup_companies())::uuid[]));
 create policy crm_tasks_read on crm_tasks for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
 create policy crm_tasks_insert on crm_tasks for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy crm_tasks_update on crm_tasks for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
@@ -3188,18 +3318,18 @@ create policy time_entries_access on time_entries for all to authenticated using
 create policy year_ends_read on year_ends for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
 create policy year_ends_write on year_ends for all to authenticated using (organisation_id = any ((select practice_companies())::uuid[])) with check (organisation_id = any ((select practice_companies())::uuid[]));
 -- A company's payroll: read by those who may see its books, changed by those who may change them.
-create policy employees_read on employees for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
-create policy employees_insert on employees for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy employees_update on employees for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy employees_delete on employees for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
-create policy payroll_runs_read on payroll_runs for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
-create policy payroll_runs_insert on payroll_runs for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy payroll_runs_update on payroll_runs for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy payroll_runs_delete on payroll_runs for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
-create policy payslips_read on payslips for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
-create policy payslips_insert on payslips for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy payslips_update on payslips for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
-create policy payslips_delete on payslips for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy employees_read on employees for select to authenticated using (organisation_id = any ((select payroll_companies())::uuid[]));
+create policy employees_insert on employees for insert to authenticated with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy employees_update on employees for update to authenticated using (organisation_id = any ((select payroll_companies())::uuid[])) with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy employees_delete on employees for delete to authenticated using (organisation_id = any ((select setup_companies())::uuid[]));
+create policy payroll_runs_read on payroll_runs for select to authenticated using (organisation_id = any ((select payroll_companies())::uuid[]));
+create policy payroll_runs_insert on payroll_runs for insert to authenticated with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy payroll_runs_update on payroll_runs for update to authenticated using (organisation_id = any ((select payroll_companies())::uuid[])) with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy payroll_runs_delete on payroll_runs for delete to authenticated using (organisation_id = any ((select setup_companies())::uuid[]));
+create policy payslips_read on payslips for select to authenticated using (organisation_id = any ((select payroll_companies())::uuid[]));
+create policy payslips_insert on payslips for insert to authenticated with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy payslips_update on payslips for update to authenticated using (organisation_id = any ((select payroll_companies())::uuid[])) with check (organisation_id = any ((select setup_companies())::uuid[]));
+create policy payslips_delete on payslips for delete to authenticated using (organisation_id = any ((select setup_companies())::uuid[]));
 -- Each person's own calendar links, for companies they can see. Reading a link's calendar goes through the service, by its hash.
 create policy calendar_feeds_own on calendar_feeds for all to authenticated using (user_id = (select app_user_id()))
   with check (user_id = (select app_user_id()) and (organisation_id is null or organisation_id = any ((select visible_companies())::uuid[])));

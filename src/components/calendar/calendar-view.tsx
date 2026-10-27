@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { PageBody } from "@/components/common/primitives";
 import { RecordBadge, RecordFilterLinks, RecordHeader, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
 import { SubscribeCalendar } from "@/components/calendar/subscribe";
+import { ClientFilter } from "@/components/common/client-filter";
 
 /**
  * The calendar: everything with a date on it, on its day. A practice sees all
@@ -101,7 +102,7 @@ export async function CalendarView({ query, company }: { query: Record<string, s
       <div className="ml-auto"><RecordFilterLinks label="View" options={CALENDAR_VIEWS.map(item => ({ label: item.label, href: href({ view: item.key }), active: view === item.key }))} /></div>
     </div>
     <div className="flex flex-col gap-2">
-      {company ? null : <RecordFilterLinks label="Client" options={[{ label: "All clients", href: href({ client: null }), active: !client },
+      {company ? null : <ClientFilter label="Client" options={[{ label: "All clients", href: href({ client: null }), active: !client },
         ...organisations.map(org => ({ label: calendarCompanyLabel(org.name), href: href({ client: org.slug }), active: client === org.slug }))]} />}
       <RecordFilterLinks label="Show" options={[{ label: "Everything", href: href({ kind: everyone ? "all" : null }), active: !kind },
         ...(Object.keys(CALENDAR_KINDS) as CalendarKind[]).map(key => ({ label: CALENDAR_KINDS[key], href: href({ kind: key }), active: kind === key }))]} />

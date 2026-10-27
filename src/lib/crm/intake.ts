@@ -46,8 +46,8 @@ export async function recordEnquiry(org: Pick<OrganisationRow, "id" | "slug">, i
   return transaction(async run => {
     // Whoever has the fewest open enquiries takes the next one; the people are those who already own the company's work.
     const [owner] = await run<{ owner: string }>(`
-      with people as (select owner from crm_enquiries where organisation_id = $1 union select owner from crm_matters where organisation_id = $1)
-      select p.owner, (select count(*) from crm_enquiries e where e.organisation_id = $1 and e.owner = p.owner and e.stage not in ('won', 'lost')) as open
+      with people as (select owner from crm_enquiries where organisation_id = $1 union select owner from crm_jobs where organisation_id = $1)
+      select p.owner, (select count(*) from crm_enquiries e join crm_stages s on s.id = e.stage_id where e.organisation_id = $1 and e.owner = p.owner and s.outcome = 'open') as open
         from people p order by open, p.owner limit 1`, [org.id]);
     const ownerName = owner?.owner ?? actor;
     const [last] = await run<{ n: number | null }>("select max(substring(reference from '(\\d+)$')::int) as n from crm_enquiries where organisation_id = $1 and reference like $2", [org.id, `${prefix}%`]);

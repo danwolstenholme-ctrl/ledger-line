@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Checkbox, Field, FormError, NativeSelect, SubmitButton, TextArea, TextInput } from "@/components/common/form-fields";
 import { CopyBlock } from "@/components/crm/forms";
 import { recordButton } from "@/components/records/record-layout";
+import { BUSINESS_TYPES, suggestBusinessType } from "@/lib/domain/business-types";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const Saved = ({ text = "Saved" }: { text?: string }) => <span role="status" className="text-positive text-[12px]">{text}</span>;
@@ -48,6 +49,7 @@ type DetailsFile = {
   id: string; company_name: string; he_number: string | null; incorporated_on: string | null; registered_address: string | null; business: string; contact_name: string | null;
   contact_email: string | null; contact_phone: string | null; services: Service[]; monthly_fee: number; hourly_rate: number; app_fee: number; vat_registered: boolean; vat_number: string | null;
   vat_quarter_end_month: number; year_end_month: number; books_from: string | null; manager: string | null; face_to_face: boolean; introduced_by: string | null; signed_at: string | null; country?: string;
+  business_type?: string | null;
 };
 
 export function ClientDetailsForm({ file, staff, locked }: { file: DetailsFile; staff: string[]; locked: boolean }) {
@@ -67,6 +69,11 @@ export function ClientDetailsForm({ file, staff, locked }: { file: DetailsFile; 
       </div>
       <Field label="Registered office" htmlFor={`${uid}-address`}><TextInput id={`${uid}-address`} name="registered_address" defaultValue={file.registered_address ?? ""} maxLength={500} /></Field>
       <Field label="What the company does" htmlFor={`${uid}-business`} hint="for the risk assessment"><TextInput id={`${uid}-business`} name="business" defaultValue={file.business} maxLength={300} /></Field>
+      <Field label="Kind of business" htmlFor={`${uid}-type`} hint="shapes their Ledgerline: names, stages, fields">
+        <NativeSelect id={`${uid}-type`} name="business_type" defaultValue={file.business_type ?? suggestBusinessType(file.business)}>
+          {BUSINESS_TYPES.map(type => <option key={type.key} value={type.key}>{type.label}</option>)}
+        </NativeSelect>
+      </Field>
       <Field label="Contact" htmlFor={`${uid}-contact`} hint="who signs for the company"><TextInput id={`${uid}-contact`} name="contact_name" defaultValue={file.contact_name ?? ""} maxLength={200} /></Field>
       <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-3">
         <Field label="Email" htmlFor={`${uid}-email`} error={errors.contact_email}><TextInput id={`${uid}-email`} name="contact_email" type="email" defaultValue={file.contact_email ?? ""} /></Field>
