@@ -15,14 +15,13 @@ import { LedgerlineMark } from "@/components/brand/ledgerline-mark";
 import { MenuPanel, Motion, NavigationProgress } from "@/components/motion/motion";
 import { TimerControl, type TimerRunning } from "@/components/work/timer-control";
 import { UserMenu } from "@/components/shell/user-menu";
+import { loadCompanies, useCompanies, useCurrentCompany, type CompanyEntry } from "@/components/shell/companies";
+import type { ShellCompany } from "@/lib/data/shell";
 import { motion } from "motion/react";
 
 export type ShellPractice = { name: string; initials: string; brand_color: string; tagline: string | null };
-/** `nav`: what the company calls its customers, its pipeline and its work, and the parts it uses (lib/domain/business-types). `payroll`: the person may see its payroll. */
-export type ShellClient = { id: string; slug: string; name: string; industry: string; practice: boolean; toReview: number; country: string; payroll: boolean;
-  nav: { customers: string; deals: string; jobs: string; modules: string[] };
-  /** What else it is known by, for finding it: its Greek name, registration (HE) and VAT numbers. */
-  greek: string | null; he: string | null; vat: string | null };
+/** The company being looked at, as its menu needs it (lib/data/shell). The list of every company is fetched when wanted (./companies). */
+export type ShellClient = ShellCompany;
 /** The person signed in. `role`: their role at the practice, or what they are to their company. `demo`: the laptop demo's sign-in. */
 export type ShellUser = { name: string; initials: string; email: string; role: string; demo: boolean };
 
@@ -38,7 +37,7 @@ type NavGroup = { label: string | null; items: NavItem[]; more?: boolean };
  * under More.
  */
 /** `member`: one of the practice's people. A client company's own people get their company's menu only: none of the practice's pages. */
-type ShellProps = { practice: ShellPractice; clients: ShellClient[]; user: ShellUser; member: boolean; toReview: number; timer: TimerRunning | null; children: ReactNode };
+type ShellProps = { practice: ShellPractice; initialCompany: ShellCompany | null; companyCount: number; user: ShellUser; member: boolean; toReview: number; timer: TimerRunning | null; children: ReactNode };
 
 export function AppShell(props: ShellProps) {
   return <NavigationProvider><Motion><NavigationProgress /><WorkspaceShell {...props} /></Motion></NavigationProvider>;
@@ -116,7 +115,7 @@ function readRecent(): string[] {
 const plain = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const compact = (text: string) => plain(text).replace(/[^a-z0-9\u03b1-\u03c9]/g, "");
 /** How a company matches what was typed: by its name (""), by another name or number it goes by (that text), or not at all (null). */
-function matchOf(entry: ShellClient, query: string): string | null {
+function matchOf(entry: CompanyEntry, query: string): string | null {
   if (plain(entry.name).includes(query)) return "";
   const short = compact(query);
   for (const alias of [entry.greek, entry.he, entry.vat]) if (alias && (plain(alias).includes(query) || (short.length > 2 && compact(alias).includes(short)))) return alias;
@@ -130,9 +129,16 @@ const subscribeNothing = () => () => undefined;
  * practice with a hundred clients: type a few letters and press Enter, or
  * ⌘K (Ctrl+K) from anywhere to open it.
  */
-function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { clients: ShellClient[]; current: ShellClient | undefined; pathname: string; onNavigate: () => void; member: boolean }) {
+function CompanySwitcher({ current, count, pathname, onNavigate, member }: { current: ShellClient | null; count: number; pathname: string; onNavigate: () => void; member: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const clients = useCompanies(open) ?? [];
+  // Fetched once the page is idle, so the first open is instant however many clients there are.
+  useEffect(() => {
+    const idle = (window as Window & { requestIdleCallback?: (callback: () => void) => number }).requestIdleCallback;
+    const handle = idle ? idle(() => void loadCompanies()) : window.setTimeout(() => void loadCompanies(), 1500);
+    return () => { if (!idle) window.clearTimeout(handle); };
+  }, []);
   const [filter, setFilter] = useState("");
   const [active, setActive] = useState(0);
   const [recent, setRecent] = useState<string[]>([]);
@@ -169,16 +175,21 @@ function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { c
   // What was typed: names that start with it first, then the rest A to Z.
   const matches = query ? companies.map(entry => ({ entry, via: matchOf(entry, query) })).filter(row => row.via !== null)
     .sort((a, b) => Number(!plain(a.entry.name).startsWith(query)) - Number(!plain(b.entry.name).startsWith(query)) || a.entry.name.localeCompare(b.entry.name)) : [];
-  const recentEntries = query ? [] : recent.map(slug => companies.find(entry => entry.slug === slug)).filter((entry): entry is ShellClient => Boolean(entry) && entry?.slug !== current?.slug).slice(0, 5);
+  const recentEntries = query ? [] : recent.map(slug => companies.find(entry => entry.slug === slug)).filter((entry): entry is CompanyEntry => Boolean(entry) && entry?.slug !== current?.slug).slice(0, 5);
   const options = query ? matches.map(row => row.entry) : [...recentEntries, ...companies];
   const done = () => { setOpen(false); setFilter(""); onNavigate(); };
-  const go = (entry: ShellClient) => { router.push(sameSection(pathname, entry.slug)); done(); };
+  const go = (entry: CompanyEntry) => { router.push(sameSection(pathname, entry.slug)); done(); };
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "ArrowDown") { event.preventDefault(); setActive(index => Math.min(index + 1, options.length - 1)); }
     else if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(index - 1, 0)); }
     else if (event.key === "Enter" && options[active]) { event.preventDefault(); go(options[active]); }
+    // Typed before the list arrived: wait for it, then open the first match.
+    else if (event.key === "Enter" && !clients.length && query) {
+      event.preventDefault();
+      void loadCompanies().then(list => { const first = list.find(entry => !entry.practice && matchOf(entry, query) !== null); if (first) go(first); });
+    }
   };
-  const row = (entry: ShellClient, index: number, via: string | null) => <li key={`${index}-${entry.slug}`}>
+  const row = (entry: CompanyEntry, index: number, via: string | null) => <li key={`${index}-${entry.slug}`}>
     <Link href={sameSection(pathname, entry.slug)} onClick={done} data-index={index} onMouseEnter={() => setActive(index)}
       className={cn("flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", index === active ? "bg-muted" : "", entry.slug === current?.slug ? "text-brand font-medium" : "text-ink")}>
       <span className="min-w-0 flex-1 truncate">{entry.name}{via ? <span className="text-ink-faint ml-1.5 text-[11.5px]">{via}</span> : null}</span>
@@ -196,7 +207,7 @@ function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { c
       </span>
       <span className="min-w-0 flex-1">
         <span className="text-ink block truncate text-[12.5px] leading-tight font-semibold">{current ? shortName(current.name) : "All clients"}</span>
-        <span className="text-ink-faint block truncate text-[11px] leading-tight">{current ? current.industry : `${companies.length} companies`}</span>
+        <span className="text-ink-faint block truncate text-[11px] leading-tight">{current ? current.industry : `${count} compan${count === 1 ? "y" : "ies"}`}</span>
       </span>
       <ChevronsUpDown className="text-ink-faint size-3.5 shrink-0" />
     </button>
@@ -212,7 +223,8 @@ function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { c
         {!query && firm && member ? <li className="border-hairline mb-1 border-b pb-1"><Link href={sameSection(pathname, firm.slug)} onClick={done} className={cn("hover:bg-muted flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] touch:py-3", firm.slug === current?.slug ? "text-brand font-medium" : "text-ink-muted")}>
           <BookOpen className="size-3.5" /><span className="min-w-0 flex-1 truncate">Your firm’s own books</span>{firm.slug === current?.slug ? <Check className="size-3.5" /> : null}</Link></li> : null}
         {recentEntries.length ? <>{heading("Recent")}{recentEntries.map((entry, index) => row(entry, index, null))}</> : null}
-        {!query ? <>{heading(`All ${companies.length}`)}{companies.map((entry, index) => row(entry, recentEntries.length + index, null))}</> : null}
+        {!query && !clients.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12px]">Finding your companies…</li> : null}
+        {!query && clients.length ? <>{heading(`All ${companies.length}`)}{companies.map((entry, index) => row(entry, recentEntries.length + index, null))}</> : null}
         {query ? matches.map((match, index) => row(match.entry, index, match.via || null)) : null}
         {query && !matches.length ? <li className="text-ink-faint px-2.5 py-1.5 text-[12px]">No company by that name or number.</li> : null}
       </ul>
@@ -221,12 +233,12 @@ function CompanySwitcher({ clients, current, pathname, onNavigate, member }: { c
   </div>;
 }
 
-function WorkspaceShell({ practice, clients, user, member, toReview, timer, children }: ShellProps) {
+function WorkspaceShell({ practice, initialCompany, companyCount, user, member, toReview, timer, children }: ShellProps) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const slug = slugFromPath(pathname);
-  const client = clients.find(item => item.slug === slug);
-  const base = client ? `/c/${client.slug}` : "";
+  const client = useCurrentCompany(initialCompany, slug);
+  const base = client && slug ? `/c/${slug}` : "";
   const practiceGroups: NavGroup[] = [{ label: null, items: [
     { href: "/", label: "Dashboard", icon: LayoutDashboard, title: "Practice dashboard" },
     { href: "/deadlines", label: "Deadlines", icon: CalendarClock, title: "Deadlines" },
@@ -270,9 +282,11 @@ function WorkspaceShell({ practice, clients, user, member, toReview, timer, chil
     const term = query.trim().toLowerCase();
     if (!term) return;
     if (client) { router.push(`${base}/customers?q=${encodeURIComponent(query.trim())}`); return; }
-    // One client by that name or number: open it. Several: the dashboard, narrowed to them.
-    const found = clients.filter(entry => !entry.practice && matchOf(entry, plain(query.trim())) !== null);
-    router.push(found.length === 1 ? `/c/${found[0].slug}` : `/?q=${encodeURIComponent(query.trim())}`);
+    // One client by that name or number: open it. Several, or the list not loaded yet: the dashboard, narrowed to them.
+    void loadCompanies().then(companies => {
+      const found = companies.filter(entry => !entry.practice && matchOf(entry, plain(query.trim())) !== null);
+      router.push(found.length === 1 ? `/c/${found[0].slug}` : `/?q=${encodeURIComponent(query.trim())}`);
+    });
   };
   const link = (entry: NavItem) => {
     const active = current?.href === entry.href;
@@ -293,7 +307,7 @@ function WorkspaceShell({ practice, clients, user, member, toReview, timer, chil
         <Link href="/" onClick={close} className="min-w-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" aria-label={`${practice.name} dashboard`}><PracticeMark practice={practice} /></Link>
         <button type="button" onClick={close} className="hover:bg-muted text-ink-muted grid size-7 shrink-0 place-items-center rounded-md lg:hidden touch:size-11" aria-label="Close navigation"><X className="size-4" /></button>
       </div>
-      <div className="px-2.5 pt-3"><CompanySwitcher clients={clients} current={client} pathname={pathname} onNavigate={close} member={member} /></div>
+      <div className="px-2.5 pt-3"><CompanySwitcher current={client} count={companyCount} pathname={pathname} onNavigate={close} member={member} /></div>
       <nav ref={navRef} className="min-h-0 flex-1 overflow-y-auto px-2.5 pt-2 pb-3">
         {groups.map((group, index) => {
           if (group.more) {
@@ -331,7 +345,7 @@ function WorkspaceShell({ practice, clients, user, member, toReview, timer, chil
             })}
           </ol>
         </nav>
-        {member ? <TimerControl running={timer} currentSlug={slug} companies={clients.map(entry => ({ id: entry.id, name: entry.name, slug: entry.slug, practice: entry.practice }))} /> : null}
+        {member ? <TimerControl running={timer} currentSlug={slug} /> : null}
         <form onSubmit={search} className="border-hairline-strong bg-surface hidden h-8 w-[220px] items-center gap-2 rounded-md border px-2.5 md:flex xl:w-[260px]">
           <Search className="text-ink-faint size-3.5 shrink-0" />
           <input value={query} onChange={event => setQuery(event.target.value)} placeholder={client ? "Search customers" : "Search clients"} aria-label="Search" className="placeholder:text-ink-faint min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" />

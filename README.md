@@ -619,7 +619,10 @@ out by valuing every match. A bank line now knows whether it is matched
 (`bank_line_matched`), the dashboard works out VAT only for the clients on
 screen, deadlines are looked up by company, and the practice pages list the
 clients that need something first, forty to sixty at a time, with a search by
-name, HE or VAT number.
+name, HE or VAT number. Pages no longer carry the list of every client for the
+switcher: the switcher and the timer fetch it when the browser is idle or when
+first opened (`/api/shell/companies`), so with 700 clients a company page is
+about 115 KB, down from 400 KB.
 
 ## If something goes wrong
 - **Reset demo data** at http://localhost:3000/settings?demo=1 rebuilds

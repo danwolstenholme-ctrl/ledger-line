@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { setRequestCurrency } from "@/lib/format";
 import { getMembership, getOrgBySlug } from "@/lib/org";
 import { RegimeProvider } from "@/components/common/regime";
+import { CompanyShellSync } from "@/components/shell/companies";
+import { getShellCompany } from "@/lib/data/shell";
 
 /** One client company's books, in its own country's terms and currency. The proxy names the company on every request beneath this. */
 export default async function CompanyLayout({ children, params }: { children: ReactNode; params: Promise<{ org: string }> }) {
@@ -13,7 +15,9 @@ export default async function CompanyLayout({ children, params }: { children: Re
   setRequestCurrency(company.currency);
   // Someone who reads these books and changes nothing (the database holds them to it) is told so once, at the top.
   const role = membership.practice ? null : membership.companies.find(entry => entry.slug === org)?.role;
+  const shell = await getShellCompany(org);
   return <RegimeProvider country={company.country}>
+    {shell ? <CompanyShellSync company={shell} /> : null}
     {role === "viewer" || role === "auditor" ? <div className="mx-auto w-full max-w-[1440px] px-3 pt-3 sm:px-5 sm:pt-5">
       <p role="note" className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[12px] leading-relaxed">
         {role === "auditor" ? `You’re here as ${company.name}’s auditor` : `You can look at ${company.name}’s books`}: read anything and download any report or the audit file. Nothing can be changed from this account.

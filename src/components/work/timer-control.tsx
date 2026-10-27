@@ -7,6 +7,7 @@ import { startTimer, stopTimer } from "@/lib/actions/work";
 import { idleState } from "@/lib/actions/state";
 import { MenuPanel } from "@/components/motion/motion";
 import { SubmitButton } from "@/components/common/form-fields";
+import { useCompanies } from "@/components/shell/companies";
 
 export type TimerCompany = { id: string; name: string; slug: string; practice: boolean };
 export type TimerRunning = { company: string; slug: string; work: string; started_at: string };
@@ -26,8 +27,10 @@ function Elapsed({ since }: { since: string }) {
 }
 
 /** The practice's clock, in the top bar of every page: start it on any client, see it run, stop it in one press. */
-export function TimerControl({ running, companies, currentSlug }: { running: TimerRunning | null; companies: TimerCompany[]; currentSlug: string | null }) {
+export function TimerControl({ running, currentSlug }: { running: TimerRunning | null; currentSlug: string | null }) {
   const [open, setOpen] = useState(false);
+  // Every company the person can see, fetched when the clock is opened: not carried by every page.
+  const companies: TimerCompany[] = useCompanies(open) ?? [];
   const [state, action] = useActionState(startTimer, idleState);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
