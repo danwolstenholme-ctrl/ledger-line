@@ -54,8 +54,11 @@ const DATA_DIR = dataDir();
  * against the public authorities, which Supabase's are not.
  */
 function databaseUrl() {
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-  if (!url || !/[?&]sslmode=/.test(url) || /[?&]uselibpqcompat=/.test(url)) return url;
+  let url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!url) return url;
+  // Supabase is always reached encrypted, whether or not the address pasted in says so.
+  if (/@[^/?]*\.supabase\.(com|co)(:\d+)?\//.test(url) && !/[?&]sslmode=/.test(url)) url += `${url.includes("?") ? "&" : "?"}sslmode=require`;
+  if (!/[?&]sslmode=/.test(url) || /[?&]uselibpqcompat=/.test(url)) return url;
   return `${url}&uselibpqcompat=true`;
 }
 const DATABASE_URL = databaseUrl();
