@@ -24,5 +24,7 @@ export async function supabaseServer() {
 export function supabaseAdmin() {
   const key = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error("SUPABASE_SECRET_KEY is not set: accounts can't be made for invitations.");
+  // The two keys sit side by side in Supabase's dashboard: the publishable one makes no accounts, and says only "requires a valid Bearer token".
+  if (key.startsWith("sb_publishable_")) throw new Error("SUPABASE_SECRET_KEY holds the publishable key: it needs the secret one (sb_secret_…), from Supabase's API Keys.");
   return createClient(SUPABASE_URL, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
