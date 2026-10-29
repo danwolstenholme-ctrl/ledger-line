@@ -17,7 +17,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   const fresh = rows.find(row => row.id === added);
   const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
   return <PageBody className="space-y-4">
-    <RecordHeader title="Products and services" description="Priced once. On an invoice or a quote, type a name and its price, VAT rate and income account fill themselves in."
+    <RecordHeader title="Products and services"
       action={<><Link href="/accounts/items/import" className={recordOutlineButton}>Import</Link><a href={`/c/${org.slug}/items/export`} className={recordOutlineButton}>Export</a><Link href="/accounts/items/new" className={recordButton}><Plus className="size-4" />New product</Link></>} />
     {fresh ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]"><CheckCircle2 className="size-4" />{fresh.name} added. It is ready to use on invoices and quotes.</p> : null}
     <Panel className="overflow-hidden">

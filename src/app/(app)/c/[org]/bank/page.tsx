@@ -24,7 +24,7 @@ export default async function BankPage() {
   const org = await requireOrg();
   const [banks, recent, statements] = await Promise.all([getBankAccounts(), getRecentBankTransactions(12), getBankStatementState()]);
   return <PageBody className="space-y-4">
-    <RecordHeader title="Bank" description="Balances, and money spent or received straight from the bank."
+    <RecordHeader title="Bank"
       action={<div className="flex flex-wrap gap-2">
         <Link href="/accounts/bank/new?kind=spend" className={recordOutlineButton}><ArrowUpRight className="size-3.5" />Spend money</Link>
         <Link href="/accounts/bank/new?kind=receive" className={recordOutlineButton}><ArrowDownLeft className="size-3.5" />Receive money</Link>

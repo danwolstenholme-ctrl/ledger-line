@@ -20,7 +20,7 @@ export default async function RepeatingPage({ searchParams }: { searchParams: Pr
   const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
   return <PageBody className="space-y-4">
     <RecordHeader title="Repeating invoices" back={{ href: "/invoices", label: "Invoices" }}
-      description="The same invoice every month, quarter or year. Start one from any invoice with Repeat." />
+      description="Start one from any invoice with Repeat." />
     {query.raised ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]">
       <CheckCircle2 className="size-4 shrink-0" /><span>{query.raised.split(",").length} invoice{query.raised.split(",").length === 1 ? "" : "s"} raised: {query.raised.split(",").join(", ")}.{query.problem ? ` ${query.problem}` : ""}</span>
     </p> : null}

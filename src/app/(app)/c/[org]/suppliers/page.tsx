@@ -18,7 +18,7 @@ export default async function SuppliersPage() {
   const [suppliers, payables] = await Promise.all([getSuppliers(), getAgedPayables()]);
   const owed = new Map(payables.suppliers.map(supplier => [supplier.id, supplier]));
   return <PageBody className="space-y-4">
-    <RecordHeader title="Suppliers" description="Who the company buys from, and what it owes each of them."
+    <RecordHeader title="Suppliers"
       action={<><Link href="/accounts/suppliers/import" className={recordOutlineButton}>Import</Link><a href={`/c/${org.slug}/suppliers/export`} className={recordOutlineButton}>Export</a><CreateRecordLink href="/accounts/suppliers/new">Add supplier</CreateRecordLink></>} />
     <PurchasesNav current="/accounts/suppliers" />
     <Panel className="overflow-hidden">

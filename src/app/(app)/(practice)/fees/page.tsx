@@ -31,7 +31,7 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
   const books = data.books ? `/c/${data.books.slug}` : null;
 
   return <PageBody className="space-y-4">
-    <RecordHeader title="Fees" description="What each client pays the firm, against the hours its books take. Fees are invoiced from the firm’s own books, like any other sale."
+    <RecordHeader title="Fees"
       action={<div className="flex items-center gap-1.5">
         <Link href={`/fees?period=${data.previous}`} aria-label={`${monthName(data.previous)}`} className={recordOutlineButton}><ChevronLeft className="size-3.5" /></Link>
         <span className="text-ink min-w-28 px-1 text-center text-[13px] font-medium">{month}</span>

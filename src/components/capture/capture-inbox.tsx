@@ -58,8 +58,8 @@ export async function CaptureInbox({ company }: { company?: OrganisationRow }) {
   const ready = review.filter(item => item.organisation_id && item.routing.confidence === "high" && (item.checks ?? []).every(check => check.ok) && "lines" in item.draft);
   return <PageBody className="space-y-4">
     <RecordHeader title={company ? t("Upload receipts") : t("Capture")} description={company
-      ? t("Receipts and supplier invoices for {company}. Each is read, checked and drafted as a bill. Nothing posts until you confirm it.", { company: company.name })
-      : t("One inbox for every client. Claude reads the documents; Ledgerline checks the arithmetic, routes each invoice to the right company, matches or creates the supplier, suggests the accounts and drafts the bill. Nothing posts until you say so.")} />
+      ? t("Each is read, checked and drafted as a bill. Nothing posts until you confirm it.")
+      : t("One inbox for every client. Nothing posts until you say so.")} />
     <DropZone available={captureAvailable()} rehearsal={rehearsalMode()} company={company ? { id: company.id, name: company.name } : undefined} />
     <section aria-label={t("To review")} className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">

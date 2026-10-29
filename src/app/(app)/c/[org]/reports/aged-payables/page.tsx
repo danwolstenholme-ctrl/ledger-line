@@ -22,7 +22,7 @@ export default async function AgedPayablesPage() {
   const narrow = (key: string) => key !== "current" && key !== "d30" && "hidden md:table-cell";
   const amount = (value: number) => value ? formatAmount(value) : <span className="text-ink-faint">—</span>;
   return <PageBody className="space-y-4">
-    <RecordHeader title="Aged payables" description="Unpaid bills, by how far past their due date they are."
+    <RecordHeader title="Aged payables"
       back={{ href: "/accounts/reports", label: "Reports" }}
       action={<a href="/accounts/reports/aged-payables/export" download className={recordOutlineButton}><Download className="size-3.5" />Export</a>} />
     <AccountsNav current="/accounts/reports" />

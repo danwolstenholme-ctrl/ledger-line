@@ -33,7 +33,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
   };
 
   return <PageBody className="space-y-4">
-    <RecordHeader title="Bills" description="What suppliers have billed, and what is still to pay. Tick bills to pay several at once."
+    <RecordHeader title="Bills" description="Tick bills to pay several at once."
       action={<><Link href="/accounts/supplier-credits" className={recordOutlineButton}>Supplier credits</Link>{runs.length ? <Link href={`/accounts/bills/runs/${runs[0].id}`} className={recordOutlineButton}>Last payment run</Link> : null}<CreateRecordLink href="/accounts/bills/new">Record a bill</CreateRecordLink></>} />
     <PurchasesNav current="/accounts/bills" />
     {!summary.failed ? <section aria-label="Payables" className="ll-panel divide-hairline grid grid-cols-3 divide-x overflow-hidden">

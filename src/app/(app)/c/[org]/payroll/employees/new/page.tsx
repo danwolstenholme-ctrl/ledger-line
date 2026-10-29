@@ -9,8 +9,7 @@ export const metadata: Metadata = { title: "New employee" };
 
 export default function NewEmployeePage() {
   return <PageBody width="3xl" className="space-y-4">
-    <RecordHeader title="New employee" back={{ href: "/accounts/payroll", label: "Payroll" }}
-      description="Their salary, the numbers the Tax Department and Social Insurance Services know them by, and what they were paid this year before Ledgerline." />
+    <RecordHeader title="New employee" back={{ href: "/accounts/payroll", label: "Payroll" }} />
     <Panel className="p-4 sm:p-5"><EmployeeForm year={Number(firmToday().slice(0, 4))} /></Panel>
   </PageBody>;
 }

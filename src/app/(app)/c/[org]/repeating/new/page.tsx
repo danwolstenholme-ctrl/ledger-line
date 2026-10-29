@@ -28,7 +28,7 @@ export default async function NewRepeatingPage({ searchParams }: { searchParams:
   const next = month(invoice.issued_on) >= today ? month(invoice.issued_on) : month(today);
   return <PageBody width="4xl" className="space-y-4">
     <RecordHeader title={`Repeat ${invoice.number}`} back={{ href: `/invoices/${invoice.id}`, label: invoice.number }}
-      description={`To ${invoice.client_name}, ${formatAmount(invoice.total)} each time, numbered in turn and due on the customer's terms.`} />
+      description={`To ${invoice.client_name}, ${formatAmount(invoice.total)} each time.`} />
     <Panel className="p-4 sm:p-5">
       <RepeatingForm today={today} values={{ invoice_id: invoice.id, name: lines[0]?.description ?? `Invoice to ${invoice.client_name}`, every_months: 1, next_on: next < addDays(today, 1) ? addDays(today, 1) : next, ends_on: null, issue: true }} />
     </Panel>

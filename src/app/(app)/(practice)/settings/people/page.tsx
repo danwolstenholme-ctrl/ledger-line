@@ -22,7 +22,7 @@ export default async function PracticePeoplePage() {
   const partner = membership.role === "Partner";
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader back={{ href: "/settings", label: "Practice settings" }} title="People"
-      description={`Everyone at ${practice.name} who signs in to Ledgerline sees every client the practice keeps. Clients’ own people are invited from each company, and see only their own.`} />
+      description="Everyone here sees every client. Clients’ own people are invited from each company." />
 
     <RecordSection title={`At ${practice.name}`} hint={`${staff.filter(person => person.has_sign_in).length} sign in`}>
       <ul className="divide-hairline divide-y">{staff.map(person => <li key={person.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2.5 text-[13px]">

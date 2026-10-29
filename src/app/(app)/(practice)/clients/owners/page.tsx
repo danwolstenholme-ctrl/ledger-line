@@ -46,7 +46,7 @@ export default async function OwnersPage({ searchParams }: { searchParams: Promi
   const here = (next: View) => `/clients/owners?view=${next}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader back={{ href: "/clients", label: "Client files" }} title="Owners on Ledgerline"
-      description="Each client’s owner sees their own company in Ledgerline: where the business stands, their invoices, and the receipts they send you. Nothing of yours, and no other client." />
+      description="Each owner sees their own company only: nothing of yours, and no other client." />
     <div className="flex flex-wrap items-center justify-between gap-3">
       <RecordFilterLinks label="Owners" options={[
         { label: `To invite · ${counts.todo}`, href: here("todo"), active: view === "todo" },

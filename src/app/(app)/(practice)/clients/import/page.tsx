@@ -21,7 +21,7 @@ export default async function ClientImportPage() {
   ]);
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title="Bring your clients over" back={{ href: "/clients", label: "Client files" }}
-      description="Your client list from a spreadsheet: one row a company, with its registration and VAT numbers, year end and VAT quarters, what it does, who looks after it and its fee. Every company’s books open at once, each shaped to its kind of business." />
+      description="One row a company. Each one’s books open at once." />
     <Panel className="p-4 sm:p-5"><ClientImportForm existing={[...new Set(existing.flatMap(row => clientKeys(row)))]} staff={staff.map(person => person.name)} today={firmToday()} /></Panel>
   </PageBody>;
 }

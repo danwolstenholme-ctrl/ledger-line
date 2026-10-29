@@ -24,7 +24,7 @@ export default async function JournalReportPage({ searchParams }: { searchParams
   const cell = "px-3 py-1.5 text-[13px] tabular-nums whitespace-nowrap";
   const balanced = report.debit === report.credit;
   return <PageBody width="6xl" className="space-y-4">
-    <RecordHeader title="Journal report" description="Every entry as it was posted, with its lines and who posted it." back={{ href: "/accounts/reports", label: "Reports" }} />
+    <RecordHeader title="Journal report" back={{ href: "/accounts/reports", label: "Reports" }} />
     <AccountsNav current="/accounts/reports" />
     <PeriodPicker action="/accounts/reports/journal" range={period.range} from={period.from} to={period.to}
       choices={[{ name: "source", label: "Entries", value: report.view, options: JOURNAL_VIEWS }]} />

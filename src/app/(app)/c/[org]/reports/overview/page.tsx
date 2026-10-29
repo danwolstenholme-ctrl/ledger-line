@@ -76,8 +76,7 @@ export default async function OverviewPage() {
   const cell = "px-3 py-2 text-right text-[13px] tabular-nums";
 
   return <PageBody className="space-y-4">
-    <RecordHeader title="Business overview" back={{ href: "/accounts/reports", label: "Reports" }}
-      description="Cash, what is owed each way, the year so far, twelve months of income, costs and cash, and an AI read of all of it." />
+    <RecordHeader title="Business overview" back={{ href: "/accounts/reports", label: "Reports" }} />
 
     {books.failed ? <RecordFailure what="the books" /> : <>
       <section aria-label="Headline figures" className="ll-panel bg-hairline grid grid-cols-2 gap-px overflow-hidden sm:grid-cols-3 xl:grid-cols-6 [&>*]:bg-surface">

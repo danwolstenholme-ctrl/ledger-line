@@ -11,7 +11,10 @@ export const recordOutlineButton = "active:scale-[0.98] transition-[background-c
 
 /**
  * The page's own heading, the same on every screen: an optional way back, the
- * title (the page's only h1), a line saying what it is, and its actions.
+ * title (the page's only h1), a line, and its actions. The line holds facts
+ * about the record ("Bill dated 12 Oct", "€4,200 to collect") or one short
+ * thing to know before acting ("Nothing is saved until you import"); never
+ * what the page is, which its title and contents already say.
  */
 export function RecordHeader({ title, description, back, action, eyebrow, copyLink = false }: { title: ReactNode; description?: ReactNode; back?: { href: string; label: string }; action?: ReactNode; eyebrow?: ReactNode; copyLink?: boolean }) {
   return <header className="space-y-1.5">

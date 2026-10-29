@@ -12,7 +12,7 @@ export default async function NewCustomerPage() {
   const org = await requireOrg();
   const labels = (await getWorkspace(org.id)).labels.customer;
   return <PageBody width="3xl" className="space-y-4">
-    <RecordHeader title={`New ${labels[0].toLowerCase()}`} back={{ href: "/accounts/customers", label: labels[1] }} description="Their VAT number and country decide how VAT applies to what you sell them." />
+    <RecordHeader title={`New ${labels[0].toLowerCase()}`} back={{ href: "/accounts/customers", label: labels[1] }} />
     <Panel className="p-4 sm:p-5"><CustomerForm companyTerms={org.payment_terms_days} companyLanguage={org.document_language} /></Panel>
   </PageBody>;
 }

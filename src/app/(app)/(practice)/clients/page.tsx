@@ -32,7 +32,7 @@ export default async function ClientFilesPage({ searchParams }: { searchParams: 
   const page = Math.max(1, Math.min(Number(query.page) || 1, Math.ceil(matching.length / PAGE_SIZE) || 1));
   const clients = matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return <PageBody width="6xl" className="space-y-4">
-    <RecordHeader title="Client files" description="Taking clients on, and keeping their due diligence current, as ICPAC’s AML Directive asks: the engagement letter, the people behind each company, sanctions screening and a risk rating."
+    <RecordHeader title="Client files"
       action={<><Link href="/clients/owners" className={recordOutlineButton}><Users className="size-3.5" />Owners on Ledgerline</Link><Link href="/clients/import" className={recordOutlineButton}><Upload className="size-3.5" />Bring clients over</Link><Link href="/clients/new" className={recordButton}><UserPlus className="size-3.5" />Take on a client</Link></>} />
 
     {query.screened ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]"><CheckCircle2 className="size-4 shrink-0" />

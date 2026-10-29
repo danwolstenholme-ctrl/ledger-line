@@ -19,7 +19,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const href = (task: (typeof rows)[number]) => task.enquiry_id ? `/c/${org.slug}/crm/pipeline/${task.enquiry_id}` : task.job_id ? `/c/${org.slug}/crm/jobs/${task.job_id}` : task.customer_id ? `/c/${org.slug}/customers/${task.customer_id}` : null;
   const kind = (task: (typeof rows)[number]) => task.link_kind ? workspace.labels[task.link_kind][0] : null;
   return <PageBody className="space-y-4">
-    <RecordHeader title="Tasks" description="Everything to do in this company, whatever it is about." />
+    <RecordHeader title="Tasks" />
     <RecordFilterLinks label="Tasks" options={[{ label: "Open", href: base, active: view === "open" }, { label: "Done", href: `${base}?view=done`, active: view === "done" }, { label: "All", href: `${base}?view=all`, active: view === "all" }]} />
     <Panel className="overflow-hidden">
       <div className="p-4"><AddTodo /></div>

@@ -27,7 +27,7 @@ export default async function PayrollPage() {
 
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title="Payroll"
-      description={`${current.length} employee${current.length === 1 ? "" : "s"}. Each month: payslips, social insurance and GESY, and the tax withheld, paid and filed by the end of the month after.`}
+      description={`${current.length} employee${current.length === 1 ? "" : "s"}.`}
       action={draft ? <Link href={`/accounts/payroll/${draft.id}`} className={recordButton}>Continue {monthName(draft.period)}’s payroll</Link>
         : current.length ? <StartRunForm period={next} label={`Run ${monthName(next)}’s payroll`} /> : null} />
 

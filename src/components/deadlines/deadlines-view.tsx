@@ -101,8 +101,7 @@ export async function DeadlinesView({ query, company }: { query: Record<string, 
   };
 
   return <PageBody className="space-y-4">
-    <RecordHeader title={client ? `Deadlines: ${client.name}` : "Deadlines"}
-      description={company ? `This company’s deadlines with ${country === "GB" ? "HMRC and Companies House" : "the Tax Department and the Registrar"}, and its AML review: worked out from its VAT periods, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it${country === "GB" ? "" : ", as does the year end recording the accounts filed"}; mark the rest done as you go.` : "Every client’s deadlines with the tax authority and the companies register of its country (the Tax Department and the Registrar in Cyprus; HMRC and Companies House in the UK), and the practice’s AML reviews: worked out from each company’s VAT periods, tax and financial years, incorporation date and risk rating, with any official extension. Filing a VAT return closes it, as does a year end recording the accounts filed; mark the rest done as you go."} />
+    <RecordHeader title={client ? `Deadlines: ${client.name}` : "Deadlines"} />
 
     <section aria-label="Deadlines at a glance" className="ll-panel bg-hairline grid grid-cols-2 gap-px overflow-hidden lg:grid-cols-4 [&>*]:bg-surface">
       <StatTile label="Overdue" value={String(data.counts.overdue)} tone={data.counts.overdue ? "critical" : undefined} context={data.counts.overdue ? "Past the date, still open" : "Nothing past its date"} href={href({ view: "overdue" })} />

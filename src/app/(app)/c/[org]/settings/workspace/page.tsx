@@ -29,8 +29,7 @@ export default async function WorkspacePage() {
   const stageKey = (board: "deal" | "job") => workspace.stages[board].map(stage => `${stage.id}:${stage.name}:${stage.position}:${stage.probability}`).join("|");
 
   return <PageBody width="4xl" className="space-y-4">
-    <RecordHeader title={`How ${org.name.replace(/ (Ltd|Limited|LLP)$/, "")} works`}
-      description={`What it calls things, the parts of Ledgerline it uses, the stages its ${labels.deal[1].toLowerCase()} and ${labels.job[1].toLowerCase()} go through, and the details it keeps. Set from its business type; change any of it.`} />
+    <RecordHeader title={`How ${org.name.replace(/ (Ltd|Limited|LLP)$/, "")} works`} />
     {!allowed ? <p role="note" className="border-hairline bg-surface-sunken text-ink-muted rounded-md border px-3 py-2 text-[13px]">The company’s owner or its accountant sets these. You can see them here.</p> : null}
 
     <RecordSection title="Kind of business">

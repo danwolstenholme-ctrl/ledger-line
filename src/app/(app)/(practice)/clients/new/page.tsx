@@ -18,7 +18,7 @@ export default async function NewClientPage() {
       join crm_stages s on s.id = e.stage_id
      where s.outcome = 'won' and not exists (select 1 from client_files f where f.enquiry_id = e.id) order by e.stage_changed_at desc`);
   return <PageBody width="3xl" className="space-y-4">
-    <RecordHeader back={{ href: "/clients", label: "Client files" }} title="Take on a client" description="Start the client’s file. Ledgerline asks for what due diligence needs as you go, and opens the books once it is done." />
+    <RecordHeader back={{ href: "/clients", label: "Client files" }} title="Take on a client" description="The books open once due diligence is done." />
     {won.length ? <RecordSection title="Won enquiries" hint="From the firm’s own pipeline">
       <ul className="divide-hairline divide-y">{won.map(enquiry => <li key={enquiry.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <span className="min-w-0"><span className="text-ink block text-[13.5px] font-medium">{enquiry.company ?? enquiry.full_name}</span>

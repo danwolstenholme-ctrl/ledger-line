@@ -15,7 +15,7 @@ export default async function JournalsPage({ searchParams }: { searchParams: Pro
   const [{ rows, lockDate }, query] = await Promise.all([getManualJournals(), searchParams]);
   const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap first:px-4";
   return <PageBody className="space-y-4">
-    <RecordHeader title="Journals" description="Double entries written by hand: opening balances, accruals, depreciation and corrections. Invoices, bills and the bank post their own."
+    <RecordHeader title="Journals"
       action={<CreateRecordLink href="/accounts/journals/new">New journal</CreateRecordLink>} />
     {query.removed ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]"><CheckCircle2 className="size-4 shrink-0" />The journal was removed from the books.</p> : null}
     <Panel className="overflow-hidden">

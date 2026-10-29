@@ -20,7 +20,7 @@ export default async function ImportStatementPage({ params }: { params: Promise<
   if (!bank) notFound();
   return <PageBody className="space-y-4">
     <RecordHeader title={`Import a statement · ${bank.name}`} back={{ href: `/accounts/bank/${bank.id}`, label: "Reconcile" }}
-      description="Lines are read and shown here first. Nothing is saved until you import, and nothing is posted: each line waits to be matched." />
+      description="Nothing is saved until you import, and nothing is posted." />
     <RecordSection title="Statement file">
       <div className="p-4 sm:p-5"><StatementImport bankAccountId={bank.id} bankName={bank.name} /></div>
     </RecordSection>

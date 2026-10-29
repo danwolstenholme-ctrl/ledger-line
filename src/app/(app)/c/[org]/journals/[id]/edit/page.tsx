@@ -19,7 +19,7 @@ export default async function EditJournalPage({ params }: { params: Promise<{ id
   const { journal, lines } = data;
   const amount = (value: number) => Number(value) ? Number(value).toFixed(2) : "";
   return <PageBody width="4xl" className="space-y-4">
-    <RecordHeader title="Edit journal" description="Debits and credits must be equal before it saves." back={{ href: `/accounts/journals/${id}`, label: journal.narration }} />
+    <RecordHeader title="Edit journal" back={{ href: `/accounts/journals/${id}`, label: journal.narration }} />
     {accounts.failed ? <RecordFailure what="the chart of accounts" /> : <Panel className="p-4 sm:p-5">
       <JournalForm accounts={accounts.rows} today={firmToday()}
         journal={{ id, entry_date: journal.entry_date, reference: journal.reference, narration: journal.narration,

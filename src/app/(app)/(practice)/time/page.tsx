@@ -31,7 +31,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
   const total = data.people.reduce((sum, person) => sum + person.hours, 0), onClients = data.people.reduce((sum, person) => sum + person.clientHours, 0);
 
   return <PageBody className="space-y-4">
-    <RecordHeader title="Time" description="Every hour the practice puts in, on each client and on its own work. Start the clock on any client from the top bar, on any page."
+    <RecordHeader title="Time"
       action={<div className="flex items-center gap-1.5">
         <Link href={`/time?week=${addDays(data.from, -7)}`} aria-label="The week before" className={recordOutlineButton}><ChevronLeft className="size-3.5" /></Link>
         <span className="text-ink px-1 text-[13px] font-medium tabular-nums">{data.isThisWeek ? "This week" : `Week of ${formatDate(data.from)}`}</span>

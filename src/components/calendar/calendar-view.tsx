@@ -86,10 +86,9 @@ export async function CalendarView({ query, company }: { query: Record<string, s
   const days = daysBetween(range.from, range.to);
   const shown = days.filter(day => byDay.has(day));
   const overdue = data.overdue;
-  const scope = company ? company.name : client ? organisations.find(org => org.slug === client)?.name ?? "" : "every client";
 
   return <PageBody className="space-y-4">
-    <RecordHeader title="Calendar" description={`What is due for ${scope}: deadlines, tasks, invoices falling due and quotes running out, each on its day.`}
+    <RecordHeader title="Calendar"
       action={<a href="#subscribe" className={recordOutlineButton}>Subscribe in your calendar</a>} />
 
     <div className="flex flex-wrap items-center gap-2">

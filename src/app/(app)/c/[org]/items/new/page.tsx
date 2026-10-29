@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "New product" };
 export default async function NewItemPage() {
   const data = await getSalesFormData("invoice");
   return <PageBody width="3xl" className="space-y-4">
-    <RecordHeader title="New product or service" back={{ href: "/accounts/items", label: "Products and services" }} description="Its price before VAT, the VAT rate it is sold at, and the income account its sales go to." />
+    <RecordHeader title="New product or service" back={{ href: "/accounts/items", label: "Products and services" }} />
     <Panel className="p-4 sm:p-5"><ItemForm accounts={data.accounts} defaultAccount={data.salesAccount} /></Panel>
   </PageBody>;
 }

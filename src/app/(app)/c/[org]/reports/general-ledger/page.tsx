@@ -24,7 +24,7 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
   const cell = "px-3 py-1.5 text-[13px] tabular-nums whitespace-nowrap";
   const amount = (value: number) => value ? formatAmount(value) : "";
   return <PageBody width="6xl" className="space-y-4">
-    <RecordHeader title="General ledger" description="Every transaction in the period, account by account." back={{ href: "/accounts/reports", label: "Reports" }} />
+    <RecordHeader title="General ledger" back={{ href: "/accounts/reports", label: "Reports" }} />
     <AccountsNav current="/accounts/reports" />
     <PeriodPicker action="/accounts/reports/general-ledger" range={period.range} from={period.from} to={period.to} />
     <ReportHeading period={periodLabel(period.from, period.to)} exportHref={`/accounts/reports/general-ledger/export?${query}`} />

@@ -83,7 +83,7 @@ export default async function ReconcilePage({ params, searchParams }: {
 
   return <PageBody className="space-y-4">
     <RecordHeader title={`Reconcile · ${account.name}`} back={{ href: "/accounts/bank", label: "Bank" }}
-      description="Match each line of the bank’s statement to what the books hold. Anything not in the books yet can be recorded from here."
+      description="Match each line to what the books hold, or record it from here."
       action={<>
         <Link href={`/accounts/bank/${account.id}/import`} className={recordButton}><FileUp className="size-4" />Import a statement</Link>
       </>} />

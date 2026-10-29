@@ -35,7 +35,7 @@ export default async function NewJournalPage({ searchParams }: { searchParams: P
   }
   return <PageBody width="4xl" className="space-y-4">
     <RecordHeader title={source ? "Reverse a journal" : "New journal"} back={source ? { href: `/accounts/journals/${source.journal.id}`, label: source.journal.narration } : { href: "/accounts/journals", label: "Journals" }}
-      description={source ? `Every debit of the journal of ${formatDate(source.journal.entry_date)} becomes a credit. Check the date, then post it.` : "Debits and credits must be equal before it posts."} />
+      description={source ? `Reverses the journal of ${formatDate(source.journal.entry_date)}: check the date, then post it.` : undefined} />
     {accounts.failed ? <RecordFailure what="the chart of accounts" /> : <Panel className="p-4 sm:p-5"><JournalForm accounts={accounts.rows} today={today} prefill={prefill} /></Panel>}
   </PageBody>;
 }

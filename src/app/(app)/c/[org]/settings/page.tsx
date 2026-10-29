@@ -26,7 +26,7 @@ export default async function AccountsSettingsPage() {
   const regime = regimeOf(org.country);
   // Two columns that each run on, so a tall card never leaves a gap beside a short one.
   return <PageBody width="6xl" className="space-y-4">
-    <RecordHeader title="Company settings" description="How invoices are numbered and look, when a period closes, and how the books run." />
+    <RecordHeader title="Company settings" />
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <div className="min-w-0 space-y-4">
         <RecordSection title="Invoices and quotes">

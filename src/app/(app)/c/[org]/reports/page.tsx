@@ -35,7 +35,7 @@ const forCountry = (country: string) => country !== "GB" ? REPORTS : REPORTS.map
 export default async function ReportsPage() {
   const org = await requireOrg();
   return <PageBody className="space-y-4">
-    <RecordHeader title="Reports" description="Every figure comes from the same ledger, so the statements always agree." />
+    <RecordHeader title="Reports" />
     <Link href="/accounts/reports/overview" className="ll-panel border-brand-200 bg-brand-50 hover:bg-brand-100 block px-4 py-3.5 transition-colors">
       <span className="text-brand block text-[14px] font-semibold">Business overview</span>
       <span className="text-ink-muted mt-0.5 block text-[12.5px] leading-relaxed">Cash, what is owed each way, the year against the last, twelve months of charts, the books health checks, and an AI read of all of it on request.</span>

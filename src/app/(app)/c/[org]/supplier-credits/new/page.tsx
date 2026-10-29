@@ -17,8 +17,7 @@ export default async function NewSupplierCreditPage({ searchParams }: { searchPa
   if (params.bill && !data.bill) redirect(`/c/${data.org.slug}/bills`);
   const bill = data.bill;
   return <PageBody width="4xl" className="space-y-4">
-    <RecordHeader title="Record a supplier's credit note" back={bill ? { href: `/accounts/bills/${bill.id}`, label: bill.number ?? "The bill" } : { href: "/accounts/supplier-credits", label: "Supplier credits" }}
-      description="As the supplier printed it: what they took back, at what VAT." />
+    <RecordHeader title="Record a supplier's credit note" back={bill ? { href: `/accounts/bills/${bill.id}`, label: bill.number ?? "The bill" } : { href: "/accounts/supplier-credits", label: "Supplier credits" }} />
     <Panel className="p-4 sm:p-5">
       <SupplierCreditForm suppliers={data.suppliers} accounts={data.accounts} today={data.today} cancelHref={bill ? `/accounts/bills/${bill.id}` : "/accounts/supplier-credits"}
         bill={bill ? { id: bill.id, number: bill.number, supplier_id: bill.supplier_id, supplier_name: bill.supplier_name, total: Number(bill.total), balance: Number(bill.balance),

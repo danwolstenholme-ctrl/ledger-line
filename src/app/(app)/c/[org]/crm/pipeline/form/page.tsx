@@ -54,7 +54,7 @@ export default async function WebsiteFormPage() {
 
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title="Website form" back={{ href: base, label: workspace.labels.deal[1] }}
-      description="Enquiries from your website land straight in this pipeline: assigned to whoever has the fewest open, with a call-back due the next working day."
+      description="Enquiries from your website land straight in the pipeline."
       action={key ? <a href={`/f/${key.token}`} target="_blank" rel="noopener" className={recordOutlineButton}><ExternalLink className="size-3.5" />Open the form</a> : null} />
 
     <RecordSection title="The form" hint={key ? undefined : "Off"} action={key ? <RecordBadge tone="positive">Taking enquiries</RecordBadge> : <RecordBadge>Off</RecordBadge>}>

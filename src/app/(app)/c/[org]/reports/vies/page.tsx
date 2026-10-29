@@ -29,8 +29,7 @@ export default async function ViesPage({ searchParams }: { searchParams: Promise
   const checks = await latestChecks(lines.filter(line => !line.missingNumber).map(line => `${line.vies_country}${line.vies_number}`));
   const unconfirmed = lines.filter(line => { const check = checks.get(`${line.vies_country}${line.vies_number}`); return !line.missingNumber && (!check || !check.valid); }).length;
   return <PageBody width="5xl" className="space-y-4">
-    <RecordHeader title="VIES statement" back={{ href: "/accounts/reports", label: "Reports" }}
-      description="Services to businesses in other EU states under the reverse charge, by customer VAT number, less credit notes." />
+    <RecordHeader title="VIES statement" back={{ href: "/accounts/reports", label: "Reports" }} />
     <PeriodPicker action="/accounts/reports/vies" range={period.range} from={period.from} to={period.to} />
     <ReportHeading period={periodLabel(period.from, period.to)} exportHref={`/accounts/reports/vies/export?${query}`} />
     <Panel className="overflow-hidden">

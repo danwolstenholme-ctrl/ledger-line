@@ -16,7 +16,7 @@ export default async function PracticeSettingsPage({ searchParams }: { searchPar
   // Resetting is for rehearsals: it appears only at /settings?demo=1.
   const showReset = (await searchParams).demo === "1";
   return <PageBody width="5xl" className="space-y-4">
-    <RecordHeader title="Practice settings" description="Ledgerline runs under your firm's brand: your name, your initials, your colour. Your clients see your practice; Ledgerline stays in the small print." />
+    <RecordHeader title="Practice settings" />
     <RecordSection title="People" hint="Who at the practice signs in, and inviting someone" action={<Link href="/settings/people" className={recordOutlineButton}>Manage people</Link>}>
       <p className="text-ink-muted px-4 py-3 text-[13px] sm:px-5">Everyone at the practice who signs in sees every client. A partner invites them; each makes their own account from the link.</p>
     </RecordSection>

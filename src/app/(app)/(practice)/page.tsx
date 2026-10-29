@@ -23,7 +23,7 @@ const PAGE_SIZE = 40;
  * waiting to be reviewed, who owes money, and where each set of books is locked.
  */
 export default async function PracticeDashboard({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const [{ clients, totals, practice, today }, deadlines, files, user, query] = await Promise.all([getPracticeDashboard(), getDeadlines(), getClientFiles(), getCurrentUser(), searchParams]);
+  const [{ clients, totals, today }, deadlines, files, user, query] = await Promise.all([getPracticeDashboard(), getDeadlines(), getClientFiles(), getCurrentUser(), searchParams]);
   // Hundreds of clients: the ones that need something first, a page at a time, narrowed to yours or to a search.
   const pressing = (client: (typeof clients)[number]) => (client.vat && client.vat.state === "overdue" ? 10_000 : 0) + (client.vat && client.vat.state !== "open" && client.vat.daysLeft <= 30 ? 5_000 : 0)
     + client.toReview * 100 + (client.overdue > 0 ? 50 : 0) + Math.min(client.bankLines, 49);
@@ -48,7 +48,6 @@ export default async function PracticeDashboard({ searchParams }: { searchParams
   return <PageBody className="space-y-4">
     <RecordHeader eyebrow={formatDate(today)}
       title={`${greeting()}. ${totals.clients} clients, ${totals.vatDueSoon ? `${totals.vatDueSoon} VAT return${totals.vatDueSoon === 1 ? "" : "s"} due within 30 days` : "no VAT return due within 30 days"}.`}
-      description={`Everything ${practice.name} looks after, in one place: each figure opens the books behind it.`}
       action={<Link href="/capture" className={recordButton}><ScanText className="size-4" />Capture documents</Link>} />
 
     <section aria-label="Practice totals" className="ll-panel bg-hairline grid grid-cols-2 gap-px overflow-hidden sm:grid-cols-3 xl:grid-cols-5 [&>*]:bg-surface">

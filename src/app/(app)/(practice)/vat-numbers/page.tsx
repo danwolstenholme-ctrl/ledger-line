@@ -42,7 +42,7 @@ export default async function VatNumbersPage({ searchParams }: { searchParams: P
   const shown = matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const here = (next: string) => `/vat-numbers?view=${next}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return <PageBody width="6xl" className="space-y-4">
-    <RecordHeader title="VAT numbers" description="Check any EU VAT number against VIES, the European Commission’s register, and keep the answer as evidence. Before a sale is zero-rated under the reverse charge, the customer’s number should be valid in VIES." />
+    <RecordHeader title="VAT numbers" description="Check an EU VAT number against VIES, and keep the answer as evidence." />
 
     {query.checked ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]"><CheckCircle2 className="size-4 shrink-0" />{query.checked} number{query.checked === "1" ? "" : "s"} checked against VIES just now. Each answer is kept, and on the audit trail.</p> : null}
 
