@@ -173,7 +173,12 @@ export async function acceptInvitation(_previous: ActionState, form: FormData): 
       if (current) await (await supabaseServer()).auth.signOut();
       // The address is proven by the link that reached it, so the account is made confirmed.
       const made = await supabaseAdmin().auth.admin.createUser({ email: invitation.email, password, email_confirm: true, user_metadata: { name } });
-      if (made.error) return { ok: false, error: made.error.message.includes("already") ? "You already have a Ledgerline account: sign in with it, then open this link again." : "The account could not be made. Try again." };
+      if (made.error) {
+        if (made.error.message.includes("already")) return { ok: false, error: "You already have a Ledgerline account: sign in with it, then open this link again." };
+        // Why, for whoever looks after Ledgerline (a 401 is a wrong SUPABASE_SECRET_KEY); never the password or the address.
+        console.error("[invitations] the account could not be made", made.error.status, made.error.code ?? made.error.name);
+        return { ok: false, error: "The account could not be made. Try again." };
+      }
       const signed = await (await supabaseServer()).auth.signInWithPassword({ email: invitation.email, password });
       if (signed.error) return { ok: false, error: "Your account is made, but signing in failed. Sign in from the sign-in page." };
       const person = await asService("finding the account just made", () => one<{ id: string }>("select id from app_users where auth_id = $1", [made.data.user.id]));
