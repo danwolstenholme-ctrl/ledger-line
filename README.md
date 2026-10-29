@@ -619,6 +619,14 @@ Sources (GOV.UK): [How to fill in your VAT Return (VAT Notice 700/12)](https://w
 [confirmation statement](https://www.gov.uk/guidance/confirmation-statement-guidance);
 [audit exemptions](https://www.gov.uk/audit-exemptions-for-private-limited-companies).
 
+## The front page
+
+`public/home.html` is Ledgerline's own page: a visitor who isn't signed in
+sees it at `/` (src/proxy.ts), with **Sign in** at the top and **Book a demo**
+going to Wolsten Studios; someone signed in goes straight to their dashboard.
+It began as the landing page artifact and is plain HTML, so it changes
+without touching the app.
+
 ## The public demo
 
 Every push to main deploys to Vercel: https://ledger-line-vert.vercel.app.

@@ -19,8 +19,8 @@ export const HOSTED_DEMO = AUTH_MODE === "demo" && Boolean(process.env.VERCEL) &
 /** The demo's sign-in: whose stand-in sign-in this browser uses, or "out". */
 export const DEMO_COOKIE = "ll_demo_session";
 
-/** What anyone may open without signing in: signing in itself, an invitation, a client's private link, a subscribed calendar, the website form and its API, what a phone needs to install the app, and a document shared with its customer. */
-const PUBLIC = [/^\/sign-in$/, /^\/join\/[^/]+$/, /^\/auth\/callback$/, /^\/account\/password$/, /^\/o\//, /^\/f\//, /^\/ics\/[^/]+$/, /^\/api\/v1\//, /^\/api\/health$/, /^\/api\/icon$/,
+/** What anyone may open without signing in: Ledgerline's own front page, signing in itself, an invitation, a client's private link, a subscribed calendar, the website form and its API, what a phone needs to install the app, and a document shared with its customer. */
+const PUBLIC = [/^\/home\.html$/, /^\/sign-in$/, /^\/join\/[^/]+$/, /^\/auth\/callback$/, /^\/account\/password$/, /^\/o\//, /^\/f\//, /^\/ics\/[^/]+$/, /^\/api\/v1\//, /^\/api\/health$/, /^\/api\/icon$/,
   /^\/manifest\.webmanifest$/, /^\/icons\/[a-z0-9-]+\.png$/, /^\/d\/[A-Za-z0-9_-]{32}(\/pdf)?$/];
 export const isPublicPath = (path: string) => PUBLIC.some(pattern => pattern.test(path));
 

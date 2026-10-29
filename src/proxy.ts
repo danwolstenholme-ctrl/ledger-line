@@ -6,8 +6,10 @@ import { AUTH_MODE, DEMO_COOKIE, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, isPubli
 /**
  * Before each request: tag a request under /c/{slug} with the company it is
  * about, refresh a Supabase session's cookies, and send anyone not signed in
- * to sign in. This is the optimistic check only; who someone is, is verified
- * where their data is read (lib/auth/session, lib/db).
+ * to sign in, except at the front door, where a visitor sees what Ledgerline
+ * is (public/home.html) and someone signed in their dashboard. This is the
+ * optimistic check only; who someone is, is verified where their data is
+ * read (lib/auth/session, lib/db).
  */
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -31,6 +33,11 @@ export async function proxy(request: NextRequest) {
 
   if (!signedIn && !isPublicPath(path)) {
     if (request.method !== "GET" && request.method !== "HEAD") return new NextResponse("Sign in first.", { status: 401 });
+    if (path === "/") {
+      const front = NextResponse.rewrite(new URL("/home.html", request.url));
+      for (const cookie of refreshed) front.cookies.set(cookie.name, cookie.value, cookie.options);
+      return front;
+    }
     const to = new URL("/sign-in", request.url);
     if (path !== "/") to.searchParams.set("next", `${path}${request.nextUrl.search}`);
     const response = NextResponse.redirect(to);
