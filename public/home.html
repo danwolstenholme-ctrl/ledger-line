@@ -133,13 +133,20 @@ p { margin: 0; }
 .journey .n { display: block; font: 500 11.5px/1 var(--mono); color: var(--ink-3); margin-bottom: 7px; }
 .journey b { display: block; font: 700 17px/1.2 var(--display); letter-spacing: -0.015em; }
 .journey span.d { display: block; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Below a desktop's width the seven stages are one line to swipe: their names on the ledger line, each one's detail in its
+   own section further down. */
 @media (max-width: 900px) {
-  .journey ol { grid-template-columns: minmax(0, 1fr); }
-  .journey ol::before { left: 15px; right: auto; top: 6px; bottom: 6px; width: 3px; height: auto; }
-  .journey li { padding: 0 0 22px 54px; }
-  .journey li::before { top: 2px; left: 0; }
-  .journey .n { display: inline; margin-right: 8px; }
-  .journey b { display: inline; }
+  .journey { margin-top: 40px; margin-inline: calc(-1 * clamp(16px, 4.5vw, 48px)); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 clamp(16px, 4.5vw, 48px), #000 calc(100% - 40px), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 clamp(16px, 4.5vw, 48px), #000 calc(100% - 40px), transparent); }
+  .journey::-webkit-scrollbar { display: none; }
+  .journey ol { grid-template-columns: repeat(7, max-content); width: max-content; padding-inline: clamp(16px, 4.5vw, 48px); }
+  .journey ol::before { left: clamp(16px, 4.5vw, 48px); right: clamp(16px, 4.5vw, 48px); top: 7px; height: 2px; }
+  .journey li { padding: 26px 28px 2px 0; scroll-snap-align: start; scroll-margin-left: clamp(16px, 4.5vw, 48px); }
+  .journey li::before { top: 0; width: 24px; height: 16px; }
+  .journey .n { display: inline; margin-right: 6px; }
+  .journey b { display: inline; font-size: 15.5px; }
+  .journey span.d { display: none; }
 }
 
 .stage { margin-top: clamp(52px, 7vw, 84px); position: relative; }
@@ -287,7 +294,7 @@ section.block.follows { padding-top: 0; }
 .timer .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--late); animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 .timer b { font: 500 13px/1 var(--mono); }
-@media (max-width: 480px) { .person { grid-template-columns: 90px minmax(0, 1fr) 54px; gap: 10px; } }
+@media (max-width: 480px) { .person { grid-template-columns: 106px minmax(0, 1fr) 54px; gap: 10px; } }
 
 /* 5 · books: capture */
 .capture { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: 16px; align-items: start; }
@@ -516,6 +523,56 @@ footer.foot .wordmark .i::after { background: #5fc4bc; }
 footer.foot a { color: var(--deep-ink); }
 footer.foot .right { margin-left: auto; }
 
+/* ---------------------------------------------------------------- small screens: one thing at a time */
+/* On a phone the page keeps its story and loses its detail: no ruled pad behind the words, one way to book a demo (the
+   bar's, always in view), and each picture cut to what it shows best. */
+@media (max-width: 640px) {
+  .nav .wrap { height: 58px; gap: 16px; }
+  .nav .btn { min-height: 36px; padding: 0 15px; font-size: 13.5px; white-space: nowrap; }
+  .hero::before { display: none; }
+  .hero .wrap { padding-top: 36px; }
+  .hero-copy { gap: 18px; }
+  .hero .kicker .wide { display: none; }
+  .hero h1 { font-size: 40px; }
+  .hero .lede { font-size: 17px; }
+
+  .stage { margin-top: 36px; }
+  .app-body { padding: 16px 14px 6px; gap: 14px; }
+  .greet strong { font-size: 17px; }
+  .tile { padding: 10px 12px; }
+  .tile b { font-size: 20px; margin-top: 2px; }
+  .tile span { display: none; }
+  .clients th:nth-child(3), .clients td:nth-child(3), .clients th:nth-child(5), .clients td:nth-child(5) { display: none; }
+  .clients td small { display: none; }
+  .clients tbody tr:nth-child(n+4) { display: none; }
+  .columns { margin-top: 40px; }
+  .columns span { padding-block: 12px; font-size: 12px; }
+
+  section.block { padding-block: 56px; }
+  h2 { font-size: 30px; }
+  .head { gap: 14px; }
+  .split { gap: 32px; }
+  .lede { font-size: 16px; }
+  .points li { padding: 10px 0; }
+  .intake .site, .intake .wire, .intake-note { display: none; }
+  .checklist li:nth-child(n+4):not(.wait) { display: none; }
+  .deadlines li:nth-child(n+4) { display: none; }
+  .doc .g, .capture .checks { display: none; }
+  .boxes .box.zero, .boxes .col:first-child .box:nth-child(2) { display: none; }
+  .fee-tiles span, .raise small { display: none; }
+  .fees { min-width: 0; }
+  .fees th:nth-child(3), .fees td:nth-child(3), .fees th:nth-child(4), .fees td:nth-child(4), .fees th:nth-child(5), .fees td:nth-child(5), .fees th:nth-child(7), .fees td:nth-child(7) { display: none; }
+  .fees tbody tr:nth-child(n+5), .fee-foot:not(.resale), .fee-invoice { display: none; }
+  .feature { padding: 16px 0 18px; }
+  .price-lines li { padding: 8px 0; }
+  .close .wrap { padding-top: 56px; }
+  .staff { height: 80px; margin-top: 40px; }
+}
+@media (max-width: 360px) {
+  .nav .wrap { gap: 12px; }
+  .nav .btn { padding: 0 13px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -549,12 +606,12 @@ footer.foot .right { margin-left: auto; }
   <section class="hero" aria-labelledby="hero-title">
     <div class="wrap">
       <div class="hero-copy">
-        <p class="kicker"><span class="on-paper">The practice system for Cypriot accountants, with the books built in</span></p>
+        <p class="kicker"><span class="on-paper">The practice system for Cypriot accountants<span class="wide">, with the books built in</span></span></p>
         <h1 id="hero-title">From first enquiry <span class="total">to paid fee.</span></h1>
         <p class="lede"><span class="on-paper">Ledgerline runs the whole practice in one place: the enquiry from your website, the onboarding, every client’s deadlines, the team’s work and time, the books, the VAT and your own fees. One record per client, start to finish. Your clients work in it too, under your firm’s name.</span></p>
         <div class="hero-actions">
-          <a class="btn btn-teal" href="https://www.wolstenstudios.com/contact" target="_blank" rel="noopener">Book a demo <svg aria-hidden="true"><use href="#arrow"/></svg></a>
-          <a class="textlink" href="#enquiry">Follow one client through</a>
+          <a class="btn btn-teal hide-sm" href="https://www.wolstenstudios.com/contact" target="_blank" rel="noopener">Book a demo <svg aria-hidden="true"><use href="#arrow"/></svg></a>
+          <a class="textlink hide-sm" href="#enquiry">Follow one client through</a>
           <a class="textlink" href="#pricing">€490 a month, the whole practice</a>
         </div>
       </div>
