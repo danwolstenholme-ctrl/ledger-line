@@ -188,6 +188,10 @@ export function SupplierForm({ supplier, accounts }: { supplier?: SupplierRow; a
       </Field>
       <Field label="IBAN" htmlFor={`${uid}-iban`} hint="to pay them by transfer" error={errors.iban}><TextInput id={`${uid}-iban`} name="iban" defaultValue={supplier?.iban ? formatIban(supplier.iban) : ""} maxLength={42} className="font-mono uppercase" autoComplete="off" placeholder="CY00 0000 0000 0000 0000 0000 0000" /></Field>
       <Field label="BIC" htmlFor={`${uid}-bic`} hint="optional" error={errors.bic}><TextInput id={`${uid}-bic`} name="bic" defaultValue={supplier?.bic ?? ""} maxLength={11} className="font-mono uppercase" autoComplete="off" /></Field>
+      <Field label="Address" htmlFor={`${uid}-address`} hint="on their statement and remittance advice" className="sm:col-span-2"><TextArea id={`${uid}-address`} name="address" rows={2} defaultValue={supplier?.address ?? ""} maxLength={500} /></Field>
+      <Field label="Payment terms" htmlFor={`${uid}-terms`} hint="days; a bill with no due date is due this long after its date" error={errors.payment_terms_days}>
+        <TextInput id={`${uid}-terms`} name="payment_terms_days" inputMode="numeric" defaultValue={supplier?.payment_terms_days ?? ""} className="tabular-nums" />
+      </Field>
       <Field label="Notes" htmlFor={`${uid}-notes`} className="sm:col-span-2"><TextArea id={`${uid}-notes`} name="notes" rows={2} defaultValue={supplier?.notes ?? ""} maxLength={2000} /></Field>
       <Checkbox name="reverse_charge" defaultChecked={supplier?.reverse_charge ?? false} label="Abroad, and charges no VAT: new bills start as reverse charge" className="sm:col-span-2" />
     </div>

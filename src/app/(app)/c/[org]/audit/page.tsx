@@ -35,6 +35,7 @@ function headline(row: AuditRow) {
   if (row.action === "locked") return "Lock date moved";
   if (row.action === "filed") return "VAT return filed";
   if (row.action === "checked") return "VAT number checked in VIES";
+  if (row.action === "reconciled") return "Supplier's statement checked";
   const client = CLIENT_EVENTS[`${row.entity}:${row.action}`];
   if (client) return client;
   return `${ENTITIES[row.entity] ?? row.entity} ${VERBS[row.action] ?? row.action}`;
@@ -45,6 +46,7 @@ function describe(row: AuditRow) {
   const day = (value: unknown) => typeof value === "string" && value ? formatDate(value) : null;
   if (row.action === "locked") return detail.to ? `Locked up to ${day(detail.to)}${detail.from ? `, from ${day(detail.from)}` : ""}` : `Unlocked${detail.from ? `, from ${day(detail.from)}` : ""}`;
   if (row.action === "filed") return `${periodLabel(String(detail.from), String(detail.to))} · net VAT ${formatAmount(Number(detail.net_vat ?? 0))}`;
+  if (row.action === "reconciled") return `${detail.supplier}, statement of ${day(detail.date)}: theirs ${formatAmount(Number(detail.theirs ?? 0))}, ours ${formatAmount(Number(detail.ours ?? 0))}${Number(detail.unexplained) ? `, ${formatAmount(Number(detail.unexplained))} not explained` : ", agreed"}`;
   if (CLIENT_EVENTS[`${row.entity}:${row.action}`]) {
     const parts: unknown[] = [detail.company];
     if (row.entity === "engagement_letter") parts.push(detail.by ? `by ${detail.by}` : null, detail.ip ? `from ${detail.ip}` : null, detail.hash ? `fingerprint ${String(detail.hash).slice(0, 12)}…` : null);

@@ -232,15 +232,18 @@ test("unused credit can be refunded from the bank, and the refund shows in the b
   await expect(page.getByText("Debtors agree")).toBeVisible();
 });
 
-test("a customer's statement is a PDF, and a reminder lists what is overdue", async ({ page, context }) => {
+test("a customer's statement is on screen and a PDF, and a reminder lists what is overdue", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/c/larnaka-roast/customers");
   await page.getByRole("link", { name: "Finikoudes Beach Kiosk Ltd" }).click();
-  const statement = await page.getByRole("link", { name: "Statement" }).getAttribute("href");
-  const pdf = await page.request.get(statement!);
+  await page.getByRole("link", { name: "Statement" }).click();
+  await expect(page.getByRole("heading", { name: "Finikoudes Beach Kiosk Ltd" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Brought forward" })).toBeVisible();
+  const pdf = await page.request.get((await page.getByRole("link", { name: "PDF" }).getAttribute("href"))!);
   expect(pdf.headers()["content-type"]).toBe("application/pdf");
   expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
   for (const words of ["STATEMENT", "ACCOUNT OF", "Finikoudes Beach Kiosk Ltd", "BALANCE OWED", "Brought forward"]) expect(pdfText(await pdf.body())).toContain(words);
+  await page.getByRole("link", { name: "Customer", exact: true }).click();
   await page.getByRole("button", { name: "Send a reminder" }).click();
   await expect(page.getByLabel("Message")).toHaveValue(/overdue/);
   await page.getByRole("button", { name: "Copy the message" }).click();
@@ -318,9 +321,11 @@ test("an issued invoice downloads as a UBL e-invoice, and a company's documents 
   expect(body).toContain("VATEX-EU-AE");
 
   await page.goto("/c/larnaka-roast/settings");
+  await page.getByRole("link", { name: "Change how they look" }).click();
   await expect(page.getByRole("img", { name: "Logo" })).toBeVisible();
-  await page.getByLabel("Terms at the foot").fill("Goods remain ours until paid for in full.");
-  await page.getByRole("button", { name: "Save the design" }).click();
+  await page.getByRole("link", { name: "Standard", exact: true }).click();
+  await page.getByLabel("Terms").fill("Goods remain ours until paid for in full.");
+  await page.getByRole("button", { name: "Save the style" }).click();
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
   const logo = await page.request.get("/c/larnaka-roast/logo");
   expect(logo.headers()["content-type"]).toBe("image/png");
@@ -339,9 +344,12 @@ test("an issued invoice is sent from the owner's own email and recorded as sent"
   await expect(page.getByLabel("Message")).toHaveValue(/Please find attached invoice/);
   await page.getByRole("button", { name: "Copy the message" }).click();
   await expect(page.getByText("Marked as sent, and logged on the customer's timeline.")).toBeVisible();
-  await page.reload();
-  await expect(page.getByText("PO-2231")).toBeVisible();
-  await expect(page.getByText(/Not sent to/)).toHaveCount(0);
+  // The panel says so at once and saves it a moment later: on a real Postgres a reload can come first, so look again until it has.
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByText("PO-2231")).toBeVisible();
+    await expect(page.getByText(/Not sent to/)).toHaveCount(0);
+  }).toPass({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Send again" })).toBeVisible();
 });
 
@@ -753,6 +761,8 @@ test("a client's owner is invited from the company, and sees only that company's
   const second = (await page.locator("pre").first().innerText()).trim();
   await page.reload();
   await page.getByRole("listitem").filter({ hasText: "katerina@larnakaroast.example" }).getByRole("button", { name: "Withdraw" }).click();
+  // Withdrawn once it leaves the list: opening the link sooner can beat the withdrawal on a real Postgres.
+  await expect(page.getByRole("listitem").filter({ hasText: "katerina@larnakaroast.example" })).toHaveCount(0);
   await page.goto(second);
   await expect(page.getByText("This invitation was withdrawn.")).toBeVisible();
 });
@@ -1345,7 +1355,7 @@ test("documents go in Greek, or in Greek and English, to the customers who read 
   await outside.close();
 
   // A company's own choice: Troodos Gold's documents are in both, and its PDFs are made in both.
-  await page.goto("/c/troodos-gold/settings");
+  await page.goto("/c/troodos-gold/settings/documents");
   await expect(page.getByLabel("Language")).toHaveValue("en+el");
   await page.goto("/c/troodos-gold/sales");
   await page.getByRole("link", { name: /^[A-Z]+-2026-\d{4}$/ }).first().click();
@@ -1401,4 +1411,114 @@ test("an owner reads Ledgerline in Greek: the menu, Home, invoices and receipts 
   await page.getByRole("menuitemradio", { name: "Ελληνικά" }).click();
   await expect(page.getByRole("heading", { name: "Ανέβασμα αποδείξεων" })).toBeVisible();
   await context.close();
+});
+
+/** A CSV as rows of cells: every cell quoted, as Ledgerline writes them. */
+const csvRows = (text: string) => text.replace(/^\ufeff/, "").trim().split(/\r?\n/).map(line => [...line.matchAll(/"((?:[^"]|"")*)"/g)].map(match => match[1].replace(/""/g, '"')));
+const cents = (value: string) => Math.round(Number(value || 0) * 100);
+
+test("a supplier's statement runs in date order with its balance, downloads as a PDF and a spreadsheet, and agrees with what was open that day", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/suppliers");
+  await page.getByRole("link", { name: "Highland Green Coffee Traders Ltd" }).click();
+  await page.getByRole("link", { name: "Statement", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Highland Green Coffee Traders Ltd" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Report period" }).selectOption("all");
+  await expect(page).toHaveURL(/range=all/);
+  await expect(page.getByRole("cell", { name: "Brought forward" })).toBeVisible();
+
+  // The spreadsheet: oldest first, each balance the one before it plus what was billed, less what was paid or credited.
+  const activity = csvRows(await (await page.request.get((await page.getByRole("link", { name: "CSV" }).getAttribute("href"))!)).text());
+  expect(activity[0].slice(0, 2)).toEqual(["Date", "Type"]);
+  const lines = activity.slice(2, -1);
+  expect(lines.length).toBeGreaterThan(3);
+  expect(lines.map(line => line[0])).toEqual([...lines.map(line => line[0])].sort());
+  let balance = cents(activity[1][7]);
+  for (const line of lines) { balance += cents(line[5]) - cents(line[6]); expect(cents(line[7])).toBe(balance); }
+  expect(activity.at(-1)![1]).toBe("Balance we owe");
+  expect(cents(activity.at(-1)![7])).toBe(balance);
+
+  const pdf = await page.request.get((await page.getByRole("link", { name: "PDF" }).getAttribute("href"))!);
+  expect(pdf.headers()["content-type"]).toBe("application/pdf");
+  for (const words of ["STATEMENT", "ACCOUNT WITH", "Highland Green Coffee Traders Ltd", "BALANCE WE OWE", "Brought forward", "NOT YET DUE"]) expect(pdfText(await pdf.body())).toContain(words);
+
+  // Open items the same day come to the same balance, worked out bill by bill.
+  await page.getByRole("link", { name: "Open items" }).click();
+  await expect(page.getByRole("columnheader", { name: "Outstanding" })).toBeVisible();
+  const open = csvRows(await (await page.request.get((await page.getByRole("link", { name: "CSV" }).getAttribute("href"))!)).text());
+  expect(open[0]).toContain("Days overdue");
+  expect(cents(open.at(-1)!.at(-1)!)).toBe(balance);
+});
+
+test("a supplier's statement is checked against the books: what explains the difference is kept with it, and on the audit trail", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/suppliers");
+  await page.getByRole("link", { name: "Troodos Dairy Ltd" }).click();
+  await page.getByRole("link", { name: "Check their statement" }).first().click();
+  await expect(page.getByRole("heading", { name: "Troodos Dairy Ltd" })).toBeVisible();
+  const ours = Number((await page.getByText("Ours on the same day").locator("xpath=following-sibling::dd").innerText()).replace(/[^0-9.-]/g, ""));
+  // Their statement shows €100 more: a bill of theirs we have not been sent.
+  await page.getByLabel(/^Their balance on/).fill((ours + 100).toFixed(2));
+  await expect(page.getByText("Left to explain")).toBeVisible();
+  await page.getByRole("button", { name: "Add one" }).click();
+  await page.getByLabel("Their reference").fill("TD-NOT-SENT");
+  await page.getByLabel("Amount", { exact: true }).fill("100");
+  await expect(page.getByText("Agreed", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save: agreed" }).click();
+  await expect(page.getByText("Agreed with their statement")).toBeVisible();
+  await expect(page.getByText("Theirs only")).toBeVisible();
+  await expect(page.getByText("TD-NOT-SENT")).toBeVisible();
+  await page.getByRole("link", { name: "Supplier", exact: true }).click();
+  await expect(page.getByRole("region", { name: "What is owed" }).getByText("Agreed")).toBeVisible();
+  await page.goto("/c/larnaka-roast/audit");
+  await expect(page.getByText("Supplier's statement checked").first()).toBeVisible();
+});
+
+test("a payment to a supplier has its remittance advice, and every payment run is listed", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/suppliers");
+  await page.getByRole("link", { name: "Ermou Street Properties Ltd" }).click();
+  const remittance = await page.request.get((await page.getByRole("link", { name: "Remittance" }).first().getAttribute("href"))!);
+  expect(remittance.headers()["content-type"]).toBe("application/pdf");
+  for (const words of ["REMITTANCE ADVICE", "Ermou Street Properties Ltd", "YOUR INVOICE", "PAID NOW", "Total paid", "Paid by bank transfer on"]) expect(pdfText(await remittance.body())).toContain(words);
+  await page.goto("/c/larnaka-roast/bills/runs");
+  await expect(page.getByRole("heading", { name: "Payment runs" })).toBeVisible();
+});
+
+test("a document style is changed with its preview beside it, and one customer is given a style of its own", async ({ page }) => {
+  await page.goto("/c/larnaka-roast/settings/documents");
+  await page.getByRole("button", { name: "Add a style" }).click();
+  await expect(page).toHaveURL(/\/settings\/documents\/[0-9a-f-]{36}$/);
+  await page.getByLabel("Name").fill("Wholesale");
+  await page.getByRole("group", { name: "Layout" }).getByRole("button", { name: "Plain" }).click();
+  await page.getByRole("group", { name: "Type" }).getByRole("button", { name: "Serif", exact: true }).click();
+  await page.getByLabel("Title").fill("Tax invoice");
+  await expect(page.getByText("Not saved yet")).toBeVisible();
+  // The preview is the company's own latest invoice, drawn in the style before it is saved.
+  await expect.poll(async () => {
+    const src = (await page.locator("iframe").getAttribute("src"))!.split("#")[0];
+    return pdfText(await (await page.request.get(src)).body());
+  }, { timeout: 15_000 }).toContain("TAX INVOICE");
+  await page.getByRole("button", { name: "Save the style" }).click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+
+  // One customer's documents take it; every other customer's keep the default.
+  await page.goto("/c/larnaka-roast/sales");
+  await page.getByRole("link", { name: "LRC-2026-0116" }).click();
+  await expect(page).toHaveURL(/\/c\/larnaka-roast\/sales\/[0-9a-f-]{36}$/);
+  const invoice = page.url();
+  await page.locator('main a[href*="/customers/"]').first().click();
+  await expect(page).toHaveURL(/\/customers\/[0-9a-f-]{36}$/);
+  await page.getByText("Edit details").click();
+  await page.getByLabel("Document style").selectOption({ label: "Wholesale" });
+  await page.getByRole("button", { name: "Save customer" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  // In the serif it chose, whole: "ff" copies out as two letters, not one ligature.
+  const styled = pdfText(await (await page.request.get(`${invoice}/pdf`)).body());
+  expect(styled).toContain("TAX INVOICE");
+  expect(styled).toContain("Coffee service");
+  await page.goto("/c/larnaka-roast/sales");
+  await page.getByRole("link", { name: "LRC-2026-0128" }).click();
+  await expect(page).toHaveURL(/\/c\/larnaka-roast\/sales\/[0-9a-f-]{36}$/);
+  const other = pdfText(await (await page.request.get(`${page.url()}/pdf`)).body());
+  // In its customer's language (Finikoudes reads Greek once the test of Greek documents has run), and in the default style.
+  expect(other).toMatch(/INVOICE|ΤΙΜΟΛΟΓΙΟ/);
+  expect(other).not.toContain("TAX INVOICE");
 });

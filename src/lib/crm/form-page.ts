@@ -9,7 +9,8 @@ import type { OrganisationRow } from "@/types/database";
  * can be linked to or opened from any site.
  */
 
-type Company = Pick<OrganisationRow, "name" | "slug" | "invoice_accent">;
+/** The company, with the colour of its default document style. */
+type Company = Pick<OrganisationRow, "name" | "slug"> & { accent: string | null };
 type PageInput =
   | { state: "form"; company: Company; token: string; logo: boolean }
   | { state: "sent"; company: Company; logo?: boolean }
@@ -20,7 +21,7 @@ const initials = (name: string) => name.replace(/\b(Ltd|Limited|Co)\b\.?/g, "").
 
 export function enquiryPage(input: PageInput) {
   const company = input.company;
-  const accent = company && /^#[0-9a-fA-F]{6}$/.test(company.invoice_accent) ? company.invoice_accent : "#0d6e6e";
+  const accent = company?.accent && /^#[0-9a-fA-F]{6}$/.test(company.accent) ? company.accent : "#0d6e6e";
   const name = company ? escape(company.name) : "Enquiries";
   const mark = company ? (input.logo ? `<img class="logo" src="/c/${company.slug}/logo" alt="${name}">` : `<span class="chip">${escape(initials(company.name))}</span><b class="firm">${name}</b>`) : "";
   let body: string;

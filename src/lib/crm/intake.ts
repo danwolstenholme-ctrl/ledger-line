@@ -68,8 +68,9 @@ export async function recordEnquiry(org: Pick<OrganisationRow, "id" | "slug">, i
 /** The company a form key belongs to, while the key is live. */
 export async function companyForToken(token: string) {
   if (!FORM_TOKEN_PATTERN.test(token)) return null;
-  return one<OrganisationRow & { key_id: string }>(`
-    select o.*, k.id as key_id from enquiry_form_keys k join organisations o on o.id = k.organisation_id
+  return one<OrganisationRow & { key_id: string; accent: string | null }>(`
+    select o.*, k.id as key_id, (select s.settings ->> 'accent' from document_styles s where s.organisation_id = o.id and s.is_default) as accent
+      from enquiry_form_keys k join organisations o on o.id = k.organisation_id
      where k.token = $1 and k.revoked_at is null`, [token]);
 }
 

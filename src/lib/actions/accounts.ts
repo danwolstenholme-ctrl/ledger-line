@@ -67,6 +67,10 @@ export async function saveSupplier(_previous: ActionState, form: FormData): Prom
   if (typedVat.problem) p.errors.vat_number = typedVat.problem;
   const vat = typedVat.value;
   const account = p.uuid("default_account_id"), notes = p.text("notes", { max: 2000, label: "Notes" }), rc = p.boolean("reverse_charge");
+  const address = p.text("address", { max: 500, label: "Address" });
+  const termsText = p.text("payment_terms_days", { max: 3, label: "Payment terms" });
+  const terms = termsText === null ? null : Number(termsText);
+  if (terms !== null && (!Number.isInteger(terms) || terms < 0 || terms > 365)) p.errors.payment_terms_days = "Between 0 and 365 days, or empty when they give none.";
   const ibanText = p.text("iban", { max: 42, label: "IBAN" }), bicText = p.text("bic", { max: 11, label: "BIC" });
   const iban = ibanText ? compactIban(ibanText) : null, bic = bicText ? bicText.replace(/\s+/g, "").toUpperCase() : null;
   if (iban && !validIban(iban)) p.errors.iban = "That IBAN does not check out: look at it against the supplier's invoice.";
@@ -74,10 +78,10 @@ export async function saveSupplier(_previous: ActionState, form: FormData): Prom
   if (p.failed) return p.fail();
   let savedId: string | null = id;
   try {
-    if (id) await sql("update suppliers set name = $3, email = $4, phone = $5, vat_number = $6, default_account_id = $7, notes = $8, reverse_charge = $9, iban = $10, bic = $11, updated_at = now() where id = $1 and organisation_id = $2",
-      [id, org.id, name, email, phone, vat, account, notes, rc, iban, bic]);
-    else savedId = (await one<{ id: string }>("insert into suppliers (organisation_id, name, email, phone, vat_number, default_account_id, notes, reverse_charge, iban, bic) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id",
-      [org.id, name, email, phone, vat, account, notes, rc, iban, bic]))!.id;
+    if (id) await sql("update suppliers set name = $3, email = $4, phone = $5, vat_number = $6, default_account_id = $7, notes = $8, reverse_charge = $9, iban = $10, bic = $11, address = $12, payment_terms_days = $13, updated_at = now() where id = $1 and organisation_id = $2",
+      [id, org.id, name, email, phone, vat, account, notes, rc, iban, bic, address, terms]);
+    else savedId = (await one<{ id: string }>("insert into suppliers (organisation_id, name, email, phone, vat_number, default_account_id, notes, reverse_charge, iban, bic, address, payment_terms_days) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id",
+      [org.id, name, email, phone, vat, account, notes, rc, iban, bic, address, terms]))!.id;
   } catch (error) { return dbFailure(error, "The supplier could not be saved."); }
   refresh();
   if (!id && form.get("return") !== "stay") redirect(await orgPath(`/accounts/suppliers/${savedId}`));
@@ -106,8 +110,11 @@ export async function saveBill(_previous: ActionState, form: FormData): Promise<
   let billId: string;
   try {
     if (!supplier && newSupplier) supplier = (await one<{ id: string }>("insert into suppliers (organisation_id, name) values ($1, $2) returning id", [org.id, newSupplier]))!.id;
+    // No due date given: the supplier's own terms, when they give them, count from the bill's date.
+    const terms = due ? null : (await one<{ days: number | null }>("select payment_terms_days as days from suppliers where id = $1 and organisation_id = $2", [supplier, org.id]))?.days;
+    const dueOn = due ?? (terms !== null && terms !== undefined ? new Date(Date.parse(`${issued}T12:00:00Z`) + terms * 86_400_000).toISOString().slice(0, 10) : null);
     billId = (await one<{ id: string }>("select save_bill($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12) as id",
-      [org.id, id, supplier, number, reference, issued, due, notes, source, JSON.stringify(lines), p.boolean("reverse_charge"), reverseChargeKind(form)]))!.id;
+      [org.id, id, supplier, number, reference, issued, dueOn, notes, source, JSON.stringify(lines), p.boolean("reverse_charge"), reverseChargeKind(form)]))!.id;
   } catch (error) { return dbFailure(error, "The bill could not be saved."); }
   refresh();
   redirect(await orgPath(`/accounts/bills/${billId}`));

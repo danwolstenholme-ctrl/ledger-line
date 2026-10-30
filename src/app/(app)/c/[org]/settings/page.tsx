@@ -9,9 +9,11 @@ import { AccountingSettingsForm, AiSuggestionsForm, VatSchemeForm } from "@/comp
 import { regimeOf } from "@/lib/domain/regimes";
 import { RecordDetail, RecordHeader, RecordSection } from "@/components/records/record-layout";
 import { InvoiceSettingsForm } from "@/components/sales/sale-actions";
-import { InvoiceDesignForm } from "@/components/sales/design-form";
-import { one } from "@/lib/db";
+import { getDocumentStyles } from "@/lib/data/document-styles";
 import { logoVersion, suggestNumber } from "@/lib/data/sales";
+import { DOCUMENT_LANGUAGES } from "@/lib/documents/document-words";
+import { LAYOUTS } from "@/lib/documents/style";
+import { recordOutlineButton } from "@/components/records/record-layout";
 import { firmToday } from "@/lib/domain/invoices";
 
 export const metadata: Metadata = { title: "Company settings" };
@@ -19,9 +21,8 @@ export const metadata: Metadata = { title: "Company settings" };
 /** The lock date, where payments land by default, the financial year, and the company's registration details. */
 export default async function AccountsSettingsPage() {
   const org = await requireOrg();
-  const [{ settings }, banks, logo, latest, next] = await Promise.all([getAccountingSettings(), getBankAccounts(), logoVersion(org.id),
-    one<{ id: string }>("select id from invoices where organisation_id = $1 and status <> 'void' order by issued_on desc, number desc limit 1", [org.id]),
-    suggestNumber(org, "invoice")]);
+  const [{ settings }, banks, logo, styles, next] = await Promise.all([getAccountingSettings(), getBankAccounts(), logoVersion(org.id), getDocumentStyles(), suggestNumber(org, "invoice")]);
+  const standard = styles.find(row => row.is_default);
   const quarters = { 1: "January, April, July, October", 2: "February, May, August, November", 3: "March, June, September, December" } as Record<number, string>;
   const regime = regimeOf(org.country);
   // Two columns that each run on, so a tall card never leaves a gap beside a short one.
@@ -56,8 +57,13 @@ export default async function AccountsSettingsPage() {
           <div className="p-4 sm:p-5"><VatSchemeForm values={{ vat_period: org.vat_period, vat_quarter_end_month: org.vat_quarter_end_month, vat_year_end_month: org.vat_year_end_month,
             vat_annual_payments: org.vat_annual_payments, vat_cash_accounting: org.vat_cash_accounting, vat_flat_rate: org.vat_flat_rate === null ? null : Number(org.vat_flat_rate) }} /></div>
         </RecordSection> : null}
-        <RecordSection title="How your documents look">
-          <div className="p-4 sm:p-5"><InvoiceDesignForm slug={org.slug} accent={org.invoice_accent} footer={org.invoice_footer} logoVersion={logo} language={org.document_language} cyprus={org.country === "CY"} previewHref={latest ? `/c/${org.slug}/sales/${latest.id}/pdf` : null} /></div>
+        <RecordSection title="How your documents look" hint={`${styles.length} style${styles.length === 1 ? "" : "s"}`}>
+          <dl className="divide-hairline divide-y px-4 sm:px-5">
+            <RecordDetail label="Default style" value={standard ? `${standard.name}: ${LAYOUTS.find(layout => layout.key === standard.style.layout)?.label.toLowerCase()} layout` : null} />
+            <RecordDetail label="Language" value={DOCUMENT_LANGUAGES.find(item => item.value === org.document_language)?.label} />
+            <RecordDetail label="Logo" value={logo ? "On every document" : "None: the company’s name is printed"} />
+          </dl>
+          <div className="border-hairline border-t px-4 py-3 sm:px-5"><Link href="/accounts/settings/documents" className={recordOutlineButton}>Change how they look</Link></div>
         </RecordSection>
         <RecordSection title="AI in the books" hint={settings.ai_suggestions ? "On" : "Off"}>
           <div className="text-ink-muted space-y-2 p-4 text-[13px] leading-relaxed sm:p-5">

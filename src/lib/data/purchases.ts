@@ -82,18 +82,20 @@ export async function getPaymentRun(id: string) {
   const run = await one<{ id: string; bank_account_id: string; paid_on: string; reference: string | null; created_at: string; bank_name: string; bank_details: string | null }>(`
     select r.*, a.name as bank_name, a.bank_details from bill_payment_runs r join ledger_accounts a on a.id = r.bank_account_id where r.id = $1 and r.organisation_id = $2`, [id, org.id]);
   if (!run) return null;
-  const payments = await sql<{ id: string; bill_id: string; amount: number; reference: string | null; number: string | null; supplier_id: string; supplier_name: string; iban: string | null; bic: string | null; matched: boolean }>(`
-    select p.id, p.bill_id, p.amount, p.reference, b.number, s.id as supplier_id, s.name as supplier_name, s.iban, s.bic,
+  const payments = await sql<{ id: string; bill_id: string; amount: number; reference: string | null; number: string | null; issued_on: string; supplier_id: string; supplier_name: string; supplier_email: string | null; iban: string | null; bic: string | null; matched: boolean }>(`
+    select p.id, p.bill_id, p.amount, p.reference, b.number, b.issued_on, s.id as supplier_id, s.name as supplier_name, s.email as supplier_email, s.iban, s.bic,
            exists (select 1 from bank_line_matches m where m.bill_payment_id = p.id) as matched
       from bill_payments p join bills b on b.id = p.bill_id join suppliers s on s.id = b.supplier_id
      where p.run_id = $1 order by s.name, b.number`, [id]);
   return { org, run, payments, total: payments.reduce((sum, payment) => sum + Math.round(Number(payment.amount) * 100), 0) / 100 };
 }
 
-export async function getPaymentRuns() {
+export async function getPaymentRuns(limit = 20) {
   const org = await requireOrg();
-  return sql<{ id: string; paid_on: string; reference: string | null; bank_name: string; count: number; total: number }>(`
-    select r.id, r.paid_on, r.reference, a.name as bank_name, count(p.id) as count, coalesce(sum(p.amount), 0) as total
-      from bill_payment_runs r join ledger_accounts a on a.id = r.bank_account_id left join bill_payments p on p.run_id = r.id
-     where r.organisation_id = $1 group by r.id, a.name order by r.paid_on desc, r.created_at desc limit 20`, [org.id]);
+  return sql<{ id: string; paid_on: string; reference: string | null; bank_name: string; count: number; suppliers: number; total: number }>(`
+    select r.id, r.paid_on, r.reference, a.name as bank_name, count(p.id) as count,
+           count(distinct b.supplier_id) as suppliers, coalesce(sum(p.amount), 0) as total
+      from bill_payment_runs r join ledger_accounts a on a.id = r.bank_account_id
+      left join bill_payments p on p.run_id = r.id left join bills b on b.id = p.bill_id
+     where r.organisation_id = $1 group by r.id, a.name order by r.paid_on desc, r.created_at desc limit ${Math.max(1, Math.min(500, Math.trunc(limit)))}`, [org.id]);
 }

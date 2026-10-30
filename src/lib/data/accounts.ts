@@ -291,13 +291,21 @@ export async function getSuppliers(options: { activeOnly?: boolean } = {}) {
   return { rows: await sql<SupplierRow>(`select * from suppliers where organisation_id = $1 ${options.activeOnly ? "and is_active" : ""} order by name`, [org.id]), ...ok };
 }
 
+/** A supplier with its bills, what it has been paid (newest first), and the statements of theirs checked against the books. */
 export async function getSupplier(id: string) {
   const org = await requireOrg();
-  const [supplier, bills] = await Promise.all([
+  const [supplier, bills, payments, checks] = await Promise.all([
     one<SupplierRow>("select * from suppliers where id = $1 and organisation_id = $2", [id, org.id]),
     sql<BillDirectoryRow>("select * from v_bill_directory where supplier_id = $1 and organisation_id = $2 order by issued_on desc limit 100", [id, org.id]),
+    sql<{ id: string; paid_on: string; amount: number; reference: string | null; run_id: string | null; bill_id: string; number: string | null }>(`
+      select p.id, p.paid_on, p.amount, p.reference, p.run_id, b.id as bill_id, b.number
+        from bill_payments p join bills b on b.id = p.bill_id
+       where b.supplier_id = $1 and p.organisation_id = $2 order by p.paid_on desc, b.number limit 60`, [id, org.id]),
+    sql<{ id: string; statement_date: string; their_balance: number; our_balance: number; unexplained: number; agreed: boolean; created_at: string }>(`
+      select id, statement_date, their_balance, our_balance, unexplained, agreed, created_at from supplier_statement_checks
+       where supplier_id = $1 and organisation_id = $2 order by statement_date desc, created_at desc limit 6`, [id, org.id]),
   ]);
-  return { supplier, bills, ...ok };
+  return { supplier, bills, payments, checks, ...ok };
 }
 
 export async function getBills(filters: { view?: BillView; q?: string; page?: number; supplierId?: string } = {}) {
@@ -342,23 +350,53 @@ export async function getBill(id: string) {
   return { bill, lines, payments, ...ok };
 }
 
-export async function getAgedPayables() {
+/**
+ * What the company owed each supplier on a day (today, unless asked), by
+ * how far past due: each bill as it stood then, after what had been paid and
+ * credited by then; and their credit not yet used, which comes off the total.
+ */
+export async function getAgedPayables(options: { at?: string } = {}) {
   const org = await requireOrg();
-  const open = await sql<BillDirectoryRow>("select * from v_bill_directory where organisation_id = $1 and status in ('awaiting_payment', 'part_paid')", [org.id]);
+  const at = options.at ?? firmToday();
+  const [open, credit] = await Promise.all([
+    sql<{ supplier_id: string; supplier_name: string; due_on: string | null; balance: number }>(`
+      select * from (
+        select b.supplier_id, s.name as supplier_name, b.due_on,
+               b.total - coalesce((select sum(p.amount) from bill_payments p where p.bill_id = b.id and p.paid_on <= $2), 0)
+                       - coalesce((select sum(a.amount) from supplier_credit_allocations a where a.bill_id = b.id and a.allocated_on <= $2), 0) as balance
+          from bills b join suppliers s on s.id = b.supplier_id
+         where b.organisation_id = $1 and b.status <> 'void' and b.issued_on <= $2) bills
+       where balance > 0`, [org.id, at]),
+    sql<{ supplier_id: string; supplier_name: string; unused: number }>(`
+      select * from (
+        select c.supplier_id, s.name as supplier_name,
+               sum(c.total - coalesce((select sum(a.amount) from supplier_credit_allocations a where a.supplier_credit_id = c.id and a.allocated_on <= $2), 0)
+                           - coalesce((select sum(t.amount) from bank_transactions t where t.supplier_credit_id = c.id and t.txn_date <= $2), 0)) as unused
+          from supplier_credits c join suppliers s on s.id = c.supplier_id
+         where c.organisation_id = $1 and c.status = 'recorded' and c.issued_on <= $2 group by c.supplier_id, s.name) credits
+       where unused > 0`, [org.id, at]),
+  ]);
   const empty = () => Object.fromEntries(AGEING_BUCKETS.map(bucket => [bucket.key, 0])) as Record<AgeingBucketKey, number>;
   const totals = empty();
-  const suppliers = new Map<string, { id: string; name: string; buckets: Record<AgeingBucketKey, number>; total: number; count: number; oldest: number }>();
+  type Row = { id: string; name: string; buckets: Record<AgeingBucketKey, number>; credit: number; total: number; count: number; oldest: number };
+  const suppliers = new Map<string, Row>();
+  const row = (id: string, name: string) => suppliers.get(id) ?? suppliers.set(id, { id, name, buckets: empty(), credit: 0, total: 0, count: 0, oldest: 0 }).get(id)!;
   for (const bill of open) {
-    const late = Math.max(0, Number(bill.days_overdue) || 0), bucket = ageingBucket(late), amount = toCents(bill.balance);
-    const supplier = suppliers.get(bill.supplier_id) ?? { id: bill.supplier_id, name: bill.supplier_name, buckets: empty(), total: 0, count: 0, oldest: 0 };
+    const late = bill.due_on ? Math.max(0, Math.round((Date.parse(`${at}T00:00:00Z`) - Date.parse(`${bill.due_on}T00:00:00Z`)) / 86_400_000)) : 0;
+    const bucket = ageingBucket(late), amount = toCents(bill.balance), supplier = row(bill.supplier_id, bill.supplier_name);
     supplier.buckets[bucket] += amount; supplier.total += amount; supplier.count += 1; supplier.oldest = Math.max(supplier.oldest, late);
-    suppliers.set(bill.supplier_id, supplier);
     totals[bucket] += amount;
+  }
+  let creditTotal = 0;
+  for (const item of credit) {
+    const supplier = row(item.supplier_id, item.supplier_name), amount = toCents(item.unused);
+    supplier.credit += amount; supplier.total -= amount; creditTotal += amount;
   }
   const euros = (record: Record<AgeingBucketKey, number>) => Object.fromEntries(Object.entries(record).map(([key, value]) => [key, value / 100])) as Record<AgeingBucketKey, number>;
   return {
-    suppliers: [...suppliers.values()].sort((a, b) => b.oldest - a.oldest || b.total - a.total).map(supplier => ({ ...supplier, buckets: euros(supplier.buckets), total: supplier.total / 100 })),
-    totals: euros(totals), total: Object.values(totals).reduce((sum, value) => sum + value, 0) / 100, count: open.length, failed: false, today: firmToday(),
+    suppliers: [...suppliers.values()].sort((a, b) => b.oldest - a.oldest || b.total - a.total).map(supplier => ({ ...supplier, buckets: euros(supplier.buckets), credit: supplier.credit / 100, total: supplier.total / 100 })),
+    totals: euros(totals), credit: creditTotal / 100, total: (Object.values(totals).reduce((sum, value) => sum + value, 0) - creditTotal) / 100,
+    count: open.length, failed: false, today: firmToday(), at,
   };
 }
 

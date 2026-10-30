@@ -17,23 +17,25 @@ export type PeriodChoice = { name: string; label: string; value: string; options
  * one shows its two dates and applies when both are set. One row, above the
  * report it scopes.
  */
-export function PeriodPicker({ action, range, from, to, extra = {}, asAt = false, choices = [] }: {
-  action: string; range: ReportRange; from: string; to: string; extra?: Record<string, string>;
+export function PeriodPicker({ action, range, from, to, extra = {}, asAt = false, choices = [], ranges = REPORT_RANGES }: {
+  action: string; range: ReportRange | (string & {}); from: string; to: string; extra?: Record<string, string>;
   /** A balance sheet or trial balance is as at one date, not over a period. */
   asAt?: boolean;
   choices?: PeriodChoice[];
+  /** The named periods to choose from: a report's, or a statement's (lib/domain/statements). */
+  ranges?: readonly { key: string; label: string }[];
 }) {
   const uid = useId();
   const form = useRef<HTMLFormElement>(null);
-  const [choice, setChoice] = useState<ReportRange>(range);
+  const [choice, setChoice] = useState<string>(range);
   const submit = () => setTimeout(() => form.current?.requestSubmit(), 0);
   return <NavigationForm ref={form} action={action} className="flex flex-wrap items-end gap-2 print:hidden">
     {Object.entries(extra).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
     <label className="text-ink-muted space-y-1 text-[12px]">
       <span className="block">{asAt ? "As at the end of" : "Period"}</span>
       <NativeSelect id={`${uid}-range`} name="range" aria-label={asAt ? "As at the end of" : "Report period"} value={choice} className={cn(control, "min-w-40")}
-        onChange={event => { const next = event.target.value as ReportRange; setChoice(next); if (next !== "custom") submit(); }}>
-        {REPORT_RANGES.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+        onChange={event => { const next = event.target.value; setChoice(next); if (next !== "custom") submit(); }}>
+        {ranges.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
         <option value="custom">{asAt ? "A date I choose" : "Dates I choose"}</option>
       </NativeSelect>
     </label>

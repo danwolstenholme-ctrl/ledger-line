@@ -739,4 +739,7 @@ export const GREEK: Record<string, string> = {
   "Unknown file.": "Άγνωστο αρχείο.",
   "That file is no longer here.": "Το αρχείο δεν υπάρχει πια εδώ.",
   "The file could not be read.": "Το αρχείο δεν διαβάστηκε.",
+  "Document style": "Στυλ εγγράφων",
+  "how its invoices, quotes and statements look": "πώς φαίνονται τα τιμολόγια, οι προσφορές και οι καταστάσεις του",
+  "The default: {name}": "Το προεπιλεγμένο: {name}",
 };

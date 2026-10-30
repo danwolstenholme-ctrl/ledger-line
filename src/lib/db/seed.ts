@@ -751,8 +751,9 @@ export async function seedSupplierCredits(pg: PGlite) {
 export async function seedDesign(pg: PGlite) {
   const file = path.join(process.cwd(), "src/lib/db/seed-files/larnaka-roast-logo.png");
   if (!fs.existsSync(file)) return;
-  await pg.query("update organisations set invoice_accent = '#7c4a2d', invoice_footer = $2 where slug = $1",
-    ["larnaka-roast", "Coffee is roasted to order. Please tell us of any damaged or missing goods within 7 days of delivery.\nLate payments may be charged interest at the rate allowed by law."]);
+  const terms = "Coffee is roasted to order. Please tell us of any damaged or missing goods within 7 days of delivery.\nLate payments may be charged interest at the rate allowed by law.";
+  await pg.query(`update document_styles set settings = $2 where is_default and organisation_id = (select id from organisations where slug = $1)`,
+    ["larnaka-roast", JSON.stringify({ accent: "#7c4a2d", logoSize: "large", paymentSlip: true, terms: { invoice: terms, quote: terms, statement: "Thank you for your custom. Please quote the invoice numbers you are paying." } })]);
   await pg.query("insert into organisation_logos (organisation_id, media_type, content) select id, 'image/png', $2 from organisations where slug = $1", ["larnaka-roast", fs.readFileSync(file)]);
 }
 
@@ -1372,9 +1373,11 @@ async function seedPractice(pg: PGlite) {
   // Saltlake Accounting Ltd: the firm's own books, from July 2026.
   const org = randomUUID(), bank = randomUUID(), fees = randomUUID(), payroll = randomUUID();
   await pg.query(`insert into organisations (id, practice_id, slug, name, greek_name, industry, he_number, vat_number, tic, vat_registered, vat_quarter_end_month, year_end_month,
-      contact_name, contact_email, address, invoice_prefix, payment_terms_days, invoice_accent, invoice_footer, manager, is_practice)
+      contact_name, contact_email, address, invoice_prefix, payment_terms_days, manager, is_practice)
     values ($1, $2, 'saltlake-accounting', 'Saltlake Accounting Ltd', 'ΣΑΛΤΛΕΪΚ ΛΟΓΙΣΤΙΚΗ ΛΤΔ', 'Chartered accountants: the firm''s own books', 'HE 402881', 'CY10402881S', '12402881S', true, 3, 12,
-      'Maria Antoniou', 'maria@saltlake.example', '18 Grigori Afxentiou Avenue, 6023 Larnaca', 'SAL-', 14, '#0d6e6e', 'Fees are due within 14 days. Thank you for your business.', 'Maria Antoniou', true)`, [org, practiceId]);
+      'Maria Antoniou', 'maria@saltlake.example', '18 Grigori Afxentiou Avenue, 6023 Larnaca', 'SAL-', 14, 'Maria Antoniou', true)`, [org, practiceId]);
+  await pg.query("update document_styles set settings = $2 where organisation_id = $1 and is_default",
+    [org, JSON.stringify({ accent: "#0d6e6e", terms: { invoice: "Fees are due within 14 days. Thank you for your business." } })]);
   const accounts: Row[] = [
     { id: bank, organisation_id: org, code: "090", name: "Bank of Cyprus current account", type: "bank", bank_details: "IBAN CY63 0020 0195 0000 3570 0128 4419\nBIC BCYPCY2N" },
     { id: fees, organisation_id: org, code: "200", name: "Accounting and tax fees", type: "revenue", system_role: "sales" },

@@ -83,3 +83,22 @@ export function shareMessage(language: DocumentLanguage, data: ShareMessage): { 
   // In both languages, one line each before the link, not a separator.
   return { subject: block.subject, message: language === "en+el" ? block.body.replace("\n\n— English —\n\n", "\n") : block.body };
 }
+
+export type RemittanceEmail = { company: string; sender: string; supplier: string; paidOn: string; currency: string; reference: string | null; bills: { number: string | null; amount: number }[] };
+
+/** A remittance advice by email, with the advice attached: what was paid, when, and for which of their invoices. */
+export function remittanceEmail(language: DocumentLanguage, data: RemittanceEmail): Block {
+  const total = data.bills.reduce((sum, bill) => sum + Math.round(bill.amount * 100), 0) / 100;
+  return inEach(language, lang => {
+    const words = documentWords(lang), money = (value: number) => words.money(value, data.currency);
+    const list = data.bills.map(bill => `• ${bill.number ?? "—"}: ${money(bill.amount)}`).join("\n");
+    if (lang === "el") return {
+      subject: `Ειδοποίηση πληρωμής από ${data.company}`,
+      body: `Αγαπητοί ${data.supplier},\n\nΣας πληρώσαμε ${money(total)} με τραπεζικό έμβασμα στις ${words.date(data.paidOn)}${data.reference ? ` (αιτιολογία ${data.reference})` : ""}, για τα τιμολόγιά σας:\n\n${list}\n\nΕπισυνάπτεται η ειδοποίηση πληρωμής.\n\nΜε εκτίμηση,\n${data.sender}\n${data.company}`,
+    };
+    return {
+      subject: `Remittance advice from ${data.company}`,
+      body: `Dear ${data.supplier},\n\nWe have paid you ${money(total)} by bank transfer on ${words.date(data.paidOn)}${data.reference ? ` (reference ${data.reference})` : ""}, for your invoices:\n\n${list}\n\nThe remittance advice is attached.\n\nKind regards,\n${data.sender}\n${data.company}`,
+    };
+  });
+}

@@ -50,8 +50,8 @@ function Rows({ title, rows, total, optional = [] }: { title: string; rows: [str
   </View>;
 }
 
-function Payslips({ org, run, slips }: PayslipData) {
-  const accent = /^#[0-9a-f]{6}$/i.test(org.invoice_accent) ? org.invoice_accent : INK;
+function Payslips({ org, run, slips, accent: colour }: PayslipData) {
+  const accent = /^#[0-9a-f]{6}$/i.test(colour) ? colour : INK;
   const month = new Date(`${run.period}T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
   const registered = [org.tic ? `TIC ${org.tic}` : null, org.he_number ? (/^HE/i.test(org.he_number) ? org.he_number : `HE ${org.he_number}`) : null].filter(Boolean).join(" · ");
   return <Document title={`Payslips ${month}`} author={org.name}>

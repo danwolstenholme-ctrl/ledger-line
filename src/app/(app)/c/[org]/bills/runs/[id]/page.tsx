@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { AlertTriangle, CheckCircle2, FileDown, Undo2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, FileText, Mail, Undo2 } from "lucide-react";
 import Link from "@/components/navigation/navigation-link";
 
 import { undoPaymentRun } from "@/lib/actions/purchases";
 import { getPaymentRun } from "@/lib/data/purchases";
+import { remittanceEmail } from "@/lib/documents/messages";
+import { getCurrentUser } from "@/lib/org";
 import { formatIban, ibanIn } from "@/lib/domain/iban";
 import { UUID_PATTERN } from "@/lib/domain/invoices";
 import { formatAmount, formatDate } from "@/lib/format";
@@ -18,7 +20,7 @@ export const metadata: Metadata = { title: "Payment run" };
 export default async function PaymentRunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID_PATTERN.test(id)) notFound();
-  const data = await getPaymentRun(id);
+  const [data, user] = await Promise.all([getPaymentRun(id), getCurrentUser()]);
   if (!data) notFound();
   const { org, run, payments, total } = data;
   const inFile = payments.filter(payment => payment.iban), outside = payments.filter(payment => !payment.iban);
@@ -26,6 +28,13 @@ export default async function PaymentRunPage({ params }: { params: Promise<{ id:
   const companyIban = ibanIn(run.bank_details);
   const matched = payments.some(payment => payment.matched);
   const head = "text-ink-faint px-3 py-2 text-left text-[11.5px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap";
+  // One remittance advice for each supplier: all their bills in the run on it.
+  const bySupplier = [...payments.reduce((groups, payment) => groups.set(payment.supplier_id, [...(groups.get(payment.supplier_id) ?? []), payment]), new Map<string, typeof payments>()).values()];
+  const mailto = (group: typeof payments) => {
+    const message = remittanceEmail(org.document_language, { company: org.name, sender: org.contact_name ?? user.name, supplier: group[0].supplier_name, paidOn: run.paid_on, currency: org.currency, reference: run.reference,
+      bills: group.map(payment => ({ number: payment.number, amount: Number(payment.amount) })) });
+    return `mailto:${encodeURIComponent(group[0].supplier_email ?? "")}?subject=${encodeURIComponent(message.subject)}&body=${encodeURIComponent(message.body)}`;
+  };
   return <PageBody width="5xl" className="space-y-4">
     <RecordHeader title={`Payment run, ${formatDate(run.paid_on)}`} back={{ href: "/accounts/bills", label: "Bills" }}
       description={`${payments.length} bill${payments.length === 1 ? "" : "s"} paid from ${run.bank_name}, ${formatAmount(total)} in all.${run.reference ? ` Reference: ${run.reference}.` : ""}`}
@@ -47,6 +56,17 @@ export default async function PaymentRunPage({ params }: { params: Promise<{ id:
         </tr>)}</tbody>
         <tfoot className="border-hairline-strong border-t"><tr><td colSpan={3} className="text-ink px-3 py-2.5 text-[13px] font-semibold">Total</td><td className="px-3 py-2.5 text-right text-[13.5px] font-semibold tabular-nums">{formatAmount(total)}</td></tr></tfoot>
       </table>
+    </Panel>
+    <Panel className="overflow-hidden">
+      <div className="border-hairline border-b px-4 py-2.5">
+        <h2 className="text-ink text-[14px] font-semibold">Remittance advice</h2>
+        <p className="text-ink-muted text-[12.5px]">One for each supplier, in the company’s document style: download it, then email it with the message written for you.</p>
+      </div>
+      <ul className="divide-hairline divide-y">{bySupplier.map(group => <li key={group[0].supplier_id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+        <span className="text-ink min-w-0 flex-1 text-[13px]">{group[0].supplier_name} <span className="text-ink-faint">· {group.length} bill{group.length === 1 ? "" : "s"}, {formatAmount(group.reduce((sum, payment) => sum + Math.round(Number(payment.amount) * 100), 0) / 100)}</span></span>
+        <a href={`/c/${org.slug}/bills/runs/${run.id}/remittance/${group[0].supplier_id}`} target="_blank" rel="noopener" className="text-brand inline-flex items-center gap-1 text-[13px] font-medium hover:underline"><FileText className="size-3.5" />PDF</a>
+        <a href={mailto(group)} className="text-brand inline-flex items-center gap-1 text-[13px] font-medium hover:underline"><Mail className="size-3.5" />{group[0].supplier_email ? "Email" : "Email (no address yet)"}</a>
+      </li>)}</ul>
     </Panel>
     {outside.length ? <p className="text-ink-muted text-[12.5px]">{outside.map(payment => payment.supplier_name).join(", ")}: pay by direct debit, card or a single transfer, and add their IBAN to the supplier to include them next time.</p> : null}
     {!matched ? <form action={undoPaymentRun} className="flex flex-wrap items-center gap-3"><input type="hidden" name="id" value={run.id} />

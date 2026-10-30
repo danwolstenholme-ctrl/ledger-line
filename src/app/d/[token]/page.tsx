@@ -45,8 +45,9 @@ export default async function SharedDocumentPage({ params, searchParams }: { par
   // On screen, one language at a time: a document in both opens in Greek, with English beside it.
   const language: DocumentLanguage = query.lang === "en" || query.lang === "el" ? query.lang : data.language === "en" ? "en" : "el";
   const words = documentWords(language);
-  const { org, document, lines: items, customer, bank, logo } = data;
-  const { accent, onAccent } = accentOf(org);
+  const { org, document, lines: items, customer, bank, logo, style } = data;
+  const { accent, onAccent } = accentOf(style);
+  const terms = style.terms[kind];
   const currency = ("currency" in document && document.currency) || org.currency;
   const money = (value: number | string) => words.money(value, currency);
   const today = firmToday();
@@ -160,7 +161,7 @@ export default async function SharedDocumentPage({ params, searchParams }: { par
             {customer && customer.country !== org.country ? <span className="block">{countryName(customer.country)}</span> : null}{customer?.vat_number ? <span className="block">{words.word("vatLabel")} {customer.vat_number}</span> : null}</p>
         </div>
       </section>
-      {org.invoice_footer ? <p className="text-ink-faint px-1 text-[12.5px] leading-relaxed">{org.invoice_footer}</p> : null}
+      {terms ? <p className="text-ink-faint px-1 text-[12.5px] leading-relaxed whitespace-pre-line">{terms}</p> : null}
       <p className="text-ink-faint flex items-center justify-center gap-1.5 pt-2 text-[12px]">{words.word("sentWith")} <LedgerlineMark className="size-3.5" title="" /><span className="text-ink-muted font-semibold">Ledgerline</span></p>
     </div>
   </main>;

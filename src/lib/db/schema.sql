@@ -38,9 +38,7 @@ create table organisations (
   -- How this company numbers its sales documents, and the terms it gives.
   invoice_prefix          text not null default 'INV-',
   payment_terms_days      smallint not null default 30 check (payment_terms_days between 0 and 365),
-  -- How its documents look: an accent colour and terms printed at the foot. The logo is kept apart, below.
-  invoice_accent          text not null default '#1d2433' check (invoice_accent ~ '^#[0-9a-fA-F]{6}$'),
-  invoice_footer          text,
+  -- How its documents look is its document styles' (below), the logo apart again.
   -- The language its invoices, quotes and statements are written in: English, Greek, or both (Greek first). A customer can have its own.
   document_language       text not null default 'en' check (document_language in ('en', 'el', 'en+el')),
   -- Who at the practice looks after this company: its deadlines and work are theirs.
@@ -86,6 +84,29 @@ create table organisation_logos (
   content         bytea not null,
   updated_at      timestamptz not null default now()
 );
+
+-- How a company's documents look: its layout, type, colour, what they show, their titles and terms
+-- (lib/documents/style, which reads `settings` with a default for everything missing). One is its
+-- default; a customer can be given another. Every company starts with one.
+create table document_styles (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references organisations (id) on delete cascade,
+  name            text not null check (length(btrim(name)) between 1 and 60),
+  is_default      boolean not null default false,
+  settings        jsonb not null default '{}' check (jsonb_typeof(settings) = 'object'),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (organisation_id, id)
+);
+create unique index document_styles_one_default on document_styles (organisation_id) where is_default;
+create unique index document_styles_name_unique on document_styles (organisation_id, lower(btrim(name)));
+
+create function organisation_document_style() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into document_styles (organisation_id, name, is_default) values (new.id, 'Standard', true);
+  return new;
+end $$;
+create trigger organisations_document_style after insert on organisations for each row execute function organisation_document_style();
 
 -- The people who use Ledgerline. auth_id is their sign-in: live, a Supabase Auth
 -- user's id (supabase/migrations links the two by email when the account is
@@ -159,12 +180,15 @@ create table customers (
   payment_terms_days smallint check (payment_terms_days between 0 and 365),
   -- The language of the documents it is sent; the company's when null.
   document_language text check (document_language in ('en', 'el', 'en+el')),
+  -- The look of its documents; the company's default style when null.
+  document_style_id uuid,
   -- The company's own details on its customers (custom_fields), by key.
   extra           jsonb not null default '{}' check (jsonb_typeof(extra) = 'object'),
   is_active       boolean not null default true,
   created_at      timestamptz not null default now(),
   unique (organisation_id, id),
-  foreign key (organisation_id, default_account_id) references ledger_accounts (organisation_id, id)
+  foreign key (organisation_id, default_account_id) references ledger_accounts (organisation_id, id),
+  foreign key (organisation_id, document_style_id) references document_styles (organisation_id, id) on delete set null (document_style_id)
 );
 
 create table suppliers (
@@ -176,6 +200,10 @@ create table suppliers (
   phone              text,
   vat_number         text,
   country            char(2) not null default 'CY',
+  -- Where they are, for their statement and remittance advice.
+  address            text,
+  -- Days we have to pay them: a new bill's due date starts from it.
+  payment_terms_days smallint check (payment_terms_days between 0 and 365),
   default_account_id uuid,
   notes              text,
   is_active          boolean not null default true,
@@ -1373,6 +1401,32 @@ create index supplier_credit_allocations_bill_idx on supplier_credit_allocations
 create index supplier_credit_allocations_credit_idx on supplier_credit_allocations (supplier_credit_id);
 
 alter table bank_transactions add foreign key (organisation_id, supplier_credit_id) references supplier_credits (organisation_id, id);
+
+-- A statement a supplier sent, checked against the books: their balance on its date, ours, and what explains
+-- the difference. `explained` holds each item: one of ours not on their statement yet (a payment still on its
+-- way, say), or one of theirs not in the books (a bill not recorded). Agreed when nothing is left unexplained.
+-- Their statement itself can be kept with it, as the evidence.
+create table supplier_statement_checks (
+  id              uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null,
+  supplier_id     uuid not null,
+  statement_date  date not null,
+  their_balance   numeric(14, 2) not null,
+  our_balance     numeric(14, 2) not null,
+  explained       jsonb not null default '[]' check (jsonb_typeof(explained) = 'array'),
+  unexplained     numeric(14, 2) not null default 0,
+  agreed          boolean generated always as (unexplained = 0) stored,
+  notes           text check (length(notes) <= 2000),
+  file_name       text,
+  file_type       text check (file_type in ('application/pdf', 'image/png', 'image/jpeg')),
+  file_content    bytea,
+  checked_by      uuid,
+  created_at      timestamptz not null default now(),
+  unique (organisation_id, id),
+  foreign key (organisation_id, supplier_id) references suppliers (organisation_id, id) on delete cascade,
+  constraint supplier_statement_checks_file check ((file_content is null) = (file_type is null))
+);
+create index supplier_statement_checks_supplier_idx on supplier_statement_checks (supplier_id, statement_date desc);
 create index bank_transactions_supplier_credit_idx on bank_transactions (supplier_credit_id) where supplier_credit_id is not null;
 
 -- The reverse of a bill: each line's account gives back its cost, the VAT reclaimed falls, and less is owed to the supplier.
@@ -2565,6 +2619,14 @@ begin
 end $$;
 create trigger vat_checks_audit after insert on vat_checks for each row execute function audit_vat_check();
 
+create function audit_supplier_statement_check() returns trigger language plpgsql as $$
+begin
+  perform audit_append(new.organisation_id, 'reconciled', 'supplier_statement', new.id,
+    jsonb_build_object('supplier', (select name from suppliers where id = new.supplier_id), 'date', new.statement_date, 'theirs', new.their_balance, 'ours', new.our_balance, 'unexplained', new.unexplained));
+  return new;
+end $$;
+create trigger supplier_statement_checks_audit after insert on supplier_statement_checks for each row execute function audit_supplier_statement_check();
+
 -- Deadlines other than a VAT return (a VIES statement, a provisional tax
 -- instalment, the company tax return) are marked done by hand. A VAT return
 -- needs no mark: filing it in Ledgerline is what closes its deadline.
@@ -3219,6 +3281,7 @@ alter table journal_entries enable row level security;
 alter table journal_lines enable row level security;
 alter table ledger_accounts enable row level security;
 alter table organisation_logos enable row level security;
+alter table document_styles enable row level security;
 alter table organisations enable row level security;
 alter table practice_staff enable row level security;
 alter table practices enable row level security;
@@ -3232,6 +3295,7 @@ alter table sanctions_screenings enable row level security;
 alter table supplier_credit_allocations enable row level security;
 alter table supplier_credit_lines enable row level security;
 alter table supplier_credits enable row level security;
+alter table supplier_statement_checks enable row level security;
 alter table suppliers enable row level security;
 alter table time_entries enable row level security;
 alter table vat_checks enable row level security;
@@ -3366,6 +3430,10 @@ create policy organisation_logos_read on organisation_logos for select to authen
 create policy organisation_logos_insert on organisation_logos for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy organisation_logos_update on organisation_logos for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy organisation_logos_delete on organisation_logos for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy document_styles_read on document_styles for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy document_styles_insert on document_styles for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy document_styles_update on document_styles for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy document_styles_delete on document_styles for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
 create policy quote_lines_read on quote_lines for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
 create policy quote_lines_insert on quote_lines for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy quote_lines_update on quote_lines for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
@@ -3394,6 +3462,10 @@ create policy suppliers_read on suppliers for select to authenticated using (org
 create policy suppliers_insert on suppliers for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy suppliers_update on suppliers for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy suppliers_delete on suppliers for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_statement_checks_read on supplier_statement_checks for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
+create policy supplier_statement_checks_insert on supplier_statement_checks for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_statement_checks_update on supplier_statement_checks for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));
+create policy supplier_statement_checks_delete on supplier_statement_checks for delete to authenticated using (organisation_id = any ((select writable_companies())::uuid[]));
 create policy vat_checks_read on vat_checks for select to authenticated using (organisation_id = any ((select visible_companies())::uuid[]));
 create policy vat_checks_insert on vat_checks for insert to authenticated with check (organisation_id = any ((select writable_companies())::uuid[]));
 create policy vat_checks_update on vat_checks for update to authenticated using (organisation_id = any ((select visible_companies())::uuid[])) with check (organisation_id = any ((select writable_companies())::uuid[]));

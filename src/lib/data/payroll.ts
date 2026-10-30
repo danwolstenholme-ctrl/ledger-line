@@ -4,6 +4,7 @@ import { one, sql } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
 import { NO_YEAR, addToYear, cyMonth, toSocialInsurance, type Payslip, type YearToDate } from "@/lib/domain/payroll-cy";
 import { requireOrg } from "@/lib/org";
+import { companyAccent } from "./document-styles";
 
 /**
  * A company's payroll: its employees, each month's run, and the payslips in
@@ -122,7 +123,8 @@ export async function getPayslipDocuments(id: string) {
   const data = await getPayrollRun(id);
   if (!data) return null;
   const before = await yearSoFar(data.org.id, data.run.period);
-  return { ...data, slips: data.slips.map(slip => ({ ...slip, ytd: addToYear(before.get(slip.employee_id)?.ytd ?? NO_YEAR, slip) })) };
+  // In the company's colour: its default document style's.
+  return { ...data, accent: await companyAccent(data.org.id), slips: data.slips.map(slip => ({ ...slip, ytd: addToYear(before.get(slip.employee_id)?.ytd ?? NO_YEAR, slip) })) };
 }
 
 /**

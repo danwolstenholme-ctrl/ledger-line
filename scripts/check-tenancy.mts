@@ -108,6 +108,9 @@ expect("Nikos sees none of Aegean Blue's", await count(nikos, "select count(*) a
 expect("Nikos does not see the firm's AML file on Pixelforge", await count(nikos, "select count(*) as n from client_files"), is(0));
 expect("Nikos does not see the firm's fee, time or staff", await count(nikos, "select (select count(*) from client_fees) + (select count(*) from time_entries) + (select count(*) from practice_staff) as n"), is(0));
 expect("Nikos sees whose practice it is, for its name and colours", await count(nikos, "select count(*) as n from practices"), is(1));
+expect("Nikos sees Pixelforge's document style, and no other company's", await count(nikos, "select count(*) as n from document_styles where organisation_id <> $1", [pixelforge]), is(0));
+expect("Every company has its default document style", await count(maria, "select count(*) as n from organisations o where not exists (select 1 from document_styles s where s.organisation_id = o.id and s.is_default)"), is(0));
+expect("Eva sees none of Saltlake's document styles or supplier statement checks", await count(eva, "select (select count(*) from document_styles s where not exists (select 1 from organisations o where o.id = s.organisation_id)) + (select count(*) from supplier_statement_checks) as n"), is(0));
 expect("Nikos can raise Pixelforge's own records", await count(nikos, "insert into customers (organisation_id, name) values ($1, 'New Client GmbH') returning id", [pixelforge]), is(1));
 // A caller who is not signed in at all (Supabase's anon, as any role outside `authenticated`): no function of Ledgerline's
 // is theirs to call. The audit trail above all, which only the database's own triggers write.

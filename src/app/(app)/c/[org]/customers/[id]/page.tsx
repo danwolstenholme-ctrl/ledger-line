@@ -5,6 +5,7 @@ import Link from "@/components/navigation/navigation-link";
 
 import { getClient } from "@/lib/data/crm";
 import { getReminder } from "@/lib/data/sales";
+import { getDocumentStyles } from "@/lib/data/document-styles";
 import { countryName } from "@/lib/domain/countries";
 import { UUID_PATTERN } from "@/lib/domain/invoices";
 import { formatAmount, formatDate, formatDateTime } from "@/lib/format";
@@ -33,13 +34,13 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   const { org, workspace, client, contacts, jobs, tasks, invoices, quotes, creditNotes, unusedCredit, activities, owed, overdue, billedThisYear, today } = data;
   const fields = fieldsFor(workspace, "customer");
   const [jobOne, jobMany] = workspace.labels.job;
-  const [reminder, checks] = await Promise.all([overdue > 0 ? getReminder(client.id) : null, latestChecks([client.vat_number ?? ""])]);
+  const [reminder, checks, styles] = await Promise.all([overdue > 0 ? getReminder(client.id) : null, latestChecks([client.vat_number ?? ""]), getDocumentStyles()]);
   const vat = vatKey(client.vat_number, client.country);
-  const statement = `/c/${org.slug}/customers/${client.id}/statement`;
+  const statement = `/c/${org.slug}/customers/${client.id}/statement/pdf`;
   const where = [client.vat_number ? `VAT ${client.vat_number}` : null, countryName(client.country), client.eu_business ? "EU business: invoices are reverse charge" : null].filter(Boolean).join(" · ");
   return <PageBody width="6xl" className="space-y-4">
     <RecordHeader title={client.name} description={where} back={{ href: "/accounts/customers", label: workspace.labels.customer[1] }}
-      action={<><a href={statement} target="_blank" rel="noopener" className={recordOutlineButton}><FileText className="size-3.5" />Statement</a><Link href={`/accounts/quotes/new?customer=${client.id}`} className={recordOutlineButton}>New quote</Link><Link href={`/invoices/new?customer=${client.id}`} className={recordButton}><Plus className="size-4" />New invoice</Link></>} />
+      action={<><Link href={`/accounts/customers/${client.id}/statement`} className={recordOutlineButton}><FileText className="size-3.5" />Statement</Link><Link href={`/accounts/quotes/new?customer=${client.id}`} className={recordOutlineButton}>New quote</Link><Link href={`/invoices/new?customer=${client.id}`} className={recordButton}><Plus className="size-4" />New invoice</Link></>} />
 
     <section className="ll-panel flex flex-wrap gap-x-10 gap-y-3 px-4 py-3">
       <div><p className="ll-eyebrow">Owes you</p><p className={cn("text-[20px] leading-tight font-semibold tabular-nums", overdue ? "text-critical" : "text-ink")}>{formatAmount(owed)}</p><p className="text-ink-muted text-[12px]">{overdue ? `${formatAmount(overdue)} overdue` : "Nothing overdue"}</p></div>
@@ -103,7 +104,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             {!client.email && !client.phone && !client.address ? <dd className="text-ink-faint">No contact details yet.</dd> : null}
           </dl>
           <p className="border-hairline text-ink-muted border-t px-4 py-2 text-[12.5px]">Pays within {client.payment_terms_days ?? org.payment_terms_days} days{client.payment_terms_days === null ? " (the company's terms)" : ""}</p>
-          <RecordDisclosure title="Edit details"><CustomerForm customer={client} companyTerms={org.payment_terms_days} companyLanguage={org.document_language} /></RecordDisclosure>
+          <RecordDisclosure title="Edit details"><CustomerForm customer={client} companyTerms={org.payment_terms_days} companyLanguage={org.document_language} styles={styles.map(({ id, name, is_default }) => ({ id, name, is_default }))} /></RecordDisclosure>
         </RecordSection>
         {fields.length ? <RecordSection title="Details" hint={`What ${org.name.replace(/ (Ltd|Limited|LLP)$/, "")} keeps on each`}>
           <dl className="divide-hairline divide-y px-4">{fields.map(field => <div key={field.key} className="grid gap-0.5 py-2 sm:grid-cols-[130px_minmax(0,1fr)] sm:gap-4">

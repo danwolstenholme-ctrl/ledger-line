@@ -6,6 +6,7 @@ import { addDays } from "@/lib/domain/invoice-math";
 import { lineCents } from "@/lib/domain/line-math";
 import { UUID_PATTERN, firmToday } from "@/lib/domain/invoices";
 import { requireOrg } from "@/lib/org";
+import { logoFor, styleFor } from "./document-styles";
 import type { CreditNoteDirectoryRow, CustomerRow, InvoiceDirectoryRow, ItemRow, ItemisedLine, OrganisationRow, RepeatingInvoiceRow, VatTreatment } from "@/types/database";
 
 /**
@@ -206,12 +207,6 @@ export async function getCopySource(id: string | undefined) {
 // Documents for the customer
 // ---------------------------------------------------------------------------
 
-/** The company's logo as a PDF takes it: a data URI, or nothing. */
-async function logoFor(orgId: string) {
-  const logo = await one<{ media_type: string; content: Uint8Array }>("select media_type, content from organisation_logos where organisation_id = $1", [orgId]);
-  return logo ? `data:${logo.media_type};base64,${Buffer.from(logo.content).toString("base64")}` : null;
-}
-
 /** When the company's logo last changed, as a version for its address; null when it has none. */
 export async function logoVersion(orgId: string) {
   const row = await one<{ version: string }>("select (extract(epoch from updated_at) * 1000)::bigint::text as version from organisation_logos where organisation_id = $1", [orgId]);
@@ -228,56 +223,17 @@ export async function documentFor(org: OrganisationRow, kind: SalesKind, id: str
   const view = kind === "invoice" ? "v_invoice_directory" : kind === "quote" ? "v_quote_directory" : "v_credit_note_directory";
   const document = await one<InvoiceDirectoryRow | QuoteDirectoryRow | CreditNoteDirectoryRow>(`select * from ${view} where id = $1 and organisation_id = $2`, [id, org.id]);
   if (!document) return null;
-  const [lines, customer, bank, corrects, logo] = await Promise.all([
+  const [lines, customer, bank, corrects, logo, style] = await Promise.all([
     linesOf(kind, id),
     one<CustomerRow>("select * from customers where id = $1", [document.customer_id]),
     one<{ name: string; bank_details: string | null }>("select name, bank_details from ledger_accounts where id = $1", [org.default_bank_account_id]),
     kind === "credit_note" && (document as CreditNoteDirectoryRow).invoice_id
       ? one<{ number: string; issued_on: string }>("select number, issued_on from invoices where id = $1", [(document as CreditNoteDirectoryRow).invoice_id]) : null,
     logoFor(org.id),
+    styleFor(org.id, document.customer_id),
   ]);
-  // The customer's language for its documents, or the company's.
-  return { org, kind, document, lines, customer, bank, corrects, logo, language: customer?.document_language ?? org.document_language };
-}
-
-export type StatementRow = { date: string; kind: "invoice" | "payment" | "credit_note" | "refund"; reference: string; detail: string; debit: number; credit: number; due_on: string | null };
-
-/**
- * A customer's account for a period: what was owed at its start, every
- * invoice, payment, credit and refund in it, the running balance, and what is
- * owed now by how late it is. It agrees with the receivables in the ledger.
- */
-export async function getStatement(customerId: string, from: string, to: string) {
-  const org = await requireOrg();
-  const customer = await one<CustomerRow>("select * from customers where id = $1 and organisation_id = $2", [customerId, org.id]);
-  if (!customer) return null;
-  const rows = await sql<StatementRow>(`
-    select issued_on as date, 'invoice' as kind, number as reference, 'Invoice' as detail, total as debit, 0 as credit, due_on
-      from invoices where customer_id = $1 and status in ('issued', 'part_paid', 'paid') and issued_on <= $2
-    union all
-    select p.received_on, 'payment', coalesce(p.reference, i.number), 'Payment · ' || i.number, 0, p.amount, null
-      from invoice_payments p join invoices i on i.id = p.invoice_id where i.customer_id = $1 and p.received_on <= $2
-    union all
-    select issued_on, 'credit_note', number, 'Credit note' || coalesce(' · ' || (select number from invoices where id = n.invoice_id), ''), 0, total, null
-      from credit_notes n where customer_id = $1 and status = 'issued' and issued_on <= $2
-    union all
-    select t.txn_date, 'refund', coalesce(t.reference, n.number), 'Refund · ' || n.number, t.amount, 0, null
-      from bank_transactions t join credit_notes n on n.id = t.credit_note_id where n.customer_id = $1 and t.txn_date <= $2
-    order by 1, 2 desc, 3`, [customerId, to]);
-  const cents = (value: number) => Math.round(Number(value) * 100);
-  const opening = rows.filter(row => row.date < from).reduce((sum, row) => sum + cents(row.debit) - cents(row.credit), 0);
-  let running = opening;
-  const lines = rows.filter(row => row.date >= from).map(row => { running += cents(row.debit) - cents(row.credit); return { ...row, balance: running / 100 }; });
-  const [ageing, unused] = await Promise.all([
-    sql<{ bucket: string; amount: number }>(`
-      select case when days_overdue <= 0 then 'current' when days_overdue <= 30 then '1-30' when days_overdue <= 60 then '31-60' when days_overdue <= 90 then '61-90' else '90+' end as bucket,
-             sum(balance) as amount
-        from v_invoice_directory where customer_id = $1 and status in ('issued', 'part_paid') group by 1`, [customerId]),
-    one<{ remaining: number }>("select coalesce(sum(remaining), 0) as remaining from v_credit_note_directory where customer_id = $1 and status = 'issued'", [customerId]),
-  ]);
-  const [bank, logo] = await Promise.all([one<{ name: string; bank_details: string | null }>("select name, bank_details from ledger_accounts where id = $1", [org.default_bank_account_id]), logoFor(org.id)]);
-  return { org, customer, from, to, opening: opening / 100, lines, closing: running / 100, ageing: new Map(ageing.map(row => [row.bucket, Number(row.amount)])), unusedCredit: Number(unused?.remaining ?? 0), bank, logo, today: firmToday(),
-    language: customer.document_language ?? org.document_language };
+  // The customer's language for its documents, or the company's; and its style, or the company's.
+  return { org, kind, document, lines, customer, bank, corrects, logo, style, language: customer?.document_language ?? org.document_language };
 }
 
 /** What a payment reminder says: the customer's overdue invoices, who to send it to, and how to pay. */

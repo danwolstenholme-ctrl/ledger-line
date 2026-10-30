@@ -21,7 +21,7 @@ import { RecordBadge, RecordDetail, RecordDisclosure, RecordFailure, RecordHeade
 export const metadata: Metadata = { title: "Bill" };
 
 export default async function BillPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireOrg();
+  const org = await requireOrg();
   const { id } = await params;
   if (!UUID_PATTERN.test(id)) notFound();
   const [result, accounts, banks, settings, credits] = await Promise.all([getBill(id), getLedgerAccounts(), getBankAccounts(), getAccountingSettings(), getBillCredits(id)]);
@@ -92,6 +92,8 @@ export default async function BillPage({ params }: { params: Promise<{ id: strin
           {result.payments.length ? <ul aria-label="Payments made" className="divide-hairline border-hairline divide-y border-t">{result.payments.map(payment => <li key={payment.id} className="flex items-baseline gap-3 px-4 py-2 sm:px-5">
             <span className="text-ink-muted w-24 shrink-0 text-[12.5px] tabular-nums">{formatDate(payment.paid_on)}</span>
             <span className="text-ink-muted min-w-0 flex-1 truncate text-[12.5px]">{account.get(payment.bank_account_id)?.name ?? "Bank"}{payment.reference ? ` · ${payment.reference}` : ""}</span>
+            <a href={payment.run_id ? `/c/${org.slug}/bills/runs/${payment.run_id}/remittance/${bill.supplier_id}` : `/c/${org.slug}/bills/${bill.id}/payments/${payment.id}/remittance`} target="_blank" rel="noopener"
+              className="text-brand shrink-0 text-[12.5px] hover:underline" title="Remittance advice for this payment">Remittance</a>
             <span className="text-ink shrink-0 text-[13px] font-medium tabular-nums">{formatAmount(Number(payment.amount))}</span>
             <form action={removeBillPayment}><input type="hidden" name="id" value={payment.id} /><InlineSubmit destructive title="Remove this payment">Remove</InlineSubmit></form>
           </li>)}</ul> : null}

@@ -22,6 +22,7 @@ const WORDS = {
   quote: { en: "Quote", el: "Προσφορά" },
   credit_note: { en: "Credit note", el: "Πιστωτικό σημείωμα" },
   statement: { en: "Statement", el: "Κατάσταση λογαριασμού" },
+  remittance: { en: "Remittance advice", el: "Ειδοποίηση πληρωμής" },
   number: { en: "Number", el: "Αριθμός" },
   date: { en: "Date", el: "Ημερομηνία" },
   due: { en: "Due", el: "Λήξη" },
@@ -93,6 +94,30 @@ const WORDS = {
   days31to60: { en: "31–60 days", el: "31–60 ημέρες" },
   days61to90: { en: "61–90 days", el: "61–90 ημέρες" },
   over90: { en: "Over 90 days", el: "Πάνω από 90 ημέρες" },
+  openItems: { en: "Open items", el: "Ανοιχτά υπόλοιπα" },
+  asAt: { en: "As at", el: "Κατά την" },
+  original: { en: "Original", el: "Αρχικό ποσό" },
+  outstanding: { en: "Outstanding", el: "Ανεξόφλητο" },
+  nothingOutstanding: { en: "Nothing outstanding", el: "Τίποτα ανεξόφλητο" },
+  creditToUse: { en: "Credit not yet used", el: "Πίστωση προς χρήση" },
+  // A supplier's account, as the company keeps it.
+  accountWith: { en: "Account with", el: "Λογαριασμός με" },
+  balanceWeOwe: { en: "Balance we owe", el: "Υπόλοιπο που οφείλουμε" },
+  billed: { en: "Billed", el: "Τιμολογήθηκαν" },
+  bill: { en: "Invoice", el: "Τιμολόγιο" },
+  refundReceived: { en: "Refund received", el: "Επιστροφή που λάβαμε" },
+  // Remittance advice: what was paid to a supplier, and for which of their invoices.
+  datePaid: { en: "Date paid", el: "Ημερομηνία πληρωμής" },
+  amountPaid: { en: "Amount paid", el: "Ποσό πληρωμής" },
+  yourInvoice: { en: "Your invoice", el: "Το τιμολόγιό σας" },
+  invoiceTotal: { en: "Invoice total", el: "Σύνολο τιμολογίου" },
+  paidNow: { en: "Paid now", el: "Πληρώνεται τώρα" },
+  totalPaid: { en: "Total paid", el: "Σύνολο πληρωμής" },
+  // The slip a customer cuts off and sends back with the payment.
+  paymentAdvice: { en: "Payment advice", el: "Απόκομμα πληρωμής" },
+  customer: { en: "Customer", el: "Πελάτης" },
+  statementDate: { en: "Statement date", el: "Ημερομηνία κατάστασης" },
+  enclosed: { en: "Amount paid", el: "Ποσό που πληρώθηκε" },
   // The words stamped across a document, in capitals.
   PAID: { en: "PAID", el: "ΕΞΟΦΛΗΘΗΚΕ" },
   VOID: { en: "VOID", el: "ΑΚΥΡΩΘΗΚΕ" },
@@ -126,6 +151,11 @@ const SENTENCES = {
     en: `Reason: ${reason}${corrects ? `. This credit note corrects invoice ${corrects.number} of ${corrects.date}.` : "."}`,
     el: `Αιτία: ${reason}${corrects ? `. Το πιστωτικό σημείωμα διορθώνει το τιμολόγιο ${corrects.number} της ${corrects.date}.` : "."}`,
   }),
+  creditUnused: (amount: string) => ({ en: `${amount} of credit is still to be used, and is counted in the balance.`, el: `${amount} πίστωσης δεν έχουν χρησιμοποιηθεί ακόμη και υπολογίζονται στο υπόλοιπο.` }),
+  paidByTransfer: (date: string, iban: string | null) => ({
+    en: `Paid by bank transfer on ${date}${iban ? ` to the account ${iban}` : ""}.`,
+    el: `Πληρώθηκε με τραπεζικό έμβασμα στις ${date}${iban ? ` στον λογαριασμό ${iban}` : ""}.`,
+  }),
   creditHeld: (amount: string) => ({ en: `${amount} of credit is held for you and has been counted in the balance.`, el: `${amount} πίστωσης κρατούνται για εσάς και έχουν υπολογιστεί στο υπόλοιπο.` }),
   dueOn: (date: string) => ({ en: `, due ${date}`, el: `, λήξη ${date}` }),
   statementOf: (name: string) => ({ en: `Statement · ${name}`, el: `Κατάσταση λογαριασμού · ${name}` }),
@@ -156,7 +186,8 @@ export function documentWords(language: DocumentLanguage) {
     language,
     /** The language for the page's `lang`: Greek when there is any. */
     lang: language === "en" ? "en-GB" : "el",
-    word: (key: WordKey) => pick(WORDS[key]),
+    /** A word, or a company's own English for it ("Tax invoice" for an invoice's title): Greek keeps its own. */
+    word: (key: WordKey, english?: string) => pick(english ? { en: english, el: WORDS[key].el } : WORDS[key]),
     /** A label set in capitals. */
     label: (key: WordKey) => caps(pick(WORDS[key])),
     /** Page numbers at the foot: "page 1 of 2", "σελίδα 1 από 2", or 1/2 where both would crowd it. */

@@ -204,7 +204,37 @@ to reconcile.
   → Supplier credit note** starts one from the bill's lines; it lowers the
   cost and the VAT reclaimed (box 4), and credit left over is used against
   their next bill or recorded as refunded into the bank.
-- **Suppliers** carry an IBAN and BIC, checked as banks check them.
+- **Suppliers** carry an IBAN and BIC, checked as banks check them, an
+  address, and their payment terms (a bill with no due date takes them).
+- **A supplier's statement** (Highland Green → **Statement**): every bill,
+  payment, credit note and refund in date order with the running balance, for
+  any period (**Everything** gives the whole history, newest first if asked),
+  or **Open items** on a day with how late each is. **PDF** and **CSV**; it
+  agrees with the supplier page and with aged payables, as it stood on the
+  day. Xero has no supplier statement at all.
+- **Check their statement** (Troodos Dairy): type the balance their statement
+  shows on its date beside ours; untick a payment of ours still on its way,
+  tick a bill we dated after it, add one of theirs not in the books. At
+  nothing left to explain it says **Agreed**. Kept with their statement (a PDF
+  or a photo), on the supplier page and the audit trail. Neither Xero nor Sage
+  does this without an add-on.
+- **Remittance advice**: each payment, and each supplier in a payment run,
+  has one as a PDF in the company's style, with the email written for you
+  (Sage's can't be changed, and Xero's don't take its themes). **Payment
+  runs** lists every run. **Aged payables** runs as at any day, credit not yet
+  used coming off; each supplier opens its open items that day.
+
+### 1d½. How documents look (Company settings → **Documents**), 2 minutes
+- Larnaka Roast's **Standard** style: classic, its brown, a large logo, a
+  payment slip to cut off, its own terms. **Change** opens the editor: layout
+  (classic, modern, plain), sans or serif (Greek in both), size, A4 or US
+  Letter, the logo left, centre or right and its size, headed paper, what
+  shows, and each document's title ("Tax invoice") and terms. The preview
+  beside it redraws the company's own latest invoice, quote, credit note,
+  statement or remittance as it changes; nothing is kept until it is saved.
+- **Add a style**, then give it to one customer on their page (**Document
+  style**): their invoices, quotes, credit notes and statements take it, and
+  everyone else keeps the default.
 
 ### 1e. Bringing a client's lists in, 1 minute
 - **Customers → Import** (also Suppliers and Products): choose a spreadsheet
@@ -710,6 +740,15 @@ eu-west-1), with Vercel's functions beside it in Dublin (`vercel.json`). Its
 Data API is off. The baseline and the accounts migration are applied and
 recorded, so `npm run supabase:migration` now refuses: a change to the schema
 is a new, dated migration, and schema.sql follows it.
+
+On 30 October 2026, statements, statement checks, remittance advice and
+document styles came with two migrations. Apply
+`20261030120000_statements_and_document_styles.sql` before that version goes
+live: it only adds (each company's colour and terms become its default
+style), so the version before it keeps working. Apply
+`20261030120100_drop_invoice_accent.sql` once the new version is live.
+Rehearsed on a copy built from the old schema: after both, the database is
+the same as one built from schema.sql, column for column.
 
 The whole test suite runs against any Postgres too:
 `DATABASE_URL=… npx playwright test` (an empty, throwaway database; it is

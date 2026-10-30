@@ -420,16 +420,18 @@ export async function saveCustomer(_previous: ActionState, form: FormData): Prom
   if (terms !== null && (!Number.isInteger(terms) || terms < 0 || terms > 365)) p.errors.payment_terms_days = "Between 0 and 365 days, or empty for the company's terms.";
   // Empty: the company's own language for its documents.
   const language = p.enum("document_language", ["en", "el", "en+el"] as const, { label: "Documents in" });
+  // Empty: the company's default style. A style of another company's is refused by the database.
+  const style = p.uuid("document_style_id");
   if (p.failed || !name) return p.fail();
   let saved = id;
   try {
     if (id) {
-      await sql("update customers set name = $3, email = $4, phone = $5, vat_number = $6, country = $7, address = $8, eu_business = $9, payment_terms_days = $10, document_language = $11 where id = $1 and organisation_id = $2",
-        [id, org.id, name, email, phone, vat, country, address, eu, terms, language]);
+      await sql("update customers set name = $3, email = $4, phone = $5, vat_number = $6, country = $7, address = $8, eu_business = $9, payment_terms_days = $10, document_language = $11, document_style_id = $12 where id = $1 and organisation_id = $2",
+        [id, org.id, name, email, phone, vat, country, address, eu, terms, language, style]);
     } else {
       const sales = await one<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [org.id]);
-      saved = (await one<{ id: string }>("insert into customers (organisation_id, name, email, phone, vat_number, country, address, eu_business, default_account_id, payment_terms_days, document_language) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id",
-        [org.id, name, email, phone, vat, country, address, eu, sales?.id ?? null, terms, language]))!.id;
+      saved = (await one<{ id: string }>("insert into customers (organisation_id, name, email, phone, vat_number, country, address, eu_business, default_account_id, payment_terms_days, document_language, document_style_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id",
+        [org.id, name, email, phone, vat, country, address, eu, sales?.id ?? null, terms, language, style]))!.id;
     }
   } catch (error) { return fail(error, "The customer could not be saved."); }
   refresh();
@@ -577,42 +579,8 @@ export async function raiseDueRepeating(_previous: ActionState, form: FormData):
 }
 
 // ---------------------------------------------------------------------------
-// How the company's documents look
+// Sending
 // ---------------------------------------------------------------------------
-
-const LOGO_TYPES: Record<string, (bytes: Buffer) => boolean> = {
-  "image/png": bytes => bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
-  "image/jpeg": bytes => bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
-};
-
-/** The accent colour and footer terms printed on invoices, quotes, credit notes and statements, and the logo at their head. */
-export async function saveInvoiceDesign(_previous: ActionState, form: FormData): Promise<ActionState> {
-  const org = await requireOrg();
-  const p = new FormParser(form);
-  const accent = p.text("invoice_accent", { required: true, max: 7, label: "Colour" });
-  if (accent && !/^#[0-9a-fA-F]{6}$/.test(accent)) p.errors.invoice_accent = "Choose a colour.";
-  const footer = p.text("invoice_footer", { max: 600, label: "Footer" });
-  const language = p.enum("document_language", ["en", "el", "en+el"] as const, { label: "Language" }) ?? "en";
-  const file = form.get("logo");
-  let logo: { type: string; bytes: Buffer } | null = null;
-  if (file instanceof File && file.size > 0) {
-    const bytes = Buffer.from(await file.arrayBuffer());
-    if (file.size > 1024 * 1024) p.errors.logo = "A logo of 1 MB or less, please.";
-    else if (!LOGO_TYPES[file.type]?.(bytes)) p.errors.logo = "A PNG or JPEG image, please.";
-    else logo = { type: file.type, bytes };
-  }
-  if (p.failed || !accent) return p.fail();
-  try {
-    await transaction(async run => {
-      await run("update organisations set invoice_accent = $2, invoice_footer = $3, document_language = $4 where id = $1", [org.id, accent.toLowerCase(), footer, language]);
-      if (logo) await run(`insert into organisation_logos (organisation_id, media_type, content) values ($1, $2, $3)
-                           on conflict (organisation_id) do update set media_type = excluded.media_type, content = excluded.content, updated_at = now()`, [org.id, logo.type, logo.bytes]);
-      if (p.boolean("remove_logo") && !logo) await run("delete from organisation_logos where organisation_id = $1", [org.id]);
-    });
-  } catch (error) { return fail(error, "The design could not be saved."); }
-  refresh();
-  return { ok: true, error: null };
-}
 
 /** An invoice sent from the person's own email: recorded on the invoice and on the customer's timeline. */
 export async function markInvoiceSent(invoiceId: string, to: string): Promise<void> {

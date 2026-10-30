@@ -38,6 +38,8 @@ export type SupplierRow = {
   reverse_charge: boolean;
   /** Where the supplier is paid, for a SEPA payment file. */
   iban: string | null; bic: string | null;
+  /** Where they are, for their statement and remittance advice; the days we have to pay them, when they give terms. */
+  address: string | null; payment_terms_days: number | null;
   created_by: string | null; created_at: string; updated_at: string;
 };
 export const BILL_STATUSES = ["awaiting_payment", "part_paid", "paid", "void"] as const;
@@ -61,6 +63,8 @@ export type BillLineRow = {
 export type BillPaymentRow = {
   id: string; bill_id: string; paid_on: string; amount: number | string; bank_account_id: string;
   method: InvoicePaymentMethod; reference: string | null; created_by: string; created_at: string;
+  /** The payment run it was part of, when several bills were paid at once. */
+  run_id: string | null;
 };
 export type BillDirectoryRow = BillRow & { balance: number | string; supplier_name: string; supplier_iban: string | null; days_overdue: number; search_text: string };
 export const BANK_TRANSACTION_KINDS = ["spend", "receive", "transfer"] as const;
@@ -174,8 +178,7 @@ export type OrganisationRow = {
   vat_number: string | null; tic: string | null; vat_registered: boolean; vat_quarter_end_month: number; year_end_month: number;
   lock_date: string | null; default_bank_account_id: string | null; ai_suggestions: boolean; contact_name: string | null;
   contact_email: string | null; address: string | null; invoice_prefix: string; payment_terms_days: number;
-  /** The colour of its documents' headings and totals, and the terms printed at their foot. */
-  invoice_accent: string; invoice_footer: string | null; manager: string | null; is_practice: boolean;
+  manager: string | null; is_practice: boolean;
   /** The language its documents are written in (lib/documents/document-words). */
   document_language: "en" | "el" | "en+el";
   /** The first month kept in Ledgerline, for a company whose books were opened before anything was posted. */
@@ -193,7 +196,17 @@ export type CustomerRow = { id: string; organisation_id: string; name: string; e
   /** Days to pay; the company's terms when null. */
   payment_terms_days: number | null; is_active: boolean;
   /** The language of the documents it is sent; the company's when null. */
-  document_language: "en" | "el" | "en+el" | null };
+  document_language: "en" | "el" | "en+el" | null;
+  /** The look of its documents (document_styles); the company's default when null. */
+  document_style_id: string | null };
+/** One look for a company's documents (lib/documents/style reads `settings`). */
+export type DocumentStyleRow = { id: string; organisation_id: string; name: string; is_default: boolean; settings: Record<string, unknown>; created_at: string; updated_at: string };
+/** A supplier's statement checked against the books: what explains the difference between their balance and ours. */
+export type StatementCheckItem = { side: "ours" | "theirs"; date: string; reference: string; amount: number; note: string | null };
+export type SupplierStatementCheckRow = {
+  id: string; organisation_id: string; supplier_id: string; statement_date: string; their_balance: number; our_balance: number;
+  explained: StatementCheckItem[]; unexplained: number; agreed: boolean; notes: string | null; file_name: string | null; file_type: string | null; checked_by: string | null; created_at: string;
+};
 export const INVOICE_STATUSES = ["draft", "issued", "part_paid", "paid", "void"] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export const VAT_TREATMENTS = ["standard", "exempt", "reverse_charge", "outside_scope"] as const;

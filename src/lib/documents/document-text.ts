@@ -1,6 +1,7 @@
 import { formatAmount } from "@/lib/format";
 import type { OrganisationRow, VatTreatment } from "@/types/database";
 import { documentWords, type DocumentWords } from "./document-words";
+import { onAccent, type DocumentStyle } from "./style";
 
 /**
  * What a sales document says the same way on paper (the PDF) and on screen
@@ -10,11 +11,10 @@ import { documentWords, type DocumentWords } from "./document-words";
 
 const INK = "#1d2433";
 
-/** The company's accent for its documents, and the text colour that reads on it. */
-export function accentOf(org: Pick<OrganisationRow, "invoice_accent">) {
-  const hex = /^#[0-9a-f]{6}$/i.test(org.invoice_accent) ? org.invoice_accent : INK;
-  const [r, g, b] = [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return { accent: hex, onAccent: 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? INK : "#ffffff" };
+/** A document's accent in its style, and the text colour that reads on it. The plain layout has none: ink. */
+export function accentOf(style: Pick<DocumentStyle, "accent" | "layout">) {
+  const hex = style.layout === "plain" || !/^#[0-9a-f]{6}$/i.test(style.accent) ? INK : style.accent;
+  return { accent: hex, onAccent: onAccent(hex) };
 }
 
 /** Why no VAT was charged, when none was: the words the law asks for, in the document's language (a UK company's are English). */

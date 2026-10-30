@@ -85,7 +85,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
     {late && reminder && reminder.overdue.length ? <div className="flex flex-wrap items-center gap-3">
       <p className="text-critical text-[13px] font-medium">{t.n(invoice.days_overdue, "{count} day overdue.", "{count} days overdue.")}</p>
       <ReminderPanel data={{ customerId: invoice.customer_id, customerName: reminder.customer.name, to: reminder.to, greeting: reminder.greeting, company: org.name, sender: reminder.sender,
-        overdue: reminder.overdue.map(item => ({ ...item, balance: Number(item.balance) })), bank: reminder.bank, statementHref: `/c/${org.slug}/customers/${invoice.customer_id}/statement`, lastSent: reminder.lastSent, language: reminder.language }} />
+        overdue: reminder.overdue.map(item => ({ ...item, balance: Number(item.balance) })), bank: reminder.bank, statementHref: `/c/${org.slug}/customers/${invoice.customer_id}/statement/pdf`, lastSent: reminder.lastSent, language: reminder.language }} />
     </div> : null}
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
