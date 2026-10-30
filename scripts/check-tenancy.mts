@@ -221,6 +221,13 @@ expect("Nobody signed in sees no invoice", await count(null, "select count(*) as
 // The audit trail is written by the database alone, and checked whole.
 expect("Maria cannot write to the audit trail", await count(maria, "insert into audit_log (action, entity, prev_hash, hash) values ('forged', 'x', 'a', 'b') returning seq"), refused);
 expect("The audit chain checks out for Nikos too", await as(nikos, "select broken_at from audit_verify()").then(rows => Array.isArray(rows) ? rows[0]?.broken_at ?? "intact" : rows.error), is("intact"));
+// Emptying a table skips row-level security and the audit trail's row guard: nobody signed in may, and nobody at all may empty the audit trail.
+expect("Maria cannot empty the audit trail", await count(maria, "truncate audit_log"), refused);
+const emptiable = (await conn.query(`select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r'
+  and has_table_privilege('authenticated', c.oid, 'TRUNCATE') order by 1`)).rows.map(row => row.relname);
+expect("No table can be emptied by someone signed in", emptiable.length ? emptiable.join(", ") : "none", is("none"));
+const emptied = await conn.query("truncate audit_log").then(() => "emptied", (error: { message?: string }) => String(error.message ?? error));
+expect("Not even the database's owner can empty the audit trail", /audit_log_append_only/.test(emptied) ? "refused" : emptied, is("refused"));
 
 // Nothing left unguarded.
 const unguarded = (await conn.query("select tablename from pg_tables where schemaname = 'public' and not rowsecurity order by 1")).rows.map(row => row.tablename);

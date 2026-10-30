@@ -4,6 +4,7 @@ import { randomInt } from "node:crypto";
 
 import { one, transaction } from "@/lib/db";
 import { firmToday } from "@/lib/domain/invoices";
+import { readStyle } from "@/lib/documents/style";
 import type { OrganisationRow } from "@/types/database";
 
 /**
@@ -68,10 +69,12 @@ export async function recordEnquiry(org: Pick<OrganisationRow, "id" | "slug">, i
 /** The company a form key belongs to, while the key is live. */
 export async function companyForToken(token: string) {
   if (!FORM_TOKEN_PATTERN.test(token)) return null;
-  return one<OrganisationRow & { key_id: string; accent: string | null }>(`
-    select o.*, k.id as key_id, (select s.settings ->> 'accent' from document_styles s where s.organisation_id = o.id and s.is_default) as accent
+  const company = await one<OrganisationRow & { key_id: string; style: unknown }>(`
+    select o.*, k.id as key_id, (select s.settings from document_styles s where s.organisation_id = o.id and s.is_default) as style
       from enquiry_form_keys k join organisations o on o.id = k.organisation_id
      where k.token = $1 and k.revoked_at is null`, [token]);
+  // In the colour its documents are in: its default style's, read as the documents read it (a new company's is the default ink).
+  return company ? { ...company, accent: readStyle(company.style).accent } : null;
 }
 
 export async function liveFormKey(orgId: string) {

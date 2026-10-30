@@ -35,7 +35,7 @@ export async function importRecords(_previous: ImportState, form: FormData): Pro
   const sales = (await one<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [org.id]))?.id ?? null;
   const problems: { row: number; problem: string }[] = [], skipped: string[] = [], ready: Record<string, string | number | boolean | null>[] = [];
   rows.forEach((cells, index) => {
-    const read = readImportRow(kind, Array.isArray(cells) ? cells.map(String) : [], mapping, index + 2);
+    const read = readImportRow(kind, Array.isArray(cells) ? cells.map(String) : [], mapping, index + 2, org.country);
     if (read.problem) { problems.push({ row: read.row, problem: read.problem }); return; }
     const values = read.values;
     const name = String(values.name).trim().toLowerCase(), vat = values.vat_number ? String(values.vat_number) : null, code = values.code ? String(values.code).toLowerCase() : null;

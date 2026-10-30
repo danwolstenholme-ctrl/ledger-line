@@ -9,6 +9,8 @@
  * a VAT return and its payment due 1 calendar month and 7 days after the
  * period; an individual's tax year from 6 April to 5 April.
  */
+import { EU_COUNTRIES } from "@/lib/domain/countries";
+import type { VatTreatment } from "@/types/database";
 
 export const REGIME_CODES = ["CY", "GB"] as const;
 export type Regime = (typeof REGIME_CODES)[number];
@@ -48,6 +50,20 @@ export const REGIMES: Record<Regime, RegimeProfile> = {
 
 export const regimeOf = (code: string | null | undefined): RegimeProfile => REGIMES[(code ?? "CY") as Regime] ?? REGIMES.CY;
 export const standardRate = (code: string | null | undefined) => regimeOf(code).vatRates[0];
+
+/**
+ * Which VAT treatment a sale to this customer starts from: none charged by a
+ * company that isn't registered; in the UK, outside the scope for a customer
+ * abroad; in Cyprus, the reverse charge for a business in another EU state and
+ * outside the scope for a customer beyond the EU.
+ */
+export function treatmentFor(customer: { country: string; eu_business: boolean } | undefined, registered: boolean, country = "CY"): VatTreatment {
+  if (!registered) return "exempt";
+  if (country === "GB") return customer && customer.country !== "GB" ? "outside_scope" : "standard";
+  if (customer?.eu_business) return "reverse_charge";
+  if (customer && !EU_COUNTRIES.has(customer.country)) return "outside_scope";
+  return "standard";
+}
 
 /**
  * An individual's tax year containing `date`: in the UK, 6 April to

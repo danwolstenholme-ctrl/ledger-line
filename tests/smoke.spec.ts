@@ -1506,6 +1506,7 @@ test("a document style is changed with its preview beside it, and one customer i
   const invoice = page.url();
   await page.locator('main a[href*="/customers/"]').first().click();
   await expect(page).toHaveURL(/\/customers\/[0-9a-f-]{36}$/);
+  const customer = page.url();
   await page.getByText("Edit details").click();
   await page.getByLabel("Document style").selectOption({ label: "Wholesale" });
   await page.getByRole("button", { name: "Save customer" }).click();
@@ -1521,4 +1522,126 @@ test("a document style is changed with its preview beside it, and one customer i
   // In its customer's language (Finikoudes reads Greek once the test of Greek documents has run), and in the default style.
   expect(other).toMatch(/INVOICE|ΤΙΜΟΛΟΓΙΟ/);
   expect(other).not.toContain("TAX INVOICE");
+
+  // Made the default later, the style is still the customer's own after the customer is saved again.
+  await page.goto("/c/larnaka-roast/settings/documents");
+  await page.getByRole("listitem").filter({ hasText: "Wholesale" }).getByRole("button", { name: "Make default" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: "Wholesale" }).getByText("Default", { exact: true })).toBeVisible();
+  await page.goto(customer);
+  await page.getByText("Edit details").click();
+  await page.getByRole("button", { name: "Save customer" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  await page.reload();
+  await page.getByText("Edit details").click();
+  await expect(page.getByLabel("Document style").locator("option:checked")).toHaveText("Wholesale");
+});
+
+/** A bank statement as a CSV file to upload. */
+const statementFile = (name: string, rows: string) => ({ name, mimeType: "text/csv", buffer: Buffer.from(rows) });
+
+test("several bank statements upload at once: in date order, each checked against the one before, and imported together", async ({ page }) => {
+  await page.goto("/c/pixelforge/bank");
+  await page.getByRole("link", { name: "Reconcile" }).first().click();
+  await expect(page).toHaveURL(/\/c\/pixelforge\/bank\/[0-9a-f-]{36}$/);
+  await page.getByRole("link", { name: "Import statements" }).click();
+  // Chosen out of order; the third starts where the second didn't end.
+  await page.locator('input[type="file"]').setInputFiles([
+    statementFile("pixelforge-23-oct.csv", "Date,Description,Amount,Balance\n23/10/2026,SEPA CREDIT FROM HARBOUR CAFE,238.00,10238.00\n24/10/2026,CARD PAYMENT STATIONERY,-38.00,10200.00\n"),
+    statementFile("pixelforge-21-oct.csv", "Date,Description,Amount,Balance\n21/10/2026,TRANSFER FROM BLUE DOOR STUDIO LTD,595.00,10595.00\n22/10/2026,SUPPLIER PAYMENT,-595.00,10000.00\n"),
+    statementFile("pixelforge-27-oct.csv", "Date,Description,Amount,Balance\n27/10/2026,CARD PAYMENT TAXI,-20.00,9000.00\n"),
+  ]);
+  const statements = page.getByRole("region", { name: "Statements" });
+  await expect(statements.locator("tbody tr").first()).toContainText("pixelforge-21-oct.csv");
+  await expect(statements.locator("tbody tr").nth(1)).toContainText("Follows on from the statement before, at €10,000.00.");
+  await expect(statements.locator("tbody tr").nth(2)).toContainText(/Doesn.t follow on: the statement before ended at €10,200\.00, this starts at €9,020\.00/);
+  await page.getByRole("button", { name: "Import 5 lines from 3 statements" }).click();
+  await expect(page.getByText("Imported 5 lines from 3 statements.")).toBeVisible();
+  await expect(page.getByText("pixelforge-27-oct.csv")).toBeVisible();
+});
+
+test("an Airwallex balance activity report reads right: money out from its own column, the account balance, and holds and other currencies left out", async ({ page }) => {
+  await page.goto("/c/willow-wren-design/bank");
+  await page.getByRole("link", { name: "Reconcile" }).first().click();
+  await expect(page).toHaveURL(/\/c\/willow-wren-design\/bank\/[0-9a-f-]{36}$/);
+  await page.getByRole("link", { name: "Import statements" }).click();
+  // As Airwallex documents the report: Amount is positive both ways; the direction is in Debit and Credit Net Amount.
+  await page.locator('input[type="file"]').setInputFiles(statementFile("airwallex-balance-activity.csv", [
+    "Time,Type,Financial Transaction Type,Transaction Id,Description,Wallet Currency,Target Currency,Target Amount,Conversion Rate,Mature Date,Amount,Fee,Debit Net Amount,Credit Net Amount,Available Balance,Account Balance,Created At,Request Id,Reference,Note",
+    "2026-10-05T09:12:44+01:00,DEPOSIT,DEPOSIT,awx-ww-1,Deposit from BRIGHT LANE BAKERY,GBP,,,,,960.00,0.00,,960.00,3960.00,3960.00,2026-10-05T09:12:44+01:00,,WW-1043,",
+    "2026-10-06T14:03:10+01:00,CARD,CARD_PURCHASE,awx-ww-2,FIGMA,GBP,,,,,45.00,0.00,45.00,,3915.00,3915.00,2026-10-06T14:03:10+01:00,,,",
+    "2026-10-06T18:40:00+01:00,CARD,ISSUING_AUTHORISATION_HOLD,awx-ww-3,TRAINLINE,GBP,,,,,62.10,0.00,62.10,,3852.90,3915.00,2026-10-06T18:40:00+01:00,,,",
+    "2026-10-07T10:00:00+01:00,DEPOSIT,DEPOSIT,awx-ww-4,Deposit from ATELIER NOVA,EUR,,,,,1200.00,0.00,,1200.00,1200.00,1200.00,2026-10-07T10:00:00+01:00,,,",
+    "2026-10-08T11:20:00+01:00,PAYOUT,PAYOUT,awx-ww-5,Payout to STUDIO RENT LTD,GBP,,,,,1500.00,1.50,1501.50,,2351.40,2413.50,2026-10-08T11:20:00+01:00,,October rent,",
+  ].join("\n") + "\n"));
+  const statements = page.getByRole("region", { name: "Statements" });
+  await expect(statements).toContainText("1 line still pending, declined or on hold left out.");
+  await expect(statements).toContainText("1 line in EUR left out: these books are kept in GBP.");
+  await expect(statements).toContainText("£3,000.00 → £2,413.50");
+  await expect(statements.getByRole("cell", { name: "−£1,501.50" })).toBeVisible();
+  await page.getByRole("button", { name: "Import 3 lines" }).click();
+  await expect(page.getByText("Imported 3 lines.")).toBeVisible();
+});
+
+test("money received with no invoice is invoiced in one go: the payer as customer, the VAT worked back from the total, numbered in a series of its own, matched, and undone in one go", async ({ page }) => {
+  await page.goto("/c/troodos-gold/bank");
+  await page.getByRole("link", { name: "Reconcile" }).first().click();
+  await expect(page).toHaveURL(/\/c\/troodos-gold\/bank\/[0-9a-f-]{36}$/);
+  const reconcile = page.url();
+  await page.getByRole("link", { name: "Import statements" }).click();
+  await page.locator('input[type="file"]').setInputFiles(statementFile("troodos-oct.csv",
+    "Date,Description,Amount\n25/10/2026,SEPA CREDIT FROM MESA VERDE TAVERNA,119.00\n26/10/2026,TRANSFER FROM OLIVE GROVE DELI LTD,59.50\n"));
+  await page.getByRole("button", { name: "Import 2 lines" }).click();
+  await expect(page.getByText("Imported 2 lines.")).toBeVisible();
+
+  await page.getByRole("link", { name: "Invoice money received" }).click();
+  // The shop's payouts are card takings, coded before: noted, and not ticked.
+  const payout = page.getByRole("row").filter({ hasText: "ONLINE SHOP PAYOUT" }).first();
+  await expect(payout).toContainText(/Coded before as|card or online takings/);
+  await expect(payout.getByRole("checkbox")).not.toBeChecked();
+  // Nothing ticked to begin with but payments from customers already kept: untick those, until the page is live and has.
+  await expect(async () => {
+    for (const box of await page.getByRole("checkbox", { checked: true }).all()) await box.uncheck();
+    await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  const mesa = page.getByRole("row").filter({ has: page.getByLabel("Invoice €119.00 received 25 Oct 2026") });
+  const deli = page.getByRole("row").filter({ has: page.getByLabel("Invoice €59.50 received 26 Oct 2026") });
+  await mesa.getByRole("checkbox").check();
+  await deli.getByRole("checkbox").check();
+  await expect(mesa.getByLabel(/^Customer/)).toHaveValue("Mesa Verde Taverna");
+  await expect(deli.getByLabel(/^Customer/)).toHaveValue("Olive Grove Deli Ltd");
+  await expect(mesa).toContainText("SEPA CREDIT FROM MESA VERDE TAVERNA");
+  // Enter in the box for all applies it, and raises nothing.
+  await page.getByPlaceholder("e.g. Consulting services").fill("Extra virgin olive oil");
+  await page.getByPlaceholder("e.g. Consulting services").press("Enter");
+  await expect(mesa.getByLabel(/was for$/)).toHaveValue("Extra virgin olive oil");
+  await expect(page).toHaveURL(/\/invoices$/);
+  // A new payer starts at the company's usual rate: Troodos Gold's olive oil sells at 5%.
+  await expect(mesa).toContainText("€113.33 + VAT €5.67");
+  await page.getByRole("button", { name: "Raise 2 invoices · €178.50" }).click();
+  await expect(page).toHaveURL(new RegExp(`${reconcile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?invoiced=2$`));
+  await expect(page.getByText("Raised 2 invoices from money received, each matched to its payment.")).toBeVisible();
+
+  // Each is an invoice to the payer, paid by the payment, numbered in date order in their own series.
+  const numberOf = async (customer: string) => {
+    await page.goto(`/c/troodos-gold/sales?view=all&q=${encodeURIComponent(customer)}`);
+    return (await page.getByRole("link", { name: /R2026-\d{4}$/ }).first().innerText()).trim();
+  };
+  const [first, second] = [await numberOf("Mesa Verde Taverna"), await numberOf("Olive Grove Deli")];
+  expect(Number(/(\d+)$/.exec(first)![1])).toBeLessThan(Number(/(\d+)$/.exec(second)![1]));
+  await page.getByRole("link", { name: second }).click();
+  await expect(page.getByRole("heading", { name: "Paid in full" })).toBeVisible();
+  await page.goto(`/c/troodos-gold/sales?view=all&q=${encodeURIComponent("Mesa Verde Taverna")}`);
+  await page.getByRole("link", { name: first }).click();
+  await expect(page).toHaveURL(/\/c\/troodos-gold\/sales\/[0-9a-f-]{36}$/);
+  const pdf = pdfText(await (await page.request.get(`${page.url()}/pdf`)).body());
+  for (const words of ["Mesa Verde Taverna", "Extra virgin olive oil", "€113.33", "€5.67", "€119.00", "Recorded on"]) expect(pdf).toContain(words);
+
+  // Undone in one go: the invoice void, and its payment back to invoice or match.
+  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Yes, undo it" }).click();
+  await expect(page).toHaveURL(/\?undone=1$/);
+  await expect(page.getByRole("status").filter({ hasText: "Undone: the invoice is void, and its payment is back on the bank's statement to match or code." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Invoice ${first}` })).toBeVisible();
+  await page.goto(`${reconcile}/invoices`);
+  await expect(page.getByLabel("Invoice €119.00 received 25 Oct 2026")).toBeVisible();
 });

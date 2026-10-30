@@ -84,7 +84,8 @@ async function customerFor(orgId: string, p: FormParser) {
   if (!name) { p.errors.customer_id = "Choose the customer, or name a new one."; return null; }
   const sales = await one<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [orgId]);
   const existing = await one<{ id: string }>("select id from customers where organisation_id = $1 and lower(btrim(name)) = lower(btrim($2))", [orgId, name]);
-  return existing?.id ?? (await one<{ id: string }>("insert into customers (organisation_id, name, default_account_id) values ($1, $2, $3) returning id", [orgId, name, sales?.id ?? null]))!.id;
+  // In the company's own country, as a customer is until it is told otherwise (not the table's Cyprus, for a UK company).
+  return existing?.id ?? (await one<{ id: string }>("insert into customers (organisation_id, name, country, default_account_id) values ($1, $2, (select country from organisations where id = $1), $3) returning id", [orgId, name, sales?.id ?? null]))!.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -426,8 +427,10 @@ export async function saveCustomer(_previous: ActionState, form: FormData): Prom
   let saved = id;
   try {
     if (id) {
-      await sql("update customers set name = $3, email = $4, phone = $5, vat_number = $6, country = $7, address = $8, eu_business = $9, payment_terms_days = $10, document_language = $11, document_style_id = $12 where id = $1 and organisation_id = $2",
-        [id, org.id, name, email, phone, vat, country, address, eu, terms, language, style]);
+      // The style only when the form had its choice: with one style there is none to make, and what was chosen stays.
+      await sql(`update customers set name = $3, email = $4, phone = $5, vat_number = $6, country = $7, address = $8, eu_business = $9, payment_terms_days = $10, document_language = $11,
+          document_style_id = case when $13 then $12::uuid else document_style_id end where id = $1 and organisation_id = $2`,
+        [id, org.id, name, email, phone, vat, country, address, eu, terms, language, style, form.has("document_style_id")]);
     } else {
       const sales = await one<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [org.id]);
       saved = (await one<{ id: string }>("insert into customers (organisation_id, name, email, phone, vat_number, country, address, eu_business, default_account_id, payment_terms_days, document_language, document_style_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id",

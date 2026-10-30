@@ -162,7 +162,7 @@ async function convert(orgId: string, dealId: string, actor: string, workspace: 
     let customer = deal.customer_id;
     if (!customer && sells) {
       const [sales] = await run<{ id: string }>("select id from ledger_accounts where organisation_id = $1 and system_role = 'sales'", [orgId]);
-      customer = (await run<{ id: string }>("insert into customers (organisation_id, name, email, phone, default_account_id) values ($1, $2, $3, $4, $5) returning id",
+      customer = (await run<{ id: string }>("insert into customers (organisation_id, name, email, phone, country, default_account_id) values ($1, $2, $3, $4, (select country from organisations where id = $1), $5) returning id",
         [orgId, deal.company || deal.full_name, deal.email, deal.phone, sales?.id ?? null]))[0].id;
       if (deal.company) await run("insert into crm_contacts (organisation_id, customer_id, name, email, phone, role) values ($1, $2, $3, $4, $5, 'Main contact')", [orgId, customer, deal.full_name, deal.email, deal.phone]);
     }

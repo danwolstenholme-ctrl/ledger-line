@@ -1136,6 +1136,14 @@ create index credit_allocations_note_idx on credit_allocations (credit_note_id);
 -- A refund is money spent from the bank against the credit; see post_bank_transaction.
 alter table bank_transactions add foreign key (organisation_id, credit_note_id) references credit_notes (organisation_id, id);
 create index bank_transactions_credit_note_idx on bank_transactions (credit_note_id) where credit_note_id is not null;
+-- Payments found by their document and their bank account: a balance is summed from its payments on every payment, and each
+-- bank page reads its account's payments and transactions not on a statement yet.
+create index invoice_payments_invoice_idx on invoice_payments (invoice_id);
+create index invoice_payments_bank_idx on invoice_payments (bank_account_id);
+create index bill_payments_bill_idx on bill_payments (bill_id);
+create index bill_payments_bank_idx on bill_payments (bank_account_id);
+create index bank_transactions_bank_idx on bank_transactions (bank_account_id);
+create index bank_transactions_transfer_idx on bank_transactions (transfer_account_id) where transfer_account_id is not null;
 
 -- The reverse of an invoice: each line's account gives back its net, the VAT due falls, the customer owes less.
 create function post_credit_note(p_id uuid) returns void language plpgsql as $$
@@ -2309,12 +2317,16 @@ returns text language sql immutable as $$
                                             p_entity, coalesce(p_entity_id::text, ''), p_detail::text), 'UTF8')), 'hex');
 $$;
 
--- Runs as the owner: nobody signed in can write to the audit log except through this.
+-- Runs as the owner: nobody signed in can write to the audit log except through this. One chain for every company, so
+-- appends take turns: each waits for the one before it to be committed, or two could link to the same entry and break
+-- the chain. The turn is kept to the end of the transaction, as the entry is; the entry's time is when it joined.
 create function audit_append(p_org uuid, p_action text, p_entity text, p_entity_id uuid, p_detail jsonb) returns void language plpgsql security definer set search_path = public as $$
-declare v_prev text; v_at timestamptz := clock_timestamp();
+declare v_prev text; v_at timestamptz;
   v_actor text := coalesce(nullif(current_setting('ledgerline.actor', true), ''), (select name from app_users where id = app_user_id()), 'system');
 begin
   if coalesce(current_setting('ledgerline.seeding', true), '') = 'on' then return; end if;
+  perform pg_advisory_xact_lock(hashtext('ledgerline.audit_log'));
+  v_at := clock_timestamp();
   select hash into v_prev from audit_log order by seq desc limit 1;
   v_prev := coalesce(v_prev, repeat('0', 64));
   insert into audit_log (at, organisation_id, actor, action, entity, entity_id, detail, prev_hash, hash)
@@ -2325,6 +2337,8 @@ end $$;
 create function audit_guard() returns trigger language plpgsql as $$
 begin raise exception 'audit_log_append_only: the audit log cannot be changed' using errcode = '42501'; end $$;
 create trigger audit_log_append_only before update or delete on audit_log for each row execute function audit_guard();
+-- Nor can it be emptied: TRUNCATE skips the row guard above, so this one stops the statement.
+create trigger audit_log_no_truncate before truncate on audit_log for each statement execute function audit_guard();
 
 -- Every posting, and every match, lock and filing, goes on the chain.
 create function audit_journal_entry() returns trigger language plpgsql as $$
@@ -3570,3 +3584,5 @@ revoke execute on all functions in schema public from public;
 grant execute on all functions in schema public to authenticated;
 alter default privileges in schema public revoke execute on functions from public;
 alter default privileges in schema public grant execute on functions to authenticated;
+-- PUBLIC's own right to run a new function is built in: only the default set without IN SCHEMA takes it away.
+alter default privileges revoke execute on functions from public;

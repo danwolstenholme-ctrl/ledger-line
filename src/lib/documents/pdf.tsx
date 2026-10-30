@@ -42,7 +42,7 @@ function lookOf(style: DocumentStyle) {
     band: { position: "absolute", top: 0, left: 0, right: 0, height: 12, backgroundColor: accent },
     header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 24 },
     brandName: { fontSize: z(17), fontWeight: 500, letterSpacing: 0.2 },
-    titleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: style.letterhead ? 0 : 30, paddingBottom: 10,
+    titleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: style.letterhead ? 0 : 34, paddingBottom: 10,
       borderBottomWidth: modern ? 0 : plain ? 1 : 1.5, borderBottomColor: accent },
     title: { fontSize: z(22), fontWeight: 500, letterSpacing: 1.5, color: accent },
     stamp: { fontSize: z(11), fontWeight: 500, color: STAMP, letterSpacing: 1 },
@@ -151,13 +151,21 @@ function CompanyHeader({ org, logo, words }: { org: OrganisationRow; logo: strin
   return <View style={s.header}>{place === "right" ? <>{company}{brand}</> : <>{brand}{company}</>}</View>;
 }
 
+/**
+ * The title's size: 22pt, as every document had; in both languages smaller, as they were (17pt on an invoice, quote or
+ * credit note, 15pt on a statement or remittance, whose titles are longer); and a company's own long title smaller too,
+ * so the figures beside it keep their room.
+ */
+function titleSize(title: string, words: DocumentWords, bilingual: number) {
+  return words.language === "en+el" ? bilingual : title.length > 26 ? 16 : 22;
+}
+
 /** The title across the page, with what it stamps (paid, void) and its figures beside it. */
-function TitleRow({ title, stamp, subtitle, children }: { title: string; stamp?: string | null; subtitle?: string | null; children?: ReactNode }) {
+function TitleRow({ title, size, stamp, subtitle, children }: { title: string; size: number; stamp?: string | null; subtitle?: string | null; children?: ReactNode }) {
   const { s, z } = currentLook();
   return <View style={s.titleRow}>
     <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12, flexShrink: 1 }}>
-      {/* A long title, or one in both languages, is set smaller so the figures beside it keep their room. */}
-      <Text style={[s.title, title.length > 18 ? { fontSize: z(16) } : {}]}>{caps(title)}</Text>
+      <Text style={[s.title, { fontSize: z(size) }]}>{caps(title)}</Text>
       {stamp ? <Text style={s.stamp}>{stamp}</Text> : null}
       {subtitle ? <Text style={s.subtitle}>{caps(subtitle)}</Text> : null}
     </View>
@@ -274,7 +282,7 @@ function SalesDocument(data: DocumentPdfData) {
     <StyledPage>
       <CompanyHeader org={org} logo={logo} words={words} />
 
-      <TitleRow title={title} stamp={stamp ? words.word(stamp) : null}>
+      <TitleRow title={title} size={titleSize(title, words, 17)} stamp={stamp ? words.word(stamp) : null}>
         <Meta label={words.label("number")} value={document.number} />
         <Meta label={words.label("date")} value={words.date(document.issued_on)} />
         {until && kind !== "credit_note" ? <Meta label={words.label(kind === "quote" ? "validUntil" : "due")} value={words.date(until)} /> : null}
@@ -386,7 +394,7 @@ function StatementDocument(data: StatementData) {
   return <Document title={`${title} ${account.name}`} author={org.name} subject={account.name} creator={org.name} producer={org.name} language={words.lang}>
     <StyledPage>
       <CompanyHeader org={org} logo={logo} words={words} />
-      <TitleRow title={title} subtitle={view === "open" ? words.word("openItems") : null}>
+      <TitleRow title={title} size={titleSize(title, words, 15)} subtitle={view === "open" ? words.word("openItems") : null}>
         {view === "activity" ? <>
           <Meta label={words.label("from")} value={words.date(from)} />
           <Meta label={words.label("to")} value={words.date(to)} />
@@ -490,7 +498,7 @@ function RemittanceDocument(data: RemittanceData) {
   return <Document title={`${title} ${supplier.name}`} author={org.name} subject={supplier.name} creator={org.name} producer={org.name} language={words.lang}>
     <StyledPage>
       <CompanyHeader org={org} logo={logo} words={words} />
-      <TitleRow title={title}>
+      <TitleRow title={title} size={titleSize(title, words, 15)}>
         <Meta label={words.label("datePaid")} value={words.date(paidOn)} />
         {reference ? <Meta label={words.label("reference")} value={reference} /> : null}
       </TitleRow>

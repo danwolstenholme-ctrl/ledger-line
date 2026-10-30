@@ -503,8 +503,36 @@ to reconcile.
 - The one left is a **part payment** (Blue Horizon paid half an invoice):
   press the arrow, Invoices, take the half; the invoice stays open for the rest.
 - Bulk coding: tick several lines, pick an account and VAT rate, **Code all**.
-- Import: **Import a statement** → `demo-files/05-aegean-blue-boc-statement-21-oct.csv`
+- Import: **Import statements** → `demo-files/05-aegean-blue-boc-statement-21-oct.csv`
   (a Bank of Cyprus-style CSV). Import it a second time: nothing doubles.
+- **A year's statements at once**: choose or drop any number of files (CSV,
+  CAMT.053, MT940 or OFX). They line up in date order, each with its opening
+  and closing balance, and each is checked against the one before it (and the
+  first against the last one already imported): one that doesn't follow on
+  says so, as does a month with nothing, before anything is saved. A file for
+  another account (its IBAN not this one's) is left out, as are lines in
+  another currency, pending or declined payments and card holds. Airwallex's
+  Balance Activity Report is read by its documented columns, and the headings
+  Revolut, Wise, Starling, Monzo, Lloyds and NatWest are known to use are
+  recognised (still to be checked against real exports); a CSV whose balances
+  move the other way to its amounts says money in and out look the wrong way
+  round. They
+  import together, all or none, each its own import to undo (a long one's
+  parts as one).
+- **Invoice money received**: payments in with nothing in the books for them
+  (a business moving over from its bank statements, say) become invoices in
+  one go: to the payer as customer (one already kept when its name is in the
+  bank's words, "ACME LTD INV 1043" and "Acme Limited" alike), for what was
+  sold, with the VAT the invoice form would charge that customer worked back
+  from the total, in a number series of their own (`TG-R2026-0001`), and
+  matched to the payment, so each is paid. Only payments from customers
+  already kept start ticked. One with a note starts unticked and is matched
+  or coded on the reconcile page instead: it looks like it pays an invoice
+  already raised, is already in the books, comes from a customer who owes
+  money, is there twice, was coded otherwise before, or isn't a sale
+  (interest, a loan, a refund, tax, card takings, a transfer, the company's
+  own money). One line: its arrow → **Raise an invoice**. **Undo** on such an
+  invoice voids it and puts its payment back.
 
 ### 4. Reports, 3 minutes
 - **VAT return** (Reports → VAT return): the Jul–Sep return is on screen,
@@ -659,7 +687,11 @@ without touching the app.
 
 ## The public demo
 
-Every push to main deploys to Vercel: https://ledger-line-vert.vercel.app.
+Every push to main deploys to Vercel: https://ledgerlinecy.app (www. redirects
+to it; https://ledger-line-vert.vercel.app is the same deployment). Supabase
+Auth's site URL is the domain, and its redirect list holds `/auth/callback` on
+both addresses; `LEDGERLINE_SITE_URL` on Vercel is the domain too, for links
+made without a request to take the host from.
 With no database of its own it runs the embedded one in the server's
 temporary folder, so its data is made up, built afresh on each new server (a
 few seconds on the first visit) and kept only while that server runs. Every
@@ -749,6 +781,27 @@ style), so the version before it keeps working. Apply
 `20261030120100_drop_invoice_accent.sql` once the new version is live.
 Rehearsed on a copy built from the old schema: after both, the database is
 the same as one built from schema.sql, column for column.
+
+`20261030140000_tighten_rights.sql` can run at any time. Supabase's default
+rights had given the app's role `authenticated` TRUNCATE (which skips
+row-level security and the audit trail's append-only guard), REFERENCES,
+TRIGGER and MAINTAIN on every table, and on every table made later; it keeps
+only the rows, under the rules. Nobody, the owner included, can now empty the
+audit trail, and no function, now or later, is open to PUBLIC.
+
+`20261030150000_audit_appends_in_turn.sql` too: the audit trail is one hash
+chain for every company, and two transactions appending at once could both
+link to the same entry, which audit_verify() then reports as a break (shown
+on a real Postgres, with two connections). An append now waits for the one
+before it to commit. And `20261031090000_payment_indexes.sql`: payments found by their
+document and bank account through an index. All three go in one paste,
+`3-tighten-rights.sql`, rehearsed on a copy of the live schema.
+
+A migration run by hand in the SQL editor goes in one transaction, with
+`set local lock_timeout = '5s'` first (a busy table then stops it, changing
+nothing, instead of holding the app up), and records itself in
+`supabase_migrations.schema_migrations` with its full text, as
+`supabase db push` would.
 
 The whole test suite runs against any Postgres too:
 `DATABASE_URL=… npx playwright test` (an empty, throwaway database; it is

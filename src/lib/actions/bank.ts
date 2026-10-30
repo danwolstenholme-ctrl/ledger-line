@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { asDbError, one, sql } from "@/lib/db";
+import { asDbError, one, sql, transaction } from "@/lib/db";
 import { FormParser, describeDbError, type ActionState } from "@/lib/actions/form";
 import { aiConfigured } from "@/lib/ai/anthropic";
 import { suggestMatchesWithAi } from "@/lib/ai/bank-matching";
@@ -74,37 +74,70 @@ function readItems(raw: unknown): BankMatchItem[] | null {
   return items;
 }
 
-export async function importStatement(_previous: ActionState, form: FormData): Promise<ActionState> {
-  await requireOrg();
-  const p = new FormParser(form);
-  const bank = p.uuid("bank_account_id");
-  const fileName = p.text("file_name", { max: 200, label: "File name" });
-  let lines: unknown;
-  try { lines = JSON.parse(String(form.get("lines") ?? "[]")); } catch { lines = null; }
-  if (!bank) return { ok: false, error: "Choose the bank account this statement is for." };
-  if (!Array.isArray(lines) || !lines.length) return { ok: false, error: "The file has no lines to import." };
-  if (lines.length > 5000) return { ok: false, error: "That is more than 5,000 lines. Import the statement a few months at a time." };
-  const clean = [];
-  for (const [index, raw] of (lines as Record<string, unknown>[]).entries()) {
-    const amount = Number(raw.amount);
-    if (typeof raw.date !== "string" || !ISO_DATE.test(raw.date) || !Number.isFinite(amount) || amount === 0 || typeof raw.description !== "string" || !raw.description.trim()
+const MAX_STATEMENTS = 36, MAX_LINES = 20_000, BATCH = 5000;
+type CleanLine = { date: string; amount: number; description: string; reference: string | null; counterparty: string | null; balance: number | null; external_id: string };
+
+/** A statement's lines as the page sent them, each checked again: a date, an amount that is not nothing, a description and a key. */
+function cleanLines(lines: unknown, label: string): CleanLine[] | string {
+  if (!Array.isArray(lines) || !lines.length) return `${label} has no lines to import.`;
+  const clean: CleanLine[] = [];
+  for (const [index, raw] of (lines as (Record<string, unknown> | null)[]).entries()) {
+    const amount = Number(raw?.amount);
+    if (!raw || typeof raw !== "object" || typeof raw.date !== "string" || !ISO_DATE.test(raw.date) || !Number.isFinite(amount) || amount === 0 || typeof raw.description !== "string" || !raw.description.trim()
       || typeof raw.external_id !== "string" || !raw.external_id) {
-      return { ok: false, error: `Line ${index + 1} has no readable date, amount or description.` };
+      return `Line ${index + 1} of ${label} has no readable date, amount or description.`;
     }
     const text = (value: unknown, max: number) => typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
     const balance = raw.balance === null || raw.balance === undefined || raw.balance === "" ? null : Number(raw.balance);
     clean.push({ date: raw.date, amount: Math.round(amount * 100) / 100, description: raw.description.trim().slice(0, 500), reference: text(raw.reference, 200),
       counterparty: text(raw.counterparty, 200), balance: balance !== null && Number.isFinite(balance) ? balance : null, external_id: raw.external_id.slice(0, 200) });
   }
-  const closing = form.get("closing_balance");
-  const closingBalance = closing === null || closing === "" ? null : Number(closing);
-  let result: { added: number; skipped: number };
+  return clean;
+}
+
+/**
+ * One statement or several for a bank account, imported together in date
+ * order: all of them, or none if any of them cannot be. Lines already
+ * imported are skipped, so statements that overlap are safe. Each statement
+ * is its own import, to undo on its own; one longer than the database takes at
+ * once goes in parts, the bank's closing balance on its last.
+ */
+export async function importStatements(_previous: ActionState, form: FormData): Promise<ActionState> {
+  const org = await requireOrg();
+  const bank = new FormParser(form).uuid("bank_account_id");
+  let statements: unknown;
+  try { statements = JSON.parse(String(form.get("statements") ?? "[]")); } catch { statements = null; }
+  if (!bank || !(await one("select id from ledger_accounts where id = $1 and organisation_id = $2 and type = 'bank'", [bank, org.id]))) return { ok: false, error: "Choose the bank account these statements are for." };
+  if (!Array.isArray(statements) || !statements.length) return { ok: false, error: "There are no lines to import." };
+  if (statements.length > MAX_STATEMENTS) return { ok: false, error: `At most ${MAX_STATEMENTS} statements at once: import the rest after these.` };
+  const clean: { name: string | null; lines: CleanLine[]; closing: number | null; first: string }[] = [];
+  for (const [index, raw] of (statements as (Record<string, unknown> | null)[]).entries()) {
+    if (!raw || typeof raw !== "object") return { ok: false, error: `Statement ${index + 1} could not be read.` };
+    const name = typeof raw.file_name === "string" && raw.file_name.trim() ? raw.file_name.trim().slice(0, 200) : null;
+    const lines = cleanLines(raw.lines, name ?? `statement ${index + 1}`);
+    if (typeof lines === "string") return { ok: false, error: lines };
+    const closing = raw.closing_balance === null || raw.closing_balance === undefined || raw.closing_balance === "" ? null : Number(raw.closing_balance);
+    clean.push({ name, lines, closing: closing !== null && Number.isFinite(closing) ? closing : null, first: lines.reduce((min, line) => line.date < min ? line.date : min, lines[0].date) });
+  }
+  const total = clean.reduce((sum, statement) => sum + statement.lines.length, 0);
+  if (total > MAX_LINES) return { ok: false, error: `That is more than ${MAX_LINES.toLocaleString("en-GB")} lines: import a year or so at a time.` };
+  clean.sort((a, b) => a.first.localeCompare(b.first));
+  let added = 0, skipped = 0;
   try {
-    result = (await one<{ result: { added: number; skipped: number } }>("select import_bank_statement($1, 'file', $2, $3, $4::jsonb) as result",
-      [bank, fileName, closingBalance !== null && Number.isFinite(closingBalance) ? closingBalance : null, JSON.stringify(clean)]))!.result;
-  } catch (error) { return dbFailure(error, "The statement could not be imported."); }
+    await transaction(async run => {
+      for (const statement of clean) {
+        const lines = [...statement.lines].sort((a, b) => a.date.localeCompare(b.date));
+        for (let at = 0; at < lines.length; at += BATCH) {
+          const part = lines.slice(at, at + BATCH), last = at + BATCH >= lines.length;
+          const [{ result }] = await run<{ result: { added: number; skipped: number } }>("select import_bank_statement($1, 'file', $2, $3, $4::jsonb) as result",
+            [bank, statement.name, last ? statement.closing : null, JSON.stringify(part)]);
+          added += result.added; skipped += result.skipped;
+        }
+      }
+    });
+  } catch (error) { return dbFailure(error, clean.length === 1 ? "The statement could not be imported." : "The statements could not be imported: none of them was."); }
   refresh();
-  redirect(await orgPath(`/accounts/bank/${bank}?imported=${result.added}&skipped=${result.skipped}`));
+  redirect(await orgPath(`/accounts/bank/${bank}?imported=${added}&skipped=${skipped}&statements=${clean.length}`));
 }
 
 export async function reconcileLine(_previous: ActionState, form: FormData): Promise<ActionState> {
@@ -169,11 +202,13 @@ export async function setLinesAside(_previous: ActionState, form: FormData): Pro
   return failedCount ? { ok: failedCount < ids.length, error: `${failedCount} of ${ids.length} could not be set aside. Try them one by one.` } : { ok: true, error: null };
 }
 
+/** Undo a statement imported: its import, or each part a long one went in, together. */
 export async function undoImport(_previous: ActionState, form: FormData): Promise<ActionState> {
   await requireOrg();
-  const id = new FormParser(form).uuid("import_id");
-  if (!id) return { ok: false, error: "That import is no longer available." };
-  try { await sql("select delete_bank_statement_import($1)", [id]); } catch (error) { return dbFailure(error, "The import could not be undone."); }
+  const ids = form.getAll("import_id").map(String);
+  if (!ids.length || ids.length > 20 || !ids.every(isId)) return { ok: false, error: "That import is no longer available." };
+  try { await transaction(async run => { for (const id of ids) await run("select delete_bank_statement_import($1)", [id]); }); }
+  catch (error) { return dbFailure(error, "The import could not be undone."); }
   refresh();
   return { ok: true, error: null };
 }

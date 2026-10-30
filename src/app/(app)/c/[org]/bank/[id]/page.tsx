@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { PageBody, Panel, PanelHeader } from "@/components/common/primitives";
 import { ImportHistory } from "@/components/bank/import-history";
 import { ReconcileList, type ReconcileLine } from "@/components/bank/reconcile-list";
-import { RecordEmpty, RecordFailure, RecordFilterLinks, RecordHeader, RecordPagination, recordButton } from "@/components/records/record-layout";
+import { RecordEmpty, RecordFailure, RecordFilterLinks, RecordHeader, RecordPagination, recordButton, recordOutlineButton } from "@/components/records/record-layout";
 import { StatTile } from "@/components/reports/report-charts";
 import type { BankMatchItem } from "@/types/database";
 
@@ -41,7 +41,7 @@ export default async function ReconcilePage({ params, searchParams }: {
   const query = await searchParams;
   const view = RECONCILE_VIEWS.find(item => item === query.view) ?? "to_match";
   const page = Math.max(1, Math.min(100000, Math.trunc(Number(query.page) || 1)));
-  const [data, candidates] = await Promise.all([getReconcileView(id, view, page), view === "to_match" ? getMatchCandidates() : null]);
+  const [data, candidates] = await Promise.all([getReconcileView(id, view, page, query.imports === "all"), view === "to_match" ? getMatchCandidates() : null]);
   if (!data.failed && (!data.account || data.account.type !== "bank")) notFound();
   if (data.failed || !data.account) return <PageBody><RecordFailure what="this bank account’s statements" /></PageBody>;
   const account = data.account;
@@ -79,16 +79,22 @@ export default async function ReconcilePage({ params, searchParams }: {
   };
   const imported = typeof query.imported === "string" ? Number(query.imported) : null;
   const skipped = typeof query.skipped === "string" ? Number(query.skipped) : 0;
+  const statements = typeof query.statements === "string" ? Number(query.statements) : 1;
+  const invoiced = typeof query.invoiced === "string" ? Number(query.invoiced) : null;
   const hasLines = counts.to_match + counts.matched + counts.set_aside > 0;
 
   return <PageBody className="space-y-4">
     <RecordHeader title={`Reconcile · ${account.name}`} back={{ href: "/accounts/bank", label: "Bank" }}
       description="Match each line to what the books hold, or record it from here."
       action={<>
-        <Link href={`/accounts/bank/${account.id}/import`} className={recordButton}><FileUp className="size-4" />Import a statement</Link>
+        <Link href={`/accounts/bank/${account.id}/invoices`} className={recordOutlineButton}>Invoice money received</Link>
+        <Link href={`/accounts/bank/${account.id}/import`} className={recordButton}><FileUp className="size-4" />Import statements</Link>
       </>} />
+    {invoiced !== null && Number.isFinite(invoiced) ? <p role="status" className="border-positive-line bg-positive-soft text-positive rounded-lg border px-4 py-2.5 text-[13px]">
+      Raised {invoiced} invoice{invoiced === 1 ? "" : "s"} from money received, each matched to its payment.
+    </p> : null}
     {imported !== null && Number.isFinite(imported) ? <p role="status" className="border-positive-line bg-positive-soft text-positive rounded-lg border px-4 py-2.5 text-[13px]">
-      Imported {imported} line{imported === 1 ? "" : "s"}.{skipped ? ` ${skipped} ${skipped === 1 ? "was" : "were"} already here and left as they were.` : ""}
+      Imported {imported} line{imported === 1 ? "" : "s"}{statements > 1 ? ` from ${statements} statements` : ""}.{skipped ? ` ${skipped} ${skipped === 1 ? "was" : "were"} already here and left as they were.` : ""}
     </p> : null}
 
     {hasLines ? <section aria-label="Reconciliation" className="ll-panel divide-hairline grid grid-cols-2 divide-x divide-y overflow-hidden lg:grid-cols-4 lg:divide-y-0">
@@ -114,7 +120,7 @@ export default async function ReconcilePage({ params, searchParams }: {
         candidates={{
           invoices: candidates?.invoices ?? [], bills: candidates?.bills ?? [],
           recorded: data.unreconciled.map(item => ({ kind: item.kind, id: item.id, item_date: item.item_date, amount: Number(item.amount), label: item.label, reference: item.reference })),
-          banks, accounts: codableAccounts(data.accounts, { vat: true }), bankFeesAccountId: bankFees?.id ?? null,
+          banks, accounts: codableAccounts(data.accounts, { vat: true }), bankFeesAccountId: bankFees?.id ?? null, bankAccountId: account.id,
         }}
         ai={{ available: data.aiSuggestions && aiConfigured(), note: !aiConfigured() ? "Add ANTHROPIC_API_KEY to .env.local to let Claude suggest the rest." : null }} />}
       {data.total > LINES_PAGE ? <RecordPagination page={page} total={data.total} pageSize={LINES_PAGE} href={href({})} /> : null}
@@ -133,7 +139,8 @@ export default async function ReconcilePage({ params, searchParams }: {
 
     {data.imports.length ? <Panel className="overflow-hidden">
       <PanelHeader title="Statements imported" hint="Undoing one removes the lines it added, except any already matched" />
-      <ImportHistory imports={data.imports.map(item => ({ id: item.id, source: item.source, file_name: item.file_name, added: item.added, skipped: item.skipped, first_date: item.first_date, last_date: item.last_date, imported_at: item.imported_at }))} />
+      <ImportHistory imports={data.imports} />
+      {data.moreImports ? <p className="border-hairline border-t px-4 py-2 text-[12.5px]"><Link href={`/accounts/bank/${id}?imports=all`} className="text-brand hover:underline">Show every statement imported</Link></p> : null}
     </Panel> : null}
   </PageBody>;
 }

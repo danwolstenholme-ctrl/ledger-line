@@ -78,8 +78,10 @@ export async function saveSupplier(_previous: ActionState, form: FormData): Prom
   if (p.failed) return p.fail();
   let savedId: string | null = id;
   try {
-    if (id) await sql("update suppliers set name = $3, email = $4, phone = $5, vat_number = $6, default_account_id = $7, notes = $8, reverse_charge = $9, iban = $10, bic = $11, address = $12, payment_terms_days = $13, updated_at = now() where id = $1 and organisation_id = $2",
-      [id, org.id, name, email, phone, vat, account, notes, rc, iban, bic, address, terms]);
+    // The address and terms only when the form had them: a form from before they existed leaves them as they are.
+    if (id) await sql(`update suppliers set name = $3, email = $4, phone = $5, vat_number = $6, default_account_id = $7, notes = $8, reverse_charge = $9, iban = $10, bic = $11,
+        address = case when $14 then $12 else address end, payment_terms_days = case when $15 then $13::smallint else payment_terms_days end, updated_at = now() where id = $1 and organisation_id = $2`,
+      [id, org.id, name, email, phone, vat, account, notes, rc, iban, bic, address, terms, form.has("address"), form.has("payment_terms_days")]);
     else savedId = (await one<{ id: string }>("insert into suppliers (organisation_id, name, email, phone, vat_number, default_account_id, notes, reverse_charge, iban, bic, address, payment_terms_days) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id",
       [org.id, name, email, phone, vat, account, notes, rc, iban, bic, address, terms]))!.id;
   } catch (error) { return dbFailure(error, "The supplier could not be saved."); }

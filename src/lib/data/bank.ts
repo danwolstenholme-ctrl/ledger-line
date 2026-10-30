@@ -25,22 +25,47 @@ export async function getBankStatementState() {
 
 export type MatchedDocument = { label: string; href: string | null; amount: number };
 
-export async function getReconcileView(bankAccountId: string, view: ReconcileView, page: number) {
+export type StatementImported = Pick<BankStatementImportRow, "source" | "file_name" | "added" | "skipped" | "first_date" | "last_date" | "imported_at"> & { ids: string[] };
+/**
+ * The statements imported, each once: one too long for a single go was
+ * imported in parts, at one time under one name, and is listed (and undone)
+ * as one.
+ */
+function statementsImported(rows: BankStatementImportRow[]): StatementImported[] {
+  const statements = new Map<string, StatementImported>();
+  for (const row of rows) {
+    const key = `${row.imported_at}|${row.source}|${row.file_name ?? ""}`, seen = statements.get(key);
+    if (!seen) { statements.set(key, { ids: [row.id], source: row.source, file_name: row.file_name, added: Number(row.added), skipped: Number(row.skipped), first_date: row.first_date, last_date: row.last_date, imported_at: row.imported_at }); continue; }
+    seen.ids.push(row.id); seen.added += Number(row.added); seen.skipped += Number(row.skipped);
+    if (row.first_date && (!seen.first_date || row.first_date < seen.first_date)) seen.first_date = row.first_date;
+    if (row.last_date && (!seen.last_date || row.last_date > seen.last_date)) seen.last_date = row.last_date;
+  }
+  return [...statements.values()];
+}
+
+/** allImports: every statement imported, not the latest upload and the eight before. */
+export async function getReconcileView(bankAccountId: string, view: ReconcileView, page: number, allImports = false) {
   const org = await requireOrg();
   const today = firmToday();
   const statusFilter = view === "to_match" ? "status in ('unmatched', 'partial')" : view === "matched" ? "status = 'matched'" : "status = 'excluded'";
   const order = view === "to_match" ? "txn_date, created_at, id" : "txn_date desc, id";
-  const [account, pageRows, counts, unreconciled, open, balance, imports, stated, range, accounts] = await Promise.all([
+  const [account, pageRows, counts, unreconciled, open, balance, imports, stated, range, accounts, importCount] = await Promise.all([
     one<LedgerAccountRow>("select * from ledger_accounts where id = $1 and organisation_id = $2", [bankAccountId, org.id]),
     sql<BankStatementLineViewRow & { full_count: number }>(`select *, count(*) over () as full_count from v_bank_statement_lines where bank_account_id = $1 and ${statusFilter} order by ${order} limit ${LINES_PAGE} offset ${(page - 1) * LINES_PAGE}`, [bankAccountId]),
     sql<{ status: BankLineStatus; count: number }>("select status, count(*) as count from v_bank_statement_lines where bank_account_id = $1 group by status", [bankAccountId]),
     sql<UnreconciledBankItemRow>("select * from unreconciled_bank_items($1)", [bankAccountId]),
     sql<{ amount: number; matched_amount: number }>("select amount, matched_amount from v_bank_statement_lines where bank_account_id = $1 and status in ('unmatched', 'partial')", [bankAccountId]),
     sql<LedgerBalanceRow>("select * from ledger_balances($1, $2, $3)", [org.id, today, today]),
-    sql<BankStatementImportRow>("select * from bank_statement_imports where bank_account_id = $1 order by imported_at desc limit 8", [bankAccountId]),
+    // The last eight imports, and every one from the latest upload however many statements it held (all at its time):
+    // newest first, the statements of one upload by their dates.
+    sql<BankStatementImportRow>(`select * from bank_statement_imports where bank_account_id = $1
+       and ($2 or imported_at = (select max(imported_at) from bank_statement_imports where bank_account_id = $1)
+            or id in (select id from bank_statement_imports where bank_account_id = $1 order by imported_at desc, last_date desc nulls last, id limit 8))
+     order by imported_at desc, last_date desc nulls last, id`, [bankAccountId, allImports]),
     one<{ closing_balance: number; last_date: string }>("select closing_balance, last_date from bank_statement_imports where bank_account_id = $1 and closing_balance is not null and last_date is not null order by last_date desc, imported_at desc limit 1", [bankAccountId]),
     one<{ first: string | null; last: string | null }>("select min(txn_date) as first, max(txn_date) as last from bank_statement_lines where bank_account_id = $1", [bankAccountId]),
     sql<Pick<LedgerAccountRow, "id" | "code" | "name" | "type" | "system_role" | "is_active">>("select id, code, name, type, system_role, is_active from ledger_accounts where organisation_id = $1 and is_active order by code", [org.id]),
+    one<{ count: number }>("select count(*) as count from bank_statement_imports where bank_account_id = $1", [bankAccountId]),
   ]);
   const count = (statuses: BankLineStatus[]) => counts.filter(row => statuses.includes(row.status)).reduce((sum, row) => sum + Number(row.count), 0);
   const bankRow = balance.find(row => row.account_id === bankAccountId);
@@ -56,7 +81,7 @@ export async function getReconcileView(bankAccountId: string, view: ReconcileVie
   return {
     account, lines: pageRows, total: pageRows[0]?.full_count ?? 0,
     counts: { to_match: count(["unmatched", "partial"]), matched: count(["matched"]), set_aside: count(["excluded"]) },
-    unreconciled, imports, accounts, aiSuggestions: org.ai_suggestions, outstanding,
+    unreconciled, imports: statementsImported(imports), moreImports: Number(importCount?.count ?? 0) > imports.length, accounts, aiSuggestions: org.ai_suggestions, outstanding,
     summary: { ...summary, bookBalance, bankBalance, from, to }, failed: false,
   };
 }

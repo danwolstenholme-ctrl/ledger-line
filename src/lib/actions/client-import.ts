@@ -52,6 +52,9 @@ export async function importClients(_previous: ClientImportState, form: FormData
   if (ready.length) {
     try {
       await transaction(async run => {
+        // Each company opened goes on the audit trail, whose turn is held to the end: taken first, before this holds anything
+        // another import could be waiting on (a company's name), so two imports can't wait on each other.
+        await run("select pg_advisory_xact_lock(hashtext('ledgerline.audit_log'))");
         const taken = new Set<string>();
         for (const client of ready) {
           const slug = await freeSlug(run, client.name, taken);

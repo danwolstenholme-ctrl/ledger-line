@@ -108,7 +108,8 @@ export function CustomerForm({ customer, companyTerms, companyLanguage = "en", s
       {styles.length > 1 ? <Field label={t("Document style")} htmlFor="customer-style" hint={t("how its invoices, quotes and statements look")}>
         <NativeSelect id="customer-style" name="document_style_id" defaultValue={customer?.document_style_id ?? ""}>
           <option value="">{t("The default: {name}", { name: styles.find(style => style.is_default)?.name ?? "" })}</option>
-          {styles.filter(style => !style.is_default).map(style => <option key={style.id} value={style.id}>{style.name}</option>)}
+          {/* Every style, the default too: a customer given the style that later became the default keeps it when saved. */}
+          {styles.map(style => <option key={style.id} value={style.id}>{style.name}</option>)}
         </NativeSelect>
       </Field> : null}
       {home === "CY" && country !== "CY" && EU_COUNTRIES.has(country) ? <Checkbox name="eu_business" defaultChecked={customer?.eu_business ?? true} label={t("A business in another EU state: invoices are reverse charge and go on the VIES statement")} className="sm:col-span-2" /> : null}

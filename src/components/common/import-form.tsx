@@ -10,6 +10,7 @@ import { IMPORT_FIELDS, guessColumns, importTemplate, readImportRow, type Import
 import { cn } from "@/lib/utils";
 import { Field, FormError, NativeSelect, SubmitButton, TextArea } from "@/components/common/form-fields";
 import { recordOutlineButton } from "@/components/records/record-layout";
+import { useRegime } from "@/components/common/regime";
 
 const NOUN: Record<ImportKind, [string, string]> = { customers: ["customer", "customers"], suppliers: ["supplier", "suppliers"], items: ["product", "products"] };
 
@@ -20,6 +21,7 @@ const NOUN: Record<ImportKind, [string, string]> = { customers: ["customer", "cu
  */
 export function ImportForm({ kind, existing, listHref }: { kind: ImportKind; existing: { names: string[]; vats: string[]; codes: string[] }; listHref: string }) {
   const [state, action] = useActionState<ImportState, FormData>(importRecords, { ok: false, error: null });
+  const home = useRegime().country;
   const [source, setSource] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const parsed = useMemo(() => {
@@ -31,10 +33,10 @@ export function ImportForm({ kind, existing, listHref }: { kind: ImportKind; exi
   const mapping = useMemo(() => override ?? (parsed ? guessColumns(kind, parsed.headings) : {}), [override, parsed, kind]);
   const known = useMemo(() => ({ names: new Set(existing.names), vats: new Set(existing.vats), codes: new Set(existing.codes) }), [existing]);
   const checked = useMemo(() => (parsed?.body ?? []).map((cells, index) => {
-    const read = readImportRow(kind, cells, mapping, index + 2);
+    const read = readImportRow(kind, cells, mapping, index + 2, home);
     const there = !read.problem && (known.names.has(String(read.values.name).trim().toLowerCase()) || (read.values.vat_number && known.vats.has(String(read.values.vat_number))) || (read.values.code && known.codes.has(String(read.values.code).toLowerCase())));
     return { ...read, there: Boolean(there) };
-  }), [parsed, mapping, kind, known]);
+  }), [parsed, mapping, kind, known, home]);
   const ready = checked.filter(row => !row.problem && !row.there).length;
   const [one, many] = NOUN[kind];
   const fields = IMPORT_FIELDS[kind];

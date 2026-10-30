@@ -25,6 +25,8 @@ export type MatchedDocumentView = { label: string; href: string | null; amount: 
 type Candidates = {
   invoices: OpenInvoice[]; bills: OpenBill[]; recorded: RecordedItem[];
   banks: { id: string; code: string; name: string }[]; accounts: PickerAccount[]; bankFeesAccountId: string | null;
+  /** The account being reconciled, for raising an invoice from a payment into it. */
+  bankAccountId: string;
 };
 
 const cents = (value: number) => Math.round(value * 100);
@@ -117,7 +119,7 @@ export function ReconcileList({ view, lines, suggestions, documents, candidates,
         <span className={cn(HEADING, "[grid-area:amount] text-right")}>Amount</span>
       </div>}
     <ul className="divide-hairline divide-y">
-      {lines.map(line => <li key={line.id} className={cn(selected.includes(line.id) && "bg-brand-50")}>
+      {lines.map(line => <li key={line.id} id={`line-${line.id}`} className={cn("scroll-mt-24 target:bg-brand-50", selected.includes(line.id) && "bg-brand-50")}>
         {view === "to_match" ? <LineToMatch line={line} suggestions={withAi(suggestions[line.id] ?? [], line.status === "unmatched" ? fromAi[line.id] ?? [] : [])} candidates={candidates}
             selected={selected.includes(line.id)} onSelect={line.status === "unmatched" ? on => toggle(line.id, on) : undefined} />
           : view === "matched" ? <MatchedLine line={line} documents={documents[line.id] ?? []} />
@@ -210,13 +212,14 @@ function LineToMatch({ line, suggestions, candidates, selected, onSelect }: {
   </>;
 }
 
-type OptionTab = "suggested" | "documents" | "recorded" | "code" | "transfer" | "aside";
+type OptionTab = "suggested" | "documents" | "invoice" | "recorded" | "code" | "transfer" | "aside";
 
 function LineOptions({ line, candidates, others }: { line: ReconcileLine; candidates: Candidates; others: Suggestion[] }) {
   const moneyIn = line.amount > 0;
   const tabs: { key: OptionTab; label: string }[] = [
     ...(others.length ? [{ key: "suggested" as const, label: `Other suggestions · ${others.length}` }] : []),
     { key: "documents", label: moneyIn ? "Invoices" : "Bills" },
+    ...(moneyIn ? [{ key: "invoice" as const, label: "Raise an invoice" }] : []),
     { key: "recorded", label: "Already recorded" },
     { key: "code", label: moneyIn ? "Code as money received" : "Code as money spent" },
     ...(candidates.banks.length ? [{ key: "transfer" as const, label: "Transfer" }] : []),
@@ -234,6 +237,8 @@ function LineOptions({ line, candidates, others }: { line: ReconcileLine; candid
         <MatchButton lineId={line.id} items={suggestion.items} label="Use this" variant="outline" />
       </li>)}</ul>
       : tab === "documents" ? <DocumentPicker line={line} candidates={candidates} />
+      : tab === "invoice" ? <p className="text-ink-muted text-[13px]">No invoice for it yet? Raise one to the payer for this amount, dated the day it arrived, and it is matched here at once.{" "}
+        <Link href={`/accounts/bank/${candidates.bankAccountId}/invoices?line=${line.id}`} className="text-brand font-medium hover:underline">Raise an invoice for it</Link></p>
       : tab === "recorded" ? <RecordedPicker line={line} recorded={candidates.recorded} />
       : tab === "code" ? <CodeIt line={line} accounts={candidates.accounts} />
       : tab === "transfer" ? <TransferTo line={line} banks={candidates.banks} />

@@ -6,6 +6,7 @@ import Link from "@/components/navigation/navigation-link";
 import { deleteDraftInvoice, removeInvoicePayment } from "@/lib/actions/sales";
 import { getPostings } from "@/lib/data/accounts";
 import { getInvoice, getReminder } from "@/lib/data/sales";
+import { raisedFromPayment } from "@/lib/domain/bank-invoicing";
 import { countryName } from "@/lib/domain/countries";
 import { UUID_PATTERN } from "@/lib/domain/invoices";
 import { getI18n } from "@/lib/i18n/server";
@@ -17,6 +18,7 @@ import { InlineSubmit, SubmitButton } from "@/components/common/form-fields";
 import { Postings } from "@/components/accounts/postings";
 import { RecordDetail, RecordHeader, RecordSection, recordOutlineButton } from "@/components/records/record-layout";
 import { InvoiceStatusButton, RecordPaymentForm, RestoreInvoiceButton } from "@/components/sales/sale-actions";
+import { UndoInvoiceFromPayment } from "@/components/bank/undo-invoice-from-payment";
 import { DocumentLines, InvoiceStatusBadge, PdfLinks, TREATMENT_LABELS, treatmentDetail } from "@/components/sales/sales-parts";
 import { ReminderPanel } from "@/components/sales/reminder";
 import { SendInvoicePanel, type SendInvoiceData } from "@/components/sales/send-invoice";
@@ -76,6 +78,9 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
     {query.issued ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]">
       <CheckCircle2 className="size-4 shrink-0" /><span><span className="font-medium">{t("Issued and in the books.")}</span> {invoice.due_on ? t("{name} owes {amount} by {date}.", { name: invoice.client_name, amount: formatAmount(invoice.balance), date: formatDate(invoice.due_on) })
         : t("{name} owes {amount}.", { name: invoice.client_name, amount: formatAmount(invoice.balance) })}{invoice.sent_at || Number(invoice.balance) === 0 ? "" : ` ${t("Send it below.")}`}</span>
+    </p> : null}
+    {query.undone && invoice.status === "void" ? <p role="status" className="border-positive-line bg-positive-soft text-positive flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]">
+      <CheckCircle2 className="size-4 shrink-0" /><span>{t("Undone: the invoice is void, and its payment is back on the bank's statement to match or code.")}</span>
     </p> : null}
     {invoice.status === "draft" ? <p className="border-hairline bg-surface-sunken text-ink-muted rounded-lg border px-4 py-2.5 text-[13px]">{t("A draft: nothing is in the books until it is issued.")}</p> : null}
     {send && !invoice.sent_at && open ? <div className="flex flex-wrap items-center gap-3">
@@ -165,6 +170,8 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
             <SubmitButton variant="outline" size="sm" pendingLabel={t("Deleting…")}><Trash2 className="size-3.5" />{t("Delete this draft")}</SubmitButton>
           </form> : null}
           {invoice.status === "issued" && paid === 0 && credited === 0 ? <div className="border-hairline border-t px-4 py-3"><InvoiceStatusButton id={id} to="void" /></div> : null}
+          {invoice.status !== "void" && invoice.status !== "draft" && credited === 0 && !credits.length && raisedFromPayment(invoice.notes) && (!org.lock_date || invoice.issued_on > org.lock_date)
+            ? <div className="border-hairline border-t px-4 py-3"><UndoInvoiceFromPayment id={id} /></div> : null}
         </RecordSection>
       </div>
     </div>

@@ -6,8 +6,8 @@ import { Loader2 } from "lucide-react";
 import { saveInvoice, saveQuote } from "@/lib/actions/sales";
 import { idleState } from "@/lib/actions/state";
 import type { PickerAccount } from "@/lib/domain/accounts";
-import { EU_COUNTRIES } from "@/lib/domain/countries";
 import { addDays } from "@/lib/domain/invoice-math";
+import { treatmentFor } from "@/lib/domain/regimes";
 import { cn } from "@/lib/utils";
 import { Checkbox, Field, FormError, NativeSelect, TextArea, TextInput } from "@/components/common/form-fields";
 import Link from "@/components/navigation/navigation-link";
@@ -41,15 +41,6 @@ export const TREATMENTS = TREATMENT_OPTIONS.CY;
 const METHODS: Record<(typeof INVOICE_PAYMENT_METHODS)[number], string> = { bank_transfer: "Bank transfer", card: "Card", cash: "Cash", cheque: "Cheque", other: "Other" };
 
 export const NEW_CUSTOMER = "new";
-
-/** Which treatment a sale to this customer starts from. */
-export function treatmentFor(customer: DocumentFormCustomer | undefined, registered: boolean, country = "CY"): VatTreatment {
-  if (!registered) return "exempt";
-  if (country === "GB") return customer && customer.country !== "GB" ? "outside_scope" : "standard";
-  if (customer?.eu_business) return "reverse_charge";
-  if (customer && !EU_COUNTRIES.has(customer.country)) return "outside_scope";
-  return "standard";
-}
 
 /**
  * A document form sent without React's reset after an action, so that a
